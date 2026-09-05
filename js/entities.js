@@ -191,6 +191,7 @@
       this.hitFlash = 0;                       // 被击中闪白
       this.hitCd = 0;                          // 被我方子弹命中的间隔（防穿透弹一帧多次计数）
       this.bscale = opts.bscale || 1;          // 弹体缩放（大型导弹等）
+      this.invuln = opts.invuln || 0;          // 发射后无敌时间（期间我方子弹/旋转剑无法命中）
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -203,6 +204,7 @@
       this.spin += dt * 9;
       this.hitFlash = Math.max(0, this.hitFlash - dt);
       this.hitCd = Math.max(0, this.hitCd - dt);
+      this.invuln = Math.max(0, this.invuln - dt);
       if (this.neutralized) {
         this.fade = Math.max(0, this.fade - dt * 1.15);
         this.vx *= (1 - dt * 2.2); this.vy *= (1 - dt * 2.2);
@@ -435,6 +437,13 @@
         ctx.fillStyle = '#3d4654';
         ctx.fillRect(-10 * ms, -6 * ms, 2 * ms, 2 * ms); ctx.fillRect(-10 * ms, 4 * ms, 2 * ms, 2 * ms);
         ctx.restore();
+        // 发射后无敌时间：青色脉动护盾环
+        if (this.invuln > 0) {
+          const rr = 20 * ms + Math.sin(this.t * 14) * 3;
+          ctx.strokeStyle = `rgba(127,231,255,${0.5 + Math.sin(this.t * 14) * 0.3})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(this.x, this.y, rr, 0, TAU); ctx.stroke();
+        }
         return;
       }
       if (k === 'float') {
@@ -763,6 +772,8 @@
           const bp = this.bladePos(i);
           const rr = (CFG.blade.blockR + b.r) * (0.7 + lenMul * 0.3);
           if ((b.x - bp.x) ** 2 + (b.y - bp.y) ** 2 < rr * rr) {
+            // 导弹发射后的无敌时间内：剑也无法引爆，留待后续帧再判定
+            if (b.kind === 'missile' && b.invuln > 0) break;
             b.bladeRolled = true;
             if (b.kind === 'missile') {
               // 旋转剑击中导弹：1 次必定引爆

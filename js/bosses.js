@@ -717,14 +717,14 @@
         }
         SFX.enemyShoot();
       }
-      // 尾部喷出巨型追踪导弹（体积×3：被子弹击中 3 次爆炸，被旋转剑击中 1 次必爆）
+      // 尾部喷出巨型追踪导弹（体积×3：发射后 6s 无敌，之后被子弹击中 3 次爆炸，被旋转剑击中 1 次必爆）
       this.missileT -= dt;
       if (this.missileT <= 0) {
         this.missileT = rand(3.4, 4.4);
         const m = new Bullet(this.x + 88, this.y - 52,
           160, -120,
-          { kind: 'missile', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 6,
-            homing: true, turnRate: 2.3, rockBreak: true, bscale: 3, hp: 3 });
+          { kind: 'missile', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 12,
+            homing: true, turnRate: 2.3, rockBreak: true, bscale: 3, hp: 3, invuln: 6 });
         m.onBreak = (gg, b) => gg.shellBlast(b.x, b.y, b.dmg);
         m.onExpire = (gg, b) => gg.shellBlast(b.x, b.y, b.dmg);
         g.bullets.push(m);
@@ -784,6 +784,7 @@
             this.spinUsed++;
             this.rotA = Math.atan2(p.y - this.y, p.x - this.x);
             this.spinFire = 0.25;
+            SFX.phaseRise();   // 危险招式提示：旋转扫射蓄力
             g.toast(`祖国人开始旋转扫射！（${this.spinUsed}/3）`, 1.8);
           } else if (roll < 0.60) {
             // 落地冲刺
@@ -1089,15 +1090,15 @@
       const p = g.player;
 
       if (this.state === 'enter') {
-        this.x -= 100 * dt;
+        this.x -= 150 * dt;
         if (this.x <= this.hoverX) { this.state = 'fight'; this.stateT = 0; }
         return;
       }
 
       if (this.state === 'fight') {
-        this.baseY += (clamp(p.y - 30, 140, CFG.GROUND_Y - 190) - this.baseY) * dt * 1.4;
+        this.baseY += (clamp(p.y - 30, 140, CFG.GROUND_Y - 190) - this.baseY) * dt * 2.0;
         this.y = this.baseY;
-        this.x += (this.hoverX - this.x) * dt * 1.6;
+        this.x += (this.hoverX - this.x) * dt * 2.4;
         this.actT -= dt;
         if (this.actT <= 0) {
           const act = this.actIdx % 4;
@@ -1123,55 +1124,55 @@
       }
       else if (this.state === 'sdash') {
         // S 型路线：x 高速左冲，y 正弦摆动
-        this.x -= 640 * dt;
-        this.y = clamp(this.sy + Math.sin(this.stateT * 9) * 130, 100, CFG.GROUND_Y - 100);
+        this.x -= 820 * dt;
+        this.y = clamp(this.sy + Math.sin(this.stateT * 11) * 140, 100, CFG.GROUND_Y - 100);
         g.particles.push(new Particle(this.x + 30, this.y, rand(-90, 0), rand(-50, 50), 0.3, 6, '#ffd23b'));
-        if (this.stateT > 1.7 || this.x < 110) { this.state = 'back'; this.stateT = 0; }
+        if (this.stateT > 1.4 || this.x < 110) { this.state = 'back'; this.stateT = 0; }
       }
       else if (this.state === 'toTop') {
         // 移动到屏幕顶端
         const tx = CFG.W * 0.5, ty = 120;
-        this.x += (tx - this.x) * dt * 2.4;
-        this.y += (ty - this.y) * dt * 2.4;
-        if (this.stateT > 0.8) { this.state = 'knives'; this.stateT = 0; this.knifeFireT = 0.25; }
+        this.x += (tx - this.x) * dt * 3.4;
+        this.y += (ty - this.y) * dt * 3.4;
+        if (this.stateT > 0.6) { this.state = 'knives'; this.stateT = 0; this.knifeFireT = 0.2; }
       }
       else if (this.state === 'knives') {
-        // 顶端向下散射飞刀
+        // 顶端向下大范围散射飞刀（9 发/轮，扇形覆盖 ±0.64 弧度）
         this.x = CFG.W * 0.5 + Math.sin(this.t * 1.2) * 70;
         this.y = 120;
         this.knifeFireT -= dt;
         if (this.knifeFireT <= 0) {
-          this.knifeFireT = 0.22;
-          for (let i = -2; i <= 2; i++) {
-            const a = Math.PI / 2 + i * 0.2;
+          this.knifeFireT = 0.2;
+          for (let i = -4; i <= 4; i++) {
+            const a = Math.PI / 2 + i * 0.16;
             g.bullets.push(new Bullet(this.x, this.y + 50,
-              Math.cos(a) * 330, Math.sin(a) * 330,
-              { kind: 'knife', r: 8, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5 }));
+              Math.cos(a) * 360, Math.sin(a) * 360,
+              { kind: 'knife', r: 9, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5.5 }));
           }
           SFX.enemyShoot();
         }
-        if (this.stateT > 2.6) { this.state = 'back'; this.stateT = 0; }
+        if (this.stateT > 2.8) { this.state = 'back'; this.stateT = 0; }
       }
       else if (this.state === 'cross') {
         // 回到屏幕右侧
-        this.x += (this.hoverX - this.x) * dt * 2.6;
-        this.baseY += (clamp(p.y - 30, 140, CFG.GROUND_Y - 190) - this.baseY) * dt * 2;
-        this.y += (this.baseY - this.y) * dt * 2;
-        if (this.stateT > 0.9) {
+        this.x += (this.hoverX - this.x) * dt * 3.4;
+        this.baseY += (clamp(p.y - 30, 140, CFG.GROUND_Y - 190) - this.baseY) * dt * 2.6;
+        this.y += (this.baseY - this.y) * dt * 2.6;
+        if (this.stateT > 0.7) {
           this.state = 'back'; this.stateT = 0;
-          // 向左发射巨大十字型子弹
+          // 向左发射巨大十字型子弹（体积×2）
           const a = Math.atan2(p.y - this.y, p.x - this.x);
           g.bullets.push(new Bullet(this.x - 60, this.y,
             Math.cos(a) * 210, Math.sin(a) * 210,
-            { kind: 'cross', r: 26, dmg: 22 * g.atkScale, dmgScale: g.atkScale, life: 6 }));
+            { kind: 'cross', r: 52, dmg: 22 * g.atkScale, dmgScale: g.atkScale, life: 6 }));
           SFX.dash(); g.shake(6);
         }
       }
       else if (this.state === 'back') {
-        this.x += (this.hoverX - this.x) * dt * 2.2;
-        this.baseY += (clamp(p.y - 30, 140, CFG.GROUND_Y - 190) - this.baseY) * dt * 2.2;
-        this.y += (this.baseY - this.y) * dt * 2.2;
-        if (this.stateT > 1.0) { this.state = 'fight'; this.stateT = 0; this.actT = rand(1.8, 2.6); }
+        this.x += (this.hoverX - this.x) * dt * 3.2;
+        this.baseY += (clamp(p.y - 30, 140, CFG.GROUND_Y - 190) - this.baseY) * dt * 3.2;
+        this.y += (this.baseY - this.y) * dt * 3.2;
+        if (this.stateT > 0.8) { this.state = 'fight'; this.stateT = 0; this.actT = rand(1.8, 2.6); }
       }
     }
     render(ctx) {
@@ -1192,7 +1193,7 @@
     { cls: DogKing, weight: 3, minOrd: 1, chance: 0.3, music: 'boss' },     // 第 1 轮起 30% 概率出现
     { cls: GiantPheasant, weight: 3, minOrd: 2, music: 'pheasant' },       // 野鸡王：鸡叫融合电音
     { cls: Homelander, weight: 3, minOrd: 2, chance: 0.3, music: 'hero' },  // 祖国人：军乐+电磁声
-    { cls: BossMan, weight: 3, minOrd: 1, maxOrd: 3, music: 'boss' },      // 大王：仅 1-3 轮
+    { cls: BossMan, weight: 3, minOrd: 1, maxOrd: 3, forceChance: { 1: 0.6, 2: 0.4, 3: 0.4 }, music: 'boss' },  // 大王：首轮 60% 直接出场
     { cls: Stranger, weight: 3, minOrd: 1, maxOrd: 3, music: 'boss' }      // 怪客：仅 1-3 轮
   ];
 })();

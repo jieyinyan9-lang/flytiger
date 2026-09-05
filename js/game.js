@@ -389,7 +389,22 @@
         pool = window.BOSS_LIST.filter(b => ordOk(b));
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
-      const pick = pool[Math.floor(Math.random() * pool.length)];
+      // forceChance：部分 Boss 在指定出场序号有独立的直接出场概率（如大王首轮 60%）；
+      // 未命中强制概率的该类 Boss 不再参与本轮随机池
+      let pick = null;
+      const randomPool = [];
+      for (const b of pool) {
+        const fc = b.forceChance && b.forceChance[ord];
+        if (fc !== undefined) {
+          if (Math.random() < fc) { pick = b; break; }
+        } else {
+          randomPool.push(b);
+        }
+      }
+      if (!pick) {
+        const p2 = randomPool.length ? randomPool : pool;
+        pick = p2[Math.floor(Math.random() * p2.length)];
+      }
       this.pendingBoss = pick.cls;
       this.warnT = CFG.boss.warnTime;
       this.el.warnSub.textContent = '强大的气息逼近了！';
@@ -404,6 +419,8 @@
       this.el.bossName.textContent = `${b.bossName}（${b.title}）`;
       this.el.bossHud.classList.remove('hidden');
       this.toast(`${b.bossName} 出现！`, 2);
+      SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
+      this.shake(6);
     }
     onBossDefeated(boss) {
       this.bossCount++;
@@ -708,6 +725,7 @@
         for (const eb of this.bullets) {
           if (eb.friendly || eb.dead || eb.neutralized) continue;
           if (!eb.volatile && !(eb.hp > 0)) continue;
+          if (eb.invuln > 0) continue;   // 发射后无敌时间内：子弹直接穿过，不消耗
           const rr = fb.r + eb.r + 2;
           if ((fb.x - eb.x) ** 2 + (fb.y - eb.y) ** 2 < rr * rr) {
             if (eb.volatile) {
