@@ -196,6 +196,7 @@
       this.flashColor = '#fff';
       this.ultWave = null;    // 大招光波特效
       this.round = 1;
+      this.wayPicksThisRound = 0;   // 每轮弹道类成长选择次数（上限 3）
       this.diffMul = 1;
       this.clouds = [];
       for (let i = 0; i < 7; i++) {
@@ -328,7 +329,14 @@
       this.state = 'levelup';
       SFX.levelup();
       // pool: can() 通过的项（can 可能含随机概率，只调用一次）
-      const pool = CFG.upgrades.filter(u => u.can(this.player, this));
+      // 每轮弹道类成长最多 3 次，超限后从池中排除弹道类选项
+      const WAY_IDS = ['way', 'tail', 'down', 'flame', 'poison', 'ice'];
+      const wayLimitReached = this.wayPicksThisRound >= 3;
+      const pool = CFG.upgrades.filter(u => {
+        if (!u.can(this.player, this)) return false;
+        if (wayLimitReached && WAY_IDS.includes(u.id)) return false;
+        return true;
+      });
       const opts = [];
       // guaranteed 项强制放入选项（从 pool 中提取，can 已验证通过）
       const guaranteed = pool.filter(u => u.guaranteed && u.guaranteed(this.player, this));
@@ -366,6 +374,10 @@
       const isNew = (u.id === 'chain' && !this.player.chainJumps) ||
                     (u.id === 'blade' && !this.player.blades);
       u.apply(this.player);
+      // 弹道类成长计数（每轮上限 3 次）
+      if (['way', 'tail', 'down', 'flame', 'poison', 'ice'].includes(u.id)) {
+        this.wayPicksThisRound++;
+      }
       this.pendingOptions = null;
       this.el.levelup.classList.add('hidden');
       // 专属升级提示音效：闪电子弹（电流升腾）/ 防护刀刃（金属出鞘）
@@ -447,6 +459,7 @@
       this.bossCount++;
       // 击败 1 个 Boss = 通过 1 轮
       this.round = this.bossCount + 1;
+      this.wayPicksThisRound = 0;   // 新一轮重置弹道成长计数
       this.score += 500;
       this.kills++;
       this.addRage(CFG.ultimate.rageBoss);
