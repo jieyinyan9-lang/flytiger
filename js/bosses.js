@@ -793,7 +793,7 @@
           const a = base + i * 0.19;
           g.bullets.push(new Bullet(this.x - 72, this.y - 12,
             Math.cos(a) * 290, Math.sin(a) * 290,
-            { kind: 'orb', r: 7, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ff9d2e', rockBreak: true }));
+            { kind: 'orb', r: 21, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ff9d2e', rockBreak: true, fireTrail: true }));
         }
         SFX.enemyShoot();
       }
@@ -1374,9 +1374,9 @@
           this.vx *= 0.86;
           this.hopT -= dt;
           if (this.hopT <= 0) {
-            // 弧形跳向玩家（大跳远距离）
+            // 弧形大跳：跳得更高更远，跨屏幕追击
             this.hopT = rand(1.05, 1.5);
-            this.vy = -rand(470, 560);
+            this.vy = -rand(620, 720);
             this.vx = clamp((p.x - this.x) * 1.25, -440, 440);
             this.onGround = false;
             SFX.dash();
@@ -1797,6 +1797,6 @@
     { cls: BossMan, weight: 3, minOrd: 1, maxOrd: 3, forceChance: { 1: 0.6, 2: 0.4, 3: 0.4 }, music: 'imperial' },  // 大王：首轮 60% 直接出场，帝王军乐
     { cls: Stranger, weight: 3, minOrd: 1, maxOrd: 3, music: 'boss' },      // 怪客：仅 1-3 轮
     { cls: FrogKing, weight: 3, minOrd: 3, music: 'boss' },                 // 蛙哥：地面巨兽，第 3 轮起
-    { cls: CraneSage, weight: 3, minOrd: 4, music: 'crane' }                 // 鹤仙：五技特殊型，第 4 轮起
+    { cls: CraneSage, weight: 3, minOrd: 4, music: 'crane' }                // 鹤仙：五技特殊型，第 4 轮起；悲壮像素摇滚
   ];
 })();

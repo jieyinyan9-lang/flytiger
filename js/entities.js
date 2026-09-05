@@ -193,6 +193,8 @@
       this.bscale = opts.bscale || 1;          // 弹体缩放（大型导弹等）
       this.invuln = opts.invuln || 0;          // 发射后无敌时间（期间我方子弹/旋转剑无法命中）
       this.element = opts.element || '';       // 元素属性：'flame'/'poison'/'ice'（友方弹专用）
+      this.sineWave = opts.sine || null;       // S 形弹道：{ amp, freq, phase }（飞刀线性 S 走向）
+      this.fireTrail = !!opts.fireTrail;       // 火焰弹：飞行时喷射火焰粒子拖尾 + 火焰分层渲染
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -291,6 +293,26 @@
             Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
         }
       }
+      // 火焰弹拖尾：沿飞行反方向持续喷射红黄白火焰粒子（弹体越大粒子越粗）
+      if (this.fireTrail && !this.neutralized) {
+        this.trail += dt;
+        if (this.trail > 0.03) {
+          this.trail = 0;
+          const spd = Math.hypot(this.vx, this.vy);
+          const bx = spd > 1 ? this.vx / spd : -1, by = spd > 1 ? this.vy / spd : 0;
+          const fireCols = ['#ff2a0a', '#ff5a1a', '#ff9d2e', '#ffd23b', '#fff5d0'];
+          for (let i = 0; i < 3; i++) {
+            const ja = rand(0, TAU), jr = rand(10, 60);
+            g.particles.push(new Particle(
+              this.x + rand(-this.r * 0.4, this.r * 0.4),
+              this.y + rand(-this.r * 0.4, this.r * 0.4),
+              -bx * rand(50, 140) + Math.cos(ja) * jr,
+              -by * rand(50, 140) + Math.sin(ja) * jr - 30,
+              rand(0.35, 0.7), rand(this.r * 0.35, this.r * 0.8),
+              fireCols[randi(0, fireCols.length - 1)]));
+          }
+        }
+      }
       this.x += this.vx * dt; this.y += this.vy * dt;
       if (this.life <= 0 && !this.dead) {
         if (this.onExpire) this.onExpire(g, this);
@@ -330,6 +352,22 @@
       if (k === 'orb' || k === 'spark') {
         // 元素弹道优先走自定义渲染（火焰圆形/毒液菱形/寒冰锥型）
         if (this.element) { this.renderElement(ctx); return; }
+        // 火焰弹：暗红→橙→黄→白芯分层 + 跳动闪烁
+        if (this.fireTrail) {
+          const r = this.r;
+          const f = 1 + Math.sin(this.t * 18) * 0.16;
+          ctx.fillStyle = '#7a1e08';
+          ctx.fillRect(this.x - r * 1.18 * f, this.y - r * 1.18 * f, r * 2.36 * f, r * 2.36 * f);
+          ctx.fillStyle = '#c94a1e';
+          ctx.fillRect(this.x - r * f, this.y - r * f, r * 2 * f, r * 2 * f);
+          ctx.fillStyle = '#ff7b2e';
+          ctx.fillRect(this.x - r * 0.64 * f, this.y - r * 0.64 * f, r * 1.28 * f, r * 1.28 * f);
+          ctx.fillStyle = '#ffd23b';
+          ctx.fillRect(this.x - r * 0.34, this.y - r * 0.34, r * 0.68, r * 0.68);
+          ctx.fillStyle = '#fff5d0';
+          ctx.fillRect(this.x - r * 0.15, this.y - r * 0.15, r * 0.3, r * 0.3);
+          return;
+        }
         const c = k === 'spark' ? '#c77dff' : this.color || '#ff6b6b';
         ctx.fillStyle = '#000'; ctx.fillRect(this.x - this.r - 1, this.y - this.r - 1, (this.r + 1) * 2, (this.r + 1) * 2);
         ctx.fillStyle = c;
@@ -1447,6 +1485,7 @@
         case 'skull': this.aiSkull(dt, g, p); break;
         case 'skeleton': this.aiSkeleton(dt, g, p); break;
         case 'superboy': this.aiSuperboy(dt, g, p); break;
+        case 'bigbat': this.aiBigBat(dt, g, p); break;
       }
       // 飞离屏幕清理
       if (this.x < -80 || this.y > CFG.H + 100 || this.y < -160) this.dead = true;
@@ -1791,7 +1830,8 @@
           drawSprite(ctx, Sprites.leigongL, this.x, this.y + Math.sin(t * 2) * 3, 2.2, 2.2, 0, this.flash);
           break;
         case 'pig':
-          drawSprite(ctx, Sprites.pigL, this.x, this.y + Math.sin(t * 2.2) * 3, 2.1, 2.1, 0, this.flash);
+          // 火猪血量与体积 ×3（缩放 2.1 → 3.2）
+          drawSprite(ctx, Sprites.pigL, this.x, this.y + Math.sin(t * 2.2) * 3, 3.2, 3.2, 0, this.flash);
           break;
         case 'archer': {
           const moving = this.state !== 'stop';
