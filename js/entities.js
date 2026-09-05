@@ -304,6 +304,8 @@
         return;
       }
       if (k === 'orb' || k === 'spark') {
+        // 元素弹道优先走自定义渲染（火焰圆形/毒液菱形/寒冰锥型）
+        if (this.element) { this.renderElement(ctx); return; }
         const c = k === 'spark' ? '#c77dff' : this.color || '#ff6b6b';
         ctx.fillStyle = '#000'; ctx.fillRect(this.x - this.r - 1, this.y - this.r - 1, (this.r + 1) * 2, (this.r + 1) * 2);
         ctx.fillStyle = c;
@@ -503,18 +505,17 @@
         ctx.restore();
         return;
       }
-      // 元素弹道：火焰=红色圆形，毒液=绿色菱形，寒冰=蓝色锥型
+    }
+
+    /** 元素弹道专用渲染：火焰=红色圆形，毒液=绿色菱形，寒冰=蓝色锥型 */
+    renderElement(ctx) {
+      const r = this.r;
       if (this.element === 'flame') {
-        const r = this.r;
         ctx.fillStyle = '#cc1a00'; ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
         ctx.fillStyle = '#ff3b1a'; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
         ctx.fillStyle = '#ffdd55'; ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.45, 0, TAU); ctx.fill();
-        return;
-      }
-      if (this.element === 'poison') {
-        const r = this.r;
+      } else if (this.element === 'poison') {
         ctx.save(); ctx.translate(this.x, this.y);
-        // 菱形
         ctx.fillStyle = '#0a3a0a';
         ctx.beginPath(); ctx.moveTo(0, -r - 2); ctx.lineTo(r + 2, 0); ctx.lineTo(0, r + 2); ctx.lineTo(-r - 2, 0); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#2dd44a';
@@ -522,13 +523,9 @@
         ctx.fillStyle = '#a6ffa6';
         ctx.beginPath(); ctx.moveTo(0, -r * 0.4); ctx.lineTo(r * 0.4, 0); ctx.lineTo(0, r * 0.4); ctx.lineTo(-r * 0.4, 0); ctx.closePath(); ctx.fill();
         ctx.restore();
-        return;
-      }
-      if (this.element === 'ice') {
-        const r = this.r;
+      } else if (this.element === 'ice') {
         const a = Math.atan2(this.vy, this.vx);
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
-        // 锥型（三角形，尖端朝飞行方向）
         ctx.fillStyle = '#1a5a8a';
         ctx.beginPath(); ctx.moveTo(r + 3, 0); ctx.lineTo(-r - 1, -r - 1); ctx.lineTo(-r - 1, r + 1); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#4ab8ff';
@@ -536,7 +533,6 @@
         ctx.fillStyle = '#e0f7ff';
         ctx.beginPath(); ctx.moveTo(r * 0.5, 0); ctx.lineTo(-r * 0.5, -r * 0.35); ctx.lineTo(-r * 0.5, r * 0.35); ctx.closePath(); ctx.fill();
         ctx.restore();
-        return;
       }
     }
   }
