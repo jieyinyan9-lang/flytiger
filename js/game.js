@@ -197,6 +197,7 @@
       this.ultWave = null;    // 大招光波特效
       this.round = 1;
       this.wayPicksThisRound = 0;   // 每轮弹道类成长选择次数（上限 3）
+      this.elemPicksThisRound = 0;  // 每轮元素弹道成长选择次数（上限 2）
       this.diffMul = 1;
       this.clouds = [];
       for (let i = 0; i < 7; i++) {
@@ -330,11 +331,15 @@
       SFX.levelup();
       // pool: can() 通过的项（can 可能含随机概率，只调用一次）
       // 每轮弹道类成长最多 3 次，超限后从池中排除弹道类选项
+      // 元素弹道每轮最多 2 次，超限后从池中排除
       const WAY_IDS = ['way', 'tail', 'down', 'flame', 'poison', 'ice'];
+      const ELEM_IDS = ['flame', 'poison', 'ice'];
       const wayLimitReached = this.wayPicksThisRound >= 3;
+      const elemLimitReached = this.elemPicksThisRound >= 2;
       const pool = CFG.upgrades.filter(u => {
         if (!u.can(this.player, this)) return false;
         if (wayLimitReached && WAY_IDS.includes(u.id)) return false;
+        if (elemLimitReached && ELEM_IDS.includes(u.id)) return false;
         return true;
       });
       const opts = [];
@@ -377,6 +382,10 @@
       // 弹道类成长计数（每轮上限 3 次）
       if (['way', 'tail', 'down', 'flame', 'poison', 'ice'].includes(u.id)) {
         this.wayPicksThisRound++;
+      }
+      // 元素弹道单独计数（每轮上限 2 次）
+      if (['flame', 'poison', 'ice'].includes(u.id)) {
+        this.elemPicksThisRound++;
       }
       this.pendingOptions = null;
       this.el.levelup.classList.add('hidden');
@@ -460,6 +469,7 @@
       // 击败 1 个 Boss = 通过 1 轮
       this.round = this.bossCount + 1;
       this.wayPicksThisRound = 0;   // 新一轮重置弹道成长计数
+      this.elemPicksThisRound = 0;  // 新一轮重置元素弹道成长计数
       this.score += 500;
       this.kills++;
       this.addRage(CFG.ultimate.rageBoss);
