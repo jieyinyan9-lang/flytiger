@@ -13,7 +13,12 @@
 
   let ctx = null, bus = null, master = null, timer = null, noiseBuf = null;
   let current = null;
+  let runners = [];          // 并存调度的播放实例（新曲淡入期间旧曲继续演奏）
   let muted = false;
+
+  const FADE_IN = 1.7;       // 新曲淡入时长（秒）
+  const FADE_OUT = 1.6;      // 旧曲淡出时长（秒）
+  const BAR_WAIT_CAP = 1.4;  // 入场对齐小节边界的最长等待，超过则退到下一拍
 
   /* ---------------- 音频上下文 / 总线 ---------------- */
   function ac() {
@@ -477,7 +482,7 @@
     }
   };
 
-  /* ---------------- 调度器（前瞻 lookahead 调度） ---------------- */
+  /* ---------------- 调度器（前瞻 lookahead，多实例交叉调度） ---------------- */
   function drumHit(c, t, v, dest) {
     switch (c) {
       case 'K': kick(t, v, dest); break;
@@ -522,14 +527,34 @@
   }
 
   function tick() {
-    if (!ctx || !current || ctx.state !== 'running') return;
-    const r = current;
-    // 标签页挂起恢复后防止补播堆积：落后超过 0.1s 直接对齐当前时间
-    if (r.nextT < ctx.currentTime - 0.1) r.nextT = ctx.currentTime + 0.02;
-    let guard = 0;
-    while (r.nextT < ctx.currentTime + 0.18 && guard++ < 64) {
-      scheduleStep(r, r.nextT);
+    if (!ctx || ctx.state !== 'running') return;
+    for (const r of runners) {
+      if (r.dead) continue;
+      // 标签页挂起恢复后防止补播堆积：落后超过 0.1s 直接对齐当前时间
+      if (r.nextT < ctx.currentTime - 0.1) r.nextT = ctx.currentTime + 0.02;
+      let guard = 0;
+      while (r.nextT < ctx.currentTime + 0.18 && guard++ < 64) {
+        if (r.nextT >= r.stopAt) break;    // 淡出后段不再排新音，余音自然衰减
+        scheduleStep(r, r.nextT);
+      }
+      // 淡出结束：断开节点并标记回收
+      if (!r.dead && ctx.currentTime > r.cleanupAt) {
+        r.dead = true;
+        try { r.gain.disconnect(); } catch (e) {}
+        try { r.filter.disconnect(); } catch (e) {}
+      }
     }
+    if (runners.some(r => r.dead)) runners = runners.filter(r => !r.dead);
+  }
+
+  /** 旧曲下一个可切入的音乐边界：优先小节开头（乐句完整交接），等待过久则退到下一拍 */
+  function entryBoundary(old, nowC) {
+    const spb = 60 / old.def.bpm / 4;
+    const stepsToBar = old.step === 0 ? 0 : 16 - old.step;
+    const barT = old.nextT + stepsToBar * spb;
+    if (barT - nowC <= BAR_WAIT_CAP) return barT;
+    const stepsToBeat = (4 - (old.step % 4)) % 4;
+    return old.nextT + stepsToBeat * spb;
   }
 
   /* ---------------- 对外接口 ---------------- */
@@ -537,37 +562,81 @@
     /** 用户手势内调用：创建/恢复音频上下文 */
     unlock() { ac(); },
 
-    /** 按场景切歌（同名不重复切换，1.4s 交叉淡入淡出） */
+    /**
+     * 按场景切歌（同名不重复）：
+     * 新曲在旧曲的小节/节拍边界上进入，1.7s 低通滤波扫开 + 两段式淡入；
+     * 旧曲继续演奏并同步滤波渐暗、1.6s 淡出，后段停排新音、节点自动回收。
+     */
     play(name) {
       const c = ac();
       if (!c) return;
       const def = TRACKS[name];
       if (!def) return;
-      if (current && current.defKey === name) return;
+      if (current && current.defKey === name && !current.dead) return;
 
+      const nowC = c.currentTime;
+
+      // 新曲链路：osc → gain → lowpass → bus（淡入时滤波从闷到亮）
       const g = c.createGain();
-      g.gain.setValueAtTime(0.0001, c.currentTime);
-      g.connect(bus);
-      g.gain.exponentialRampToValueAtTime(1.0, c.currentTime + 1.4);
-      const runner = { def, defKey: name, step: 0, bar: 0, nextT: c.currentTime + 0.08, gain: g };
+      const f = c.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 420;
+      g.gain.value = 0.0001;
+      g.connect(f); f.connect(bus);
 
-      const old = current;
-      if (old) {
-        const og = old.gain;
-        og.gain.cancelScheduledValues(c.currentTime);
-        og.gain.setValueAtTime(Math.max(0.0001, og.gain.value), c.currentTime);
-        og.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.9);
-        setTimeout(() => { try { og.disconnect(); } catch (e) {} }, 1500);
+      const runner = {
+        def, defKey: name, step: 0, bar: 0,
+        nextT: 0, gain: g, filter: f,
+        dead: false, stopAt: Infinity, cleanupAt: Infinity
+      };
+
+      // 入场时刻：对齐旧曲音乐边界；无旧曲或上下文未运行时立即轻起
+      const old = (current && !current.dead) ? current : null;
+      const entryT = (old && c.state === 'running') ? entryBoundary(old, nowC) : nowC + 0.12;
+      runner.nextT = entryT;
+
+      // 新曲自动化：先快速到半亮半响，再缓慢铺满（避免中段音量凹陷）
+      g.gain.setValueAtTime(0.0001, nowC);
+      g.gain.setValueAtTime(0.0001, entryT);
+      g.gain.exponentialRampToValueAtTime(0.5, entryT + 0.55);
+      g.gain.exponentialRampToValueAtTime(1.0, entryT + FADE_IN);
+      f.frequency.setValueAtTime(420, nowC);
+      f.frequency.setValueAtTime(420, entryT);
+      f.frequency.exponentialRampToValueAtTime(2800, entryT + 0.55);
+      f.frequency.exponentialRampToValueAtTime(15000, entryT + FADE_IN);
+
+      // 所有在播旧曲：从新曲入场前一刻开始交叉淡出（滤波渐暗 + 音量两段式淡出）
+      for (const r of runners) {
+        if (r === runner || r.dead) continue;
+        const exitAt = Math.max(nowC + 0.02, entryT - 0.2);
+        r.stopAt = exitAt + FADE_OUT * 0.55;
+        r.cleanupAt = exitAt + FADE_OUT + 0.4;
+        try {
+          r.gain.gain.cancelScheduledValues(nowC);
+          r.filter.frequency.cancelScheduledValues(nowC);
+          const gv = Math.max(0.0002, r.gain.gain.value);
+          const fv = Math.max(100, r.filter.frequency.value);
+          r.gain.gain.setValueAtTime(gv, nowC);
+          r.filter.frequency.setValueAtTime(fv, nowC);
+          r.gain.gain.setValueAtTime(gv, exitAt);
+          r.filter.frequency.setValueAtTime(fv, exitAt);
+          r.gain.gain.exponentialRampToValueAtTime(Math.max(0.3, gv * 0.4), exitAt + 0.5);
+          r.gain.gain.exponentialRampToValueAtTime(0.0001, exitAt + FADE_OUT);
+          r.filter.frequency.exponentialRampToValueAtTime(900, exitAt + 0.5);
+          r.filter.frequency.exponentialRampToValueAtTime(380, exitAt + FADE_OUT);
+        } catch (e) {}
       }
+
+      runners.push(runner);
       current = runner;
     },
 
-    /** 暂停/界面压低音乐音量 */
+    /** 暂停/界面压低音乐音量（0.4s 平滑过渡） */
     setDuck(v) {
       if (!bus || !ctx) return;
       bus.gain.cancelScheduledValues(ctx.currentTime);
       bus.gain.setValueAtTime(Math.max(0.0001, bus.gain.value), ctx.currentTime);
-      bus.gain.linearRampToValueAtTime(v, ctx.currentTime + 0.3);
+      bus.gain.exponentialRampToValueAtTime(Math.max(0.0001, v), ctx.currentTime + 0.4);
     },
 
     setMuted(m) {
@@ -575,10 +644,12 @@
       if (master && ctx) {
         master.gain.cancelScheduledValues(ctx.currentTime);
         master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), ctx.currentTime);
-        master.gain.linearRampToValueAtTime(m ? 0.0001 : 0.85, ctx.currentTime + 0.2);
+        master.gain.exponentialRampToValueAtTime(m ? 0.0001 : 0.85, ctx.currentTime + 0.35);
       }
     },
 
-    current() { return current ? current.defKey : null; }
+    current() { return current ? current.defKey : null; },
+    /** 调试：当前并存的播放实例数（交叉淡化期间为 2） */
+    activeCount() { return runners.length; }
   };
 })();
