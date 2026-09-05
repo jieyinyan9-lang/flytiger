@@ -144,9 +144,9 @@
       },
       {
         id: 'way', icon: '※', cls: 'c-way', name: '弹道强化',
-        desc: '子弹数量 +1，形成散射 / 多方向弹幕（上限 7 发）',
-        can(p) { return p.bulletCount < 7; },
-        apply(p) { p.bulletCount = Math.min(7, p.bulletCount + 1); p.wayLv++; },
+        desc: '子弹数量 +1，形成散射 / 多方向弹幕（上限 20 发）',
+        can(p) { return p.bulletCount < 20; },
+        apply(p) { p.bulletCount = Math.min(20, p.bulletCount + 1); p.wayLv++; },
         level(p) { return p.wayLv; }
       },
       {
@@ -284,29 +284,48 @@
         level(p) { return p.lives; }
       },
       /* —— 元素弹道（击败 Boss 后解锁，各最多 3 条） —— */
+      // 三种元素弹道全部拥有后，这组成长项不再出现
+      // 首次必定出现（guaranteed），拥有后降低出现概率（最低 10%）
       {
         id: 'flame', icon: '🔥', cls: 'c-atk', name: '火焰弹道',
         desc: '额外增加一条火焰弹道（最多 3 条）。命中后 3s 持续伤害，1s 破解敌人无敌',
-        can(p) { return p.flameWay < 3; },
+        can(p, g) {
+          if (p.flameWay >= 3) return false;
+          // 三种全有后不再出现
+          if (p.flameWay > 0 && p.poisonWay > 0 && p.iceWay > 0) return false;
+          if (p.flameWay === 0) return true;   // 首次由 guaranteed 保证
+          // 拥有后 10% 概率出现
+          return Math.random() < 0.10;
+        },
         apply(p) { p.flameWay++; },
         level(p) { return p.flameWay; },
-        guaranteed(p, g) { return g.bossCount >= 1 && p.flameWay === 0; }   // 击败首 Boss 必定出现
+        guaranteed(p, g) { return g.bossCount >= 1 && p.flameWay === 0; }
       },
       {
         id: 'poison', icon: '☠', cls: 'c-atk', name: '毒液弹道',
         desc: '额外增加一条毒液弹道（最多 3 条）。命中后 6s 持续伤害，3s 破解敌人无敌',
-        can(p) { return p.poisonWay < 3; },
+        can(p, g) {
+          if (p.poisonWay >= 3) return false;
+          if (p.flameWay > 0 && p.poisonWay > 0 && p.iceWay > 0) return false;
+          if (p.poisonWay === 0) return true;
+          return Math.random() < 0.10;
+        },
         apply(p) { p.poisonWay++; },
         level(p) { return p.poisonWay; },
-        guaranteed(p, g) { return g.round >= 2 && p.poisonWay === 0; }   // 第 2 轮必定出现
+        guaranteed(p, g) { return g.round >= 2 && p.poisonWay === 0; }
       },
       {
         id: 'ice', icon: '❄', cls: 'c-spd', name: '寒冰弹道',
         desc: '额外增加一条寒冰弹道（最多 3 条）。命中后 2s 持续伤害，冻结敌人 4s',
-        can(p) { return p.iceWay < 3; },
+        can(p, g) {
+          if (p.iceWay >= 3) return false;
+          if (p.flameWay > 0 && p.poisonWay > 0 && p.iceWay > 0) return false;
+          if (p.iceWay === 0) return true;
+          return Math.random() < 0.10;
+        },
         apply(p) { p.iceWay++; },
         level(p) { return p.iceWay; },
-        guaranteed(p, g) { return g.round >= 4 && p.iceWay === 0; }   // 第 4 轮必定出现
+        guaranteed(p, g) { return g.round >= 4 && p.iceWay === 0; }
       }
     ],
 

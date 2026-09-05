@@ -1043,7 +1043,7 @@
       for (let w = 0; w < this.flameWay; w++) {
         const off = (this.flameWay === 1 ? 0 : (w - (this.flameWay - 1) / 2) * 0.28);
         g.bullets.push(new Bullet(
-          muzzleX, muzzleY + offY,
+          muzzleX, muzzleY,
           Math.cos(off) * speed * 0.85, Math.sin(off) * speed * 0.85 - 60,
           { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
             pierce: 0, element: 'flame', life: 4 }));
@@ -1052,7 +1052,7 @@
       for (let w = 0; w < this.poisonWay; w++) {
         const off = (this.poisonWay === 1 ? 0 : (w - (this.poisonWay - 1) / 2) * 0.28);
         g.bullets.push(new Bullet(
-          muzzleX, muzzleY + offY,
+          muzzleX, muzzleY,
           Math.cos(off) * speed * 0.85, Math.sin(off) * speed * 0.85 + 60,
           { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
             pierce: 0, element: 'poison', life: 4 }));
@@ -1061,7 +1061,7 @@
       for (let w = 0; w < this.iceWay; w++) {
         const off = (this.iceWay === 1 ? 0 : (w - (this.iceWay - 1) / 2) * 0.28);
         g.bullets.push(new Bullet(
-          muzzleX, muzzleY + offY,
+          muzzleX, muzzleY,
           Math.cos(off) * speed * 0.9, Math.sin(off) * speed * 0.9,
           { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
             pierce: 0, element: 'ice', life: 4 }));

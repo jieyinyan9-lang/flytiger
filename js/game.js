@@ -327,9 +327,10 @@
     openLevelup() {
       this.state = 'levelup';
       SFX.levelup();
+      // pool: can() 通过的项（can 可能含随机概率，只调用一次）
       const pool = CFG.upgrades.filter(u => u.can(this.player, this));
       const opts = [];
-      // 必定出现机制：guaranteed 返回 true 的成长项强制放入选项
+      // guaranteed 项强制放入选项（从 pool 中提取，can 已验证通过）
       const guaranteed = pool.filter(u => u.guaranteed && u.guaranteed(this.player, this));
       guaranteed.forEach(u => {
         const idx = pool.indexOf(u);
