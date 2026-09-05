@@ -123,7 +123,7 @@
       bigbat: {
         name: '大型蝙蝠', hp: 90, speed: 100, contact: 18,
         bulletDmg: 12, xp: 18, score: 42, radius: 30, weight: 4, minBossKills: 3, elite: true,
-        dynamicHp: true, fightTime: [5, 8]   // 动态血量：保证玩家交战 5-8 秒
+        dynamicHp: true, fightTime: [3, 4]   // 动态血量：仅可承伤期(每8s中4s)能输出，反推血量保证墙钟交战 6-8 秒
       }
     },
 

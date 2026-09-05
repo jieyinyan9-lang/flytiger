@@ -1364,12 +1364,14 @@
       if (type === 'eagle') this.spawnInvuln = 3;
       // 小超人：出场 7s 无敌
       if (type === 'superboy') this.spawnInvuln = 7;
-      // 大型蝙蝠：飞行精英，悬停甩黑色飞刀（S 形弹/散射）
+      // 大型蝙蝠：飞行精英，悬停甩黑色飞刀（S 形弹/散射）；无敌 4s / 可承伤 4s 持续循环
       if (type === 'bigbat') {
         this.state = 'hover';
         this.atkT = rand(1.4, 2.2);
         this.volley = 0;
-        this.spawnInvuln = 2;
+        this.invPhase = true;      // true=无敌期，false=可承伤期
+        this.invCycleT = 4;        // 阶段倒计时（每 4s 切换）
+        this.spawnInvuln = 4;      // 首个无敌期 4s
       }
     }
 
@@ -1768,6 +1770,18 @@
 
     /* 大型蝙蝠：保持中距悬停，交替甩出 S 形黑色飞刀（单发）/ 散射飞刀群（5 发小幅 S 走向） */
     aiBigBat(dt, g, p) {
+      // 无敌 4s → 可承伤 4s 持续循环；无敌期借用 spawnInvuln（免伤/金色护盾环/元素弹破无敌/大招清除均自动生效）
+      this.invCycleT -= dt;
+      if (this.invCycleT <= 0) {
+        this.invCycleT = 4;
+        this.invPhase = !this.invPhase;
+        if (this.invPhase) {
+          this.spawnInvuln = 4;     // 进入无敌期
+          this.invulnBreakT = 0;    // 清掉元素弹留下的破无敌倒计时，防止新无敌期被旧计时提前打断
+        } else {
+          this.spawnInvuln = 0;     // 进入可承伤期
+        }
+      }
       const sp = 105 * this.speedMul;
       const wantX = p.x + 330;
       if (this.state === 'enter') {
