@@ -250,14 +250,24 @@
         const sp = Math.hypot(this.vx, this.vy);
         this.vx = Math.cos(cur) * sp; this.vy = Math.sin(cur) * sp;
         this.angle = cur;
-        // 尾焰仅导弹有
+        // 尾焰仅导弹有：尾部密集喷射红橙黄白火焰粒子（随弹体缩放，尾迹粗长）
         if (this.kind === 'missile') {
           this.trail += dt;
-          if (this.trail > 0.05) {
+          if (this.trail > 0.03) {
             this.trail = 0;
-            g.particles.push(new Particle(this.x, this.y,
-              rand(-20, 20), rand(-20, 20), 0.3, rand(2, 4),
-              Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
+            const ms = this.bscale || 1;
+            const bx = Math.cos(cur), by = Math.sin(cur);
+            const tx = this.x - bx * 14 * ms, ty = this.y - by * 14 * ms;
+            const fireCols = ['#ff2a0a', '#ff5a1a', '#ff9d2e', '#ffd23b', '#fff5d0'];
+            for (let i = 0; i < 3; i++) {
+              const ja = cur + Math.PI + rand(-0.6, 0.6);
+              g.particles.push(new Particle(
+                tx + rand(-4, 4) * ms, ty + rand(-4, 4) * ms,
+                Math.cos(ja) * rand(70, 170) + rand(-30, 30),
+                Math.sin(ja) * rand(70, 170) + rand(-30, 30),
+                rand(0.3, 0.6), rand(3, 6) * ms,
+                fireCols[randi(0, fireCols.length - 1)]));
+            }
           }
         }
       }
@@ -493,9 +503,12 @@
         // 弹头（红，黑边）
         ctx.fillStyle = '#141418'; ctx.fillRect(6 * ms, -4 * ms, 6 * ms, 8 * ms);
         ctx.fillStyle = '#e0453a'; ctx.fillRect(7 * ms, -2 * ms, 4 * ms, 4 * ms);
-        // 尾焰
-        ctx.fillStyle = Math.floor(this.t * 20) % 2 ? '#ffd23b' : '#ff7b2e';
-        ctx.fillRect(-16 * ms, -2 * ms, 5 * ms, 4 * ms);
+        // 尾焰（拉长 + 三色跳动）
+        const fl = 1 + Math.sin(this.t * 26) * 0.25;
+        ctx.fillStyle = ['#ffd23b', '#ff7b2e', '#ff2a0a'][Math.floor(this.t * 20) % 3];
+        ctx.fillRect(-22 * ms * fl, -3 * ms, 11 * ms * fl, 6 * ms);
+        ctx.fillStyle = '#fff5d0';
+        ctx.fillRect(-15 * ms, -1.5 * ms, 4 * ms, 3 * ms);
         // 尾翼
         ctx.fillStyle = '#141418';
         ctx.fillRect(-11 * ms, -7 * ms, 4 * ms, 3 * ms); ctx.fillRect(-11 * ms, 4 * ms, 4 * ms, 3 * ms);
