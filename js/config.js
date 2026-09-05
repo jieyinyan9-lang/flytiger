@@ -282,6 +282,31 @@
         can(p) { return p.lives < 3; },
         apply(p) { p.lives++; },
         level(p) { return p.lives; }
+      },
+      /* —— 元素弹道（击败 Boss 后解锁，各最多 3 条） —— */
+      {
+        id: 'flame', icon: '🔥', cls: 'c-atk', name: '火焰弹道',
+        desc: '额外增加一条火焰弹道（最多 3 条）。命中后 3s 持续伤害，1s 破解敌人无敌',
+        can(p) { return p.flameWay < 3; },
+        apply(p) { p.flameWay++; },
+        level(p) { return p.flameWay; },
+        guaranteed(p, g) { return g.bossCount >= 1 && p.flameWay === 0; }   // 击败首 Boss 必定出现
+      },
+      {
+        id: 'poison', icon: '☠', cls: 'c-atk', name: '毒液弹道',
+        desc: '额外增加一条毒液弹道（最多 3 条）。命中后 6s 持续伤害，3s 破解敌人无敌',
+        can(p) { return p.poisonWay < 3; },
+        apply(p) { p.poisonWay++; },
+        level(p) { return p.poisonWay; },
+        guaranteed(p, g) { return g.round >= 2 && p.poisonWay === 0; }   // 第 2 轮必定出现
+      },
+      {
+        id: 'ice', icon: '❄', cls: 'c-spd', name: '寒冰弹道',
+        desc: '额外增加一条寒冰弹道（最多 3 条）。命中后 2s 持续伤害，冻结敌人 4s',
+        can(p) { return p.iceWay < 3; },
+        apply(p) { p.iceWay++; },
+        level(p) { return p.iceWay; },
+        guaranteed(p, g) { return g.round >= 4 && p.iceWay === 0; }   // 第 4 轮必定出现
       }
     ],
 

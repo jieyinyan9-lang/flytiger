@@ -194,6 +194,22 @@ kbd {
 .lu-card.c-tier { box-shadow: 0 0 0 3px #c99bff, 0 10px 24px rgba(0,0,0,.6); }
 .lu-card.c-bomb { box-shadow: 0 0 0 3px #ff6b3d, 0 10px 24px rgba(0,0,0,.6); }
 
+/* 推荐卡片标记 */
+.lu-card.lu-recommend {
+  border-color: #ffd166;
+  animation: lu-rec-pulse 1.4s ease-in-out infinite;
+}
+.lu-card.lu-recommend .card-rec {
+  position: absolute; top: -12px; right: -8px;
+  background: #ff5252; color: #fff; font-size: 11px; font-weight: 900;
+  padding: 2px 8px; border: 2px solid #000; border-radius: 8px;
+  letter-spacing: 1px;
+}
+@keyframes lu-rec-pulse {
+  0%,100% { box-shadow: 0 0 0 3px #ffd166, 0 0 16px rgba(255,209,102,.5), 0 10px 24px rgba(0,0,0,.6); }
+  50%     { box-shadow: 0 0 0 4px #ffe066, 0 0 28px rgba(255,224,102,.8), 0 10px 24px rgba(0,0,0,.6); }
+}
+
 /* ---------- 菜单 / 结束 ---------- */
 #menu, #gameover, #pause {
   position: absolute; inset: 0; z-index: 40;

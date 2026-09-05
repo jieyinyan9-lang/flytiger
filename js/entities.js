@@ -192,6 +192,7 @@
       this.hitCd = 0;                          // 被我方子弹命中的间隔（防穿透弹一帧多次计数）
       this.bscale = opts.bscale || 1;          // 弹体缩放（大型导弹等）
       this.invuln = opts.invuln || 0;          // 发射后无敌时间（期间我方子弹/旋转剑无法命中）
+      this.element = opts.element || '';       // 元素属性：'flame'/'poison'/'ice'（友方弹专用）
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -502,6 +503,28 @@
         ctx.restore();
         return;
       }
+      // 元素弹道（火焰/毒液/寒冰）：友方元素弹专用渲染
+      if (this.element === 'flame') {
+        const r = this.r;
+        ctx.fillStyle = '#ff6b1a'; ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ffd23b'; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
+        return;
+      }
+      if (this.element === 'poison') {
+        const r = this.r;
+        ctx.fillStyle = '#1a4a1a'; ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#3dd84a'; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#a6ffa6'; ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
+        return;
+      }
+      if (this.element === 'ice') {
+        const r = this.r;
+        ctx.fillStyle = '#2a7aC0'; ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#7fd4ff'; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#e0f7ff'; ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
+        return;
+      }
     }
   }
 
@@ -708,6 +731,10 @@
       // 额外弹道解锁
       this.tailWay = false;   // 尾部向后弹道
       this.downWay = false;   // 下部向下弹道
+      // 元素弹道（击败 Boss 后解锁，各最多 3 条）
+      this.flameWay = 0;      // 火焰弹道数量
+      this.poisonWay = 0;     // 毒液弹道数量
+      this.iceWay = 0;        // 寒冰弹道数量
       // 闪电子弹（闪电链）
       this.chainJumps = 0;    // 链接敌人数量（0=未解锁）
       this.chainDmgLv = 0;    // 闪电伤害强化等级
@@ -858,6 +885,7 @@
         this.hp = this.maxHp;
         this.invT = 2.6;
         this.hurtFlash = 0;
+        this.rage = CFG.ultimate.rageMax;   // 复活时怒气立刻回满，可释放大招
         SFX.explode(true);
         g.shake(14);
         g.flashT = 0.45; g.flashColor = '#ffd0d0';
@@ -1011,6 +1039,33 @@
             }));
         });
       }
+      // 元素弹道：火焰（向上偏角发射，每条独立角度）
+      for (let w = 0; w < this.flameWay; w++) {
+        const off = (this.flameWay === 1 ? 0 : (w - (this.flameWay - 1) / 2) * 0.28);
+        g.bullets.push(new Bullet(
+          muzzleX, muzzleY + offY,
+          Math.cos(off) * speed * 0.85, Math.sin(off) * speed * 0.85 - 60,
+          { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
+            pierce: 0, element: 'flame', life: 4 }));
+      }
+      // 元素弹道：毒液（向下偏角发射）
+      for (let w = 0; w < this.poisonWay; w++) {
+        const off = (this.poisonWay === 1 ? 0 : (w - (this.poisonWay - 1) / 2) * 0.28);
+        g.bullets.push(new Bullet(
+          muzzleX, muzzleY + offY,
+          Math.cos(off) * speed * 0.85, Math.sin(off) * speed * 0.85 + 60,
+          { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
+            pierce: 0, element: 'poison', life: 4 }));
+      }
+      // 元素弹道：寒冰（水平发射，略带角度）
+      for (let w = 0; w < this.iceWay; w++) {
+        const off = (this.iceWay === 1 ? 0 : (w - (this.iceWay - 1) / 2) * 0.28);
+        g.bullets.push(new Bullet(
+          muzzleX, muzzleY + offY,
+          Math.cos(off) * speed * 0.9, Math.sin(off) * speed * 0.9,
+          { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
+            pierce: 0, element: 'ice', life: 4 }));
+      }
       SFX.shoot();
     }
 
@@ -1136,6 +1191,13 @@
       this.hurtT = 0;          // 持续受伤红染（>0 时叠加红色 tint，不闪烁）
       this.spawnInvuln = 0;    // 出场无敌时间
       this.kbX = 0; this.kbY = 0;
+
+      // 元素持续伤害（火焰/毒液/寒冰弹道命中后生效）
+      this.dotT = 0;           // DoT 剩余时间
+      this.dotDps = 0;         // 每秒伤害
+      this.dotType = '';       // 'flame' / 'poison' / 'ice'
+      this.invulnBreakT = 0;   // 破无敌倒计时（归零时清除 spawnInvuln）
+      this.freezeT = 0;        // 冻结时间（>0 时停止行动）
 
       // 难度缩放
       const round = g.round;
@@ -1281,6 +1343,32 @@
       this.flash = Math.max(0, this.flash - dt);
       this.hurtT = Math.max(0, this.hurtT - dt);
       this.spawnInvuln = Math.max(0, this.spawnInvuln - dt);
+
+      // 元素 DoT 处理
+      if (this.dotT > 0) {
+        this.dotT -= dt;
+        const tickDmg = this.dotDps * dt;
+        if (this.spawnInvuln <= 0 && tickDmg > 0) {
+          this.hp -= tickDmg;
+          this.hurtT = 0.12;
+          if (this.hp <= 0) { this.die(g); return; }
+        }
+      }
+      // 破无敌倒计时：归零时清除出场无敌
+      if (this.invulnBreakT > 0) {
+        this.invulnBreakT -= dt;
+        if (this.invulnBreakT <= 0) this.spawnInvuln = 0;
+      }
+      // 冻结：停止行动（不减 freezeT 由下方统一处理）
+      if (this.freezeT > 0) {
+        this.freezeT -= dt;
+        // 冻结期间仍受击退衰减但不跑 AI
+        this.x += this.kbX * dt; this.y += this.kbY * dt;
+        this.kbX *= 0.86; this.kbY *= 0.86;
+        if (this.freezeT <= 0) { /* 解冻 */ }
+        return;
+      }
+
       // 击退衰减
       this.x += this.kbX * dt; this.y += this.kbY * dt;
       this.kbX *= 0.86; this.kbY *= 0.86;
@@ -1640,6 +1728,31 @@
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius * 1.3, 0, TAU);
         ctx.fill();
+        ctx.restore();
+      }
+      // 元素 DoT 视觉提示
+      if (this.dotT > 0) {
+        const dotColor = this.dotType === 'flame' ? 'rgba(255,80,0,0.3)' :
+                         this.dotType === 'poison' ? 'rgba(40,200,40,0.3)' :
+                         'rgba(80,180,255,0.3)';
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = dotColor;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 1.2, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+      // 冻结：冰块覆盖
+      if (this.freezeT > 0) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(120,200,255,0.45)';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 1.15, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(180,230,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
         ctx.restore();
       }
       // 出场无敌期：金色脉动护盾环

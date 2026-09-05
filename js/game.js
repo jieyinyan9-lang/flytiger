@@ -280,13 +280,21 @@
       this.shake(18);
       this.flashT = 0.5; this.flashColor = '#fff';
       this.ultWave = { r: 40, a: 1 };
+      // 大招破解无敌：清除所有敌人出场无敌 + Boss 锁血
+      this.enemies.forEach(e => { e.spawnInvuln = 0; });
+      this.bosses.forEach(b => { b.lockHp = false; });
       // 屏幕内小怪全灭
       this.enemies.slice().forEach(e => {
         if (!e.dead) e.takeDamage(99999, this);
       });
-      // Boss 受到 20% 最大生命伤害（入场免伤状态除外）
+      // Boss 受到 20% 最大生命伤害（入场免伤状态除外），大招无视无敌
       this.bosses.forEach(b => {
-        if (!b.dead && b.state !== 'enter') b.takeDamage(b.maxHp * CFG.ultimate.bossDmgRatio, this);
+        if (!b.dead && b.state !== 'enter') {
+          const wasInv = b.lockHp;
+          b.lockHp = false;
+          b.takeDamage(b.maxHp * CFG.ultimate.bossDmgRatio, this);
+          if (wasInv) b.lockHp = true;  // 恢复锁血状态标记（但伤害已造成）
+        }
       });
       // 光波放射粒子
       for (let i = 0; i < 46; i++) {
@@ -321,6 +329,13 @@
       SFX.levelup();
       const pool = CFG.upgrades.filter(u => u.can(this.player, this));
       const opts = [];
+      // 必定出现机制：guaranteed 返回 true 的成长项强制放入选项
+      const guaranteed = pool.filter(u => u.guaranteed && u.guaranteed(this.player, this));
+      guaranteed.forEach(u => {
+        const idx = pool.indexOf(u);
+        if (idx >= 0) pool.splice(idx, 1);
+        opts.push(u);
+      });
       while (opts.length < 3 && pool.length) {
         const i = Math.floor(Math.random() * pool.length);
         opts.push(pool.splice(i, 1)[0]);
@@ -329,10 +344,12 @@
       this.el.luCards.innerHTML = '';
       opts.forEach((u, i) => {
         const card = document.createElement('div');
-        card.className = 'lu-card ' + u.cls;
+        const isGuaranteed = guaranteed.includes(u);
+        card.className = 'lu-card ' + u.cls + (isGuaranteed ? ' lu-recommend' : '');
         const lv = u.level(this.player);
         card.innerHTML =
           `<div class="card-key">${i + 1}</div>` +
+          (isGuaranteed ? '<div class="card-rec">★ 推荐</div>' : '') +
           `<div class="card-icon">${u.icon}</div>` +
           `<div class="card-name">${u.name}</div>` +
           `<div class="card-lv">${lv > 0 ? '当前 Lv.' + lv : '未拥有'}</div>` +
@@ -705,6 +722,18 @@
             if (!b.hitSet) b.hitSet = new Set();
             b.hitSet.add(e);
             e.takeDamage(b.dmg, this, { x: 220, y: rand(-60, 60) });
+            // 元素弹道命中：施加 DoT / 破无敌 / 冻结
+            if (b.element === 'flame') {
+              e.dotT = 3; e.dotDps = b.dmg * 0.4; e.dotType = 'flame';
+              if (e.spawnInvuln > 0) e.invulnBreakT = 1;   // 火焰：1s 后破无敌
+            } else if (b.element === 'poison') {
+              e.dotT = 6; e.dotDps = b.dmg * 0.25; e.dotType = 'poison';
+              if (e.spawnInvuln > 0) e.invulnBreakT = 3;   // 毒液：3s 后破无敌
+            } else if (b.element === 'ice') {
+              e.dotT = 2; e.dotDps = b.dmg * 0.3; e.dotType = 'ice';
+              e.freezeT = 4;                                // 寒冰：冻结 4s
+              if (e.spawnInvuln > 0) e.invulnBreakT = 0.5; // 寒冰也破无敌
+            }
             // 闪电子弹：命中后闪电链跳跃链接附近敌人
             if (p.chainJumps >= 1) this.chainLightning(e, b.dmg);
             // 爆炸弹
