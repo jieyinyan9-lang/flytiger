@@ -72,6 +72,7 @@ kbd {
   to { filter: brightness(1.55); }
 }
 .hud-info { display: flex; gap: 14px; margin-top: 2px; font-size: 13px; color: #ffe08a; font-weight: bold; }
+.lives-text { color: #ff5d73; letter-spacing: 2px; }
 
 .hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: auto; }
 #melee-box {

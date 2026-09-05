@@ -394,6 +394,56 @@
     '...KKK..KKK...'
   ];
 
+  /* ---------------- 飞天骷髅头（持续旋转的攻击头骨） ---------------- */
+  const SKULLHEAD_PAL = {
+    K: '#101018',
+    W: '#e8eef7',
+    R: '#ff3b5c',  // 眼窝红光
+    r: '#8b1e3c'
+  };
+  const SKULLHEAD = [
+    '.....KKKKKK.....',
+    '...KKWWWWWWKK...',
+    '..KWWWWWWWWWWK..',
+    '.KWWWWWWWWWWWWK.',
+    '.KWKRRKWWKRRKWK.',
+    '.KWKrRKWWKRrKWK.',
+    'KWWWWWWWWWWWWWWK',
+    'KWWWKKWWWWKKWWWK',
+    'KWWWWWWWWWWWWWWK',
+    '.KWWKWWKKWWKWWK.',
+    '..KKKKKKKKKKKK..'
+  ];
+
+  /* ---------------- 炮师（地面炮兵，铁盔 + 右向炮管） ---------------- */
+  const CAN_PAL = {
+    K: '#141418',
+    M: '#5a6678',  // 铁盔
+    m: '#3d4654',
+    S: '#f2c9a0',  // 皮肤
+    C: '#2c3545',  // 深蓝炮服
+    c: '#1d2431',
+    W: '#cfd8e3',  // 炮管
+    Y: '#8a5a2b'   // 炮架
+  };
+  const CANNONEER = [
+    '.....KKKKK........',
+    '....KMMMMMK.......',
+    '...KMMMMMMMK......',
+    '....KSSSSSK.......',
+    '....KSKKSK........',
+    '.....KSSK.........',
+    '....KCCCCK........',
+    '...KCCCCCCK.......',
+    '...KcCCCCcKWWWWWWK',
+    '...KcCCCCcKWWWWWWK',
+    '...KcCCCCcKWWKWWK.',
+    '....KCCCCK....KK..',
+    '....KC..CK........',
+    '...KKY..YKK.......',
+    '..KYKY..KYKY......'
+  ];
+
   /* ---------------- 飞天日本武士 ---------------- */
   const SAMURAI_PAL = {
     G: '#ffd23b',  // 金角
@@ -431,6 +481,71 @@
     '................'
   ];
 
+  /* ---------------- 飞天狗王狗头（程序化像素，面朝右） ---------------- */
+  function buildDogHead() {
+    const W = 34, H = 24;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const px = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const K = '#14181f', F = '#8d96a3', f = '#6f7683', Wt = '#eef2f7', R = '#ff3b3b', N = '#10141b', P = '#5c1414';
+    // 竖耳（两只）
+    px(4, 0, 5, 7, K); px(5, 1, 3, 5, F);
+    px(13, 0, 5, 7, K); px(14, 1, 3, 5, F);
+    // 头部轮廓 + 灰毛
+    px(1, 5, 28, 12, K);
+    px(2, 6, 26, 10, F);
+    px(2, 12, 26, 4, f);                 // 下颊阴影
+    px(6, 6, 2, 3, f); px(11, 6, 2, 3, f); px(16, 6, 2, 3, f);   // 额毛纹
+    // 红瞳怒目
+    px(20, 8, 4, 3, K); px(21, 9, 2, 2, R);
+    // 白色口鼻
+    px(19, 11, 13, 8, K);
+    px(20, 12, 11, 5, Wt);
+    px(28, 12, 3, 3, N);                 // 鼻头
+    // 张开的獠牙口
+    px(20, 16, 11, 7, K);
+    px(21, 17, 9, 4, P);
+    px(21, 17, 2, 2, Wt); px(25, 17, 2, 2, Wt); px(28, 19, 2, 2, Wt);
+    return cv;
+  }
+
+  /* ---------------- 巨型野鸡（程序化像素，面朝右，长尾在左） ---------------- */
+  function buildPheasant() {
+    const W = 46, H = 26;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const px = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const K = '#17110a', B = '#b34a24', b = '#8f3a1c', G = '#d97706', Wt = '#f7f7f2', R = '#e0453a', Y = '#ffc02e';
+    // 长尾羽（左侧后掠，4 根层叠）
+    for (let i = 0; i < 4; i++) {
+      const y0 = 3 + i * 4;
+      px(0, y0 + 2, 14, 3, K);
+      px(1, y0 + 2, 12, 2, i % 2 ? G : b);
+    }
+    px(13, 6, 7, 9, K);                  // 尾根
+    // 躯干
+    px(14, 6, 20, 13, K);
+    px(15, 7, 18, 8, B);
+    px(15, 13, 18, 4, b);
+    // 翅膀斑纹
+    px(18, 8, 9, 5, K); px(19, 9, 7, 3, G);
+    px(20, 10, 4, 1, Wt);
+    // 颈 + 红头
+    px(32, 5, 9, 10, K);
+    px(33, 6, 7, 7, R);
+    px(37, 7, 2, 2, K);                  // 眼
+    // 黄喙（右侧）
+    px(41, 9, 4, 3, K); px(41, 9, 3, 2, Y);
+    // 红肉垂
+    px(38, 13, 3, 4, K); px(39, 14, 2, 3, R);
+    // 双腿
+    px(20, 19, 3, 5, K); px(19, 23, 5, 2, Y);
+    px(27, 19, 3, 5, K); px(26, 23, 5, 2, Y);
+    return cv;
+  }
+
   const Sprites = {
     cat: null,   // 白猫主角：assets/cat.png 原图（异步加载）
     eagleA: buildEagle(0, EAGLE_PAL),
@@ -443,9 +558,13 @@
     pig: build(PIG, PIG_PAL),
     archer: build(ARCHER, ARCHER_PAL),
     skeleton: build(SKEL, SKEL_PAL),
+    skullhead: build(SKULLHEAD, SKULLHEAD_PAL),
+    cannoneer: build(CANNONEER, CAN_PAL),
     samurai: build(SAMURAI, SAMURAI_PAL),
     swordEagleA: buildEagle(0, SWORD_EAGLE_PAL),
     swordEagleB: buildEagle(1, SWORD_EAGLE_PAL),
+    dogHead: buildDogHead(),
+    pheasant: buildPheasant(),
   };
 
   // 敌人统一朝向：翻转成朝左
@@ -459,9 +578,12 @@
   Sprites.pigL = flip(Sprites.pig);
   Sprites.archerL = flip(Sprites.archer);
   Sprites.skeletonL = flip(Sprites.skeleton);
+  Sprites.cannoneerL = flip(Sprites.cannoneer);
   Sprites.samuraiL = flip(Sprites.samurai);
   Sprites.swordEagleAL = flip(Sprites.swordEagleA);
   Sprites.swordEagleBL = flip(Sprites.swordEagleB);
+  Sprites.dogHeadL = flip(Sprites.dogHead);
+  Sprites.pheasantL = flip(Sprites.pheasant);
 
   // 白猫主角：直接加载原图文件渲染（保证与素材 100% 一致）
   Sprites.whenReady = new Promise(resolve => {

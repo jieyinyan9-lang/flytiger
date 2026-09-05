@@ -33,6 +33,7 @@
         roundText: document.getElementById('round-text'),
         levelText: document.getElementById('level-text'),
         scoreText: document.getElementById('score-text'),
+        livesText: document.getElementById('lives-text'),
         meleeCd: document.getElementById('melee-cd'),
         meleeIcon: document.getElementById('melee-icon'),
         bossHud: document.getElementById('boss-hud'),
@@ -137,6 +138,7 @@
       this.gems = [];
       this.particles = [];
       this.lightnings = [];
+      this.beams = [];         // 长线光束（狗王解体攻击）
       this.arcs = [];          // 闪电链电弧视觉
       this.rocks = [];
       this.toasts = [];
@@ -344,10 +346,18 @@
     triggerBossWarn() {
       // Boss 按出场序号解锁：第1只飞猪王，第2只起解锁雷公巨兽/武士，第3只起解锁咬剑鹰
       // 排斥规则：上一只出现的 Boss 本次不再出现
+      // chance：部分 Boss（骷髅王/狗王）即使解锁也只有 30% 概率进入候选池
       const ord = this.bossSpawned + 1;
-      let pool = window.BOSS_LIST.filter(b => b.minOrd <= ord && b.cls.name !== this.lastBossCls);
+      let pool = window.BOSS_LIST.filter(b =>
+        b.minOrd <= ord &&
+        b.cls.name !== this.lastBossCls &&
+        (b.chance === undefined || Math.random() < b.chance));
       if (!pool.length) {
-        // 兜底：当前序号无其他可选 Boss 时，允许重复出现（防止空池卡死）
+        // 兜底1：忽略概率权重（防止空池）
+        pool = window.BOSS_LIST.filter(b => b.minOrd <= ord && b.cls.name !== this.lastBossCls);
+      }
+      if (!pool.length) {
+        // 兜底2：当前序号无其他可选 Boss 时，允许重复出现（防止空池卡死）
         pool = window.BOSS_LIST.filter(b => b.minOrd <= ord);
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
@@ -427,6 +437,19 @@
       if (Math.hypot(p.x - x, p.y - y) < radius + p.radius) p.hurt(fragDmg, this);
     }
 
+    /* ---------------- 炮弹爆炸（炮师 / 可引爆弹） ---------------- */
+    shellBlast(x, y, dmg) {
+      const R = CFG.cannoneer.blastR;
+      burst(this, x, y, 30, ['#ff7b2e', '#ffd23b', '#c94a1e', '#fff'], 300, 7, 0.6, 120);
+      SFX.explode(false);
+      this.shake(8);
+      const p = this.player;
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < R + p.radius) {
+        p.hurt(Math.round(dmg * (d < R * 0.55 ? 1 : 0.6)), this);
+      }
+    }
+
     /* ---------------- 范围伤害（爆炸弹） ---------------- */
     aoe(x, y, radius, dmg) {
       burst(this, x, y, 16, ['#ff7b2e', '#ffd23b', '#fff'], 240, 5, 0.45, 80);
@@ -502,10 +525,10 @@
       this.rockT -= dt;
       if (this.rockT > 0) return;
       if (this.rocks.length >= this.rockMaxCount()) { this.rockT = 1.5; return; }
-      // 尺寸：小石更常见
+      // 尺寸：小石 / 梯形石更常见
       const roll = Math.random();
-      const kind = roll < 0.5 ? 2 : roll < 0.82 ? 1 : 0;
-      const halfW = [240, 120, 96][kind];
+      const kind = roll < 0.26 ? 2 : roll < 0.44 ? 4 : roll < 0.60 ? 1 : roll < 0.78 ? 3 : 0;
+      const halfW = [240, 120, 96, 210, 125][kind];
       // 与上一块岩石保持安全间隔
       const rightmost = this.rocks.reduce((m, r) => Math.max(m, r.x), -9999);
       const x = Math.max(CFG.W + halfW + 260, rightmost + halfW + rand(480, 820));
@@ -586,6 +609,7 @@
       this.gems.forEach(g2 => g2.update(dt, this));
       this.particles.forEach(p => p.update(dt));
       this.lightnings.forEach(l => l.update(dt, this));
+      this.beams.forEach(b => b.update(dt, this));
       this.rocks.forEach(r => r.update(dt, this));
       this.arcs.forEach(a => a.t += dt);
 
@@ -598,6 +622,7 @@
       this.gems = this.gems.filter(g2 => !g2.dead);
       this.particles = this.particles.filter(p => !p.dead);
       this.lightnings = this.lightnings.filter(l => !l.dead);
+      this.beams = this.beams.filter(b => !b.dead);
       this.rocks = this.rocks.filter(r => !r.dead);
       this.arcs = this.arcs.filter(a => a.t < a.life);
       if (this.bosses.length === 0) this.el.bossHud.classList.add('hidden');
@@ -642,6 +667,20 @@
           }
         }
       }
+      // 我方子弹 vs 可引爆敌方炮弹：击中即引爆
+      for (const fb of this.bullets) {
+        if (!fb.friendly || fb.dead) continue;
+        for (const eb of this.bullets) {
+          if (eb.friendly || eb.dead || !eb.volatile) continue;
+          const rr = fb.r + eb.r + 2;
+          if ((fb.x - eb.x) ** 2 + (fb.y - eb.y) ** 2 < rr * rr) {
+            fb.dead = true;
+            eb.dead = true;
+            this.shellBlast(eb.x, eb.y, eb.dmg);
+            break;
+          }
+        }
+      }
       // 敌方子弹 vs 玩家（Boss 死亡后已失效的弹幕不造成伤害）
       for (const b of this.bullets) {
         if (b.friendly || b.dead || b.neutralized) continue;
@@ -650,6 +689,9 @@
           if (b.kind === 'fireball') {
             b.dead = true;
             this.explodeFireball(b.x, b.y, 12, b.dmg * 0.75, 90);
+          } else if (b.kind === 'shell') {
+            b.dead = true;
+            this.shellBlast(b.x, b.y, b.dmg);
           } else {
             b.dead = true;
             p.hurt(b.dmg, this);
@@ -722,6 +764,10 @@
       this.el.roundText.textContent = `第 ${this.round} 轮`;
       this.el.levelText.textContent = `成长 ${this.totalLevels} 次`;
       this.el.scoreText.textContent = `击破 ${this.kills}`;
+      // 生命条数
+      if (this.el.livesText) {
+        this.el.livesText.textContent = '❤'.repeat(this.player.lives) + '·'.repeat(3 - this.player.lives);
+      }
       // 近战冷却
       const cdTotal = CFG.player.meleeCooldown;
       const cdRatio = p.isMeleeing ? 0 : clamp(p.cdT / cdTotal, 0, 1);
@@ -873,6 +919,8 @@
         this.bullets.forEach(b => b.render(ctx));
         // 闪电打击层
         this.lightnings.forEach(l => { if (l.t >= l.warn) l.render(ctx); });
+        // 长线光束（狗王解体攻击）
+        this.beams.forEach(b => b.render(ctx));
         // 粒子
         this.particles.forEach(p => p.render(ctx));
         // Toast

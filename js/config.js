@@ -40,6 +40,21 @@
       triggerD: 60         // 触发距离（接触玩家即爆）
     },
 
+    /** 防护罩：受伤概率触发减伤 */
+    shield: {
+      baseChance: 0.30,     // 初始触发概率 30%
+      maxChance: 0.70,      // 概率上限 70%
+      baseReduce: 0.40,     // 初始减伤 40%
+      maxReduce: 0.50       // 减伤上限 50%
+    },
+
+    /** 炮师（地面抛射炮兵） */
+    cannoneer: {
+      shellG: 420,          // 炮弹重力
+      blastR: 96,           // 爆炸半径
+      blastDmg: 18          // 爆炸伤害
+    },
+
     /** 闪电子弹（闪电链） */
     chain: {
       range: 180,          // 链接搜索半径
@@ -79,9 +94,17 @@
         name: '自爆骷髅', hp: 22, speed: 340, contact: 20,
         xp: 6, score: 14, radius: 14, weight: 9, minBossKills: 1, elite: false, bomber: true
       },
+      skull: {
+        name: '飞天骷髅', hp: 34, speed: 110, contact: 12,
+        bulletDmg: 12, xp: 8, score: 20, radius: 17, weight: 8, minBossKills: 1, elite: false
+      },
       archer: {
         name: '小弓箭手', hp: 46, speed: 75, contact: 10,
         bulletDmg: 11, xp: 8, score: 18, radius: 15, weight: 7, minBossKills: 2, elite: false, ground: true
+      },
+      cannoneer: {
+        name: '炮师', hp: 62, speed: 60, contact: 12,
+        bulletDmg: 16, xp: 12, score: 26, radius: 18, weight: 7, minBossKills: 3, elite: false, ground: true
       },
       leigong: {
         name: '雷公', hp: 130, speed: 70, contact: 18,
@@ -205,6 +228,48 @@
         can(p, g) { return g && g.round >= 4 && p.blades >= 1 && p.blades < CFG.blade.maxBlades; },
         apply(p) { p.blades++; },
         level(p) { return p.blades; }
+      },
+      /* —— 移动速度强化 —— */
+      {
+        id: 'spdMove', icon: '»', cls: 'c-spd', name: '移动速度',
+        desc: '飞虎飞行速度 +12%，机动性大幅提升（最高 +60%）',
+        can(p) { return (p.moveSpdLv || 0) < 5; },
+        apply(p) { p.moveSpdLv = (p.moveSpdLv || 0) + 1; },
+        level(p) { return p.moveSpdLv || 0; }
+      },
+      /* —— 防护罩：解锁 + 两条成长线 —— */
+      {
+        id: 'shield', icon: '◈', cls: 'c-life', name: '防护罩',
+        desc: '受到伤害时 30% 概率触发防护罩，减免 40% 伤害',
+        can(p) { return !p.shieldLv; },
+        apply(p) {
+          p.shieldLv = 1;
+          p.shieldChance = CFG.shield.baseChance;
+          p.shieldReduce = CFG.shield.baseReduce;
+        },
+        level(p) { return p.shieldLv; }
+      },
+      {
+        id: 'shieldC', icon: '◉', cls: 'c-life', name: '护罩感应',
+        desc: '防护罩触发概率 +10%（最高 70%）',
+        can(p) { return p.shieldLv >= 1 && p.shieldChance < CFG.shield.maxChance - 0.001; },
+        apply(p) { p.shieldChance = Math.min(CFG.shield.maxChance, p.shieldChance + 0.10); },
+        level(p) { return Math.round(p.shieldChance * 100 / 10) - 3; }
+      },
+      {
+        id: 'shieldR', icon: '⬢', cls: 'c-life', name: '护罩强化',
+        desc: '防护罩减伤提升 +5%（最高减伤 50%）',
+        can(p) { return p.shieldLv >= 1 && p.shieldReduce < CFG.shield.maxReduce - 0.001; },
+        apply(p) { p.shieldReduce = Math.min(CFG.shield.maxReduce, p.shieldReduce + 0.05); },
+        level(p) { return Math.round((p.shieldReduce - CFG.shield.baseReduce) / 0.05); }
+      },
+      /* —— 额外生命 —— */
+      {
+        id: 'lifeUp', icon: '✦', cls: 'c-life', name: '额外生命',
+        desc: '生命条数 +1（上限 3 条），阵亡时消耗一条原地重生',
+        can(p) { return p.lives < 3; },
+        apply(p) { p.lives++; },
+        level(p) { return p.lives; }
       }
     ],
 

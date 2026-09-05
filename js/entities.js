@@ -162,7 +162,7 @@
   };
 
   class Bullet {
-    /** kind: bolt / orb / shuriken / feather / whirl / flame / fireball / katana / spark */
+    /** kind: bolt / orb / shuriken / feather / whirl / flame / fireball / katana / spark / shell / missile */
     constructor(x, y, vx, vy, opts) {
       this.x = x; this.y = y; this.vx = vx; this.vy = vy;
       this.kind = opts.kind || 'orb';
@@ -183,6 +183,10 @@
       this.trail = 0;
       this.neutralized = false;   // Boss 死亡后弹幕失效
       this.fade = 1;             // 失效后逐渐淡出
+      this.volatile = !!opts.volatile;        // 炮弹：被我方子弹击中也会引爆
+      this.rockBreak = !!opts.rockBreak;      // 该弹可破坏障碍山石
+      this.homing = !!opts.homing;            // 追踪导弹
+      this.turnRate = opts.turnRate || 2.2;   // 导弹转向速率
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -199,10 +203,48 @@
         if (this.fade <= 0) { this.dead = true; return; }
       }
       if (this.grav) { this.vy += this.grav * dt; }
+      // 追踪导弹：按转向速率缓慢修正朝向玩家
+      if (this.homing && !this.neutralized) {
+        const p = g.player;
+        const ta = Math.atan2(p.y - this.y, p.x - this.x);
+        let cur = Math.atan2(this.vy, this.vx);
+        let d = ta - cur;
+        while (d > Math.PI) d -= TAU;
+        while (d < -Math.PI) d += TAU;
+        cur += clamp(d, -this.turnRate * dt, this.turnRate * dt);
+        const sp = Math.hypot(this.vx, this.vy);
+        this.vx = Math.cos(cur) * sp; this.vy = Math.sin(cur) * sp;
+        this.angle = cur;
+        this.trail += dt;
+        if (this.trail > 0.05) {
+          this.trail = 0;
+          g.particles.push(new Particle(this.x, this.y,
+            rand(-20, 20), rand(-20, 20), 0.3, rand(2, 4),
+            Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
+        }
+      }
       if (this.kind === 'arrow') {
         this.vy += 520 * dt;              // 抛射：重力
         this.angle = Math.atan2(this.vy, this.vx);
         if (this.y > CFG.GROUND_Y - 4) { this.dead = true; burst(g, this.x, CFG.GROUND_Y - 6, 4, ['#8a5a2b', '#6b4a2a'], 90, 3, 0.3); }
+      }
+      // 炮弹：触地 / 触山石即引爆
+      if (this.kind === 'shell' && !this.dead) {
+        if (this.y > CFG.GROUND_Y - 8) {
+          this.dead = true;
+          if (this.onExpire) this.onExpire(g, this);
+        } else {
+          for (const r of g.rocks) {
+            if (r.dead) continue;
+            const cx = clamp(this.x, r.left, r.left + r.w);
+            const cy = clamp(this.y, r.top, r.baseY);
+            if ((this.x - cx) ** 2 + (this.y - cy) ** 2 < (this.r + 4) ** 2) {
+              this.dead = true;
+              if (this.onExpire) this.onExpire(g, this);
+              break;
+            }
+          }
+        }
       }
       if (this.kind === 'fireball') {
         this.trail += dt;
@@ -214,7 +256,7 @@
         }
       }
       this.x += this.vx * dt; this.y += this.vy * dt;
-      if (this.life <= 0) {
+      if (this.life <= 0 && !this.dead) {
         if (this.onExpire) this.onExpire(g, this);
         this.dead = true;
       }
@@ -347,6 +389,36 @@
         ctx.fillRect(this.x - 2, this.y - 2, 4, 4);
         return;
       }
+      if (k === 'shell') {
+        // 铁炮弹：黑体高光 + 引信火花
+        const f = this.r + Math.sin(this.t * 12) * 0.8;
+        ctx.fillStyle = '#0d0f14';
+        ctx.fillRect(this.x - f - 1, this.y - f - 1, (f + 1) * 2, (f + 1) * 2);
+        ctx.fillStyle = '#3d4654';
+        ctx.fillRect(this.x - f, this.y - f, f * 2, f * 2);
+        ctx.fillStyle = '#6f7683';
+        ctx.fillRect(this.x - f * 0.5, this.y - f * 0.7, f * 0.7, f * 0.7);
+        ctx.fillStyle = '#ffd23b';
+        ctx.fillRect(this.x - 2, this.y - 2, 4, 4);
+        return;
+      }
+      if (k === 'missile') {
+        const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        // 弹体
+        ctx.fillStyle = '#141418'; ctx.fillRect(-10, -3, 20, 6);
+        ctx.fillStyle = '#8d96a3'; ctx.fillRect(-9, -2, 16, 4);
+        // 弹头（红）
+        ctx.fillStyle = '#e0453a'; ctx.fillRect(7, -2, 4, 4);
+        // 尾焰
+        ctx.fillStyle = Math.floor(this.t * 20) % 2 ? '#ffd23b' : '#ff7b2e';
+        ctx.fillRect(-14, -2, 4, 4);
+        // 尾翼
+        ctx.fillStyle = '#3d4654';
+        ctx.fillRect(-10, -5, 3, 2); ctx.fillRect(-10, 3, 3, 2);
+        ctx.restore();
+        return;
+      }
       if (k === 'katana') {
         const a = Math.atan2(this.vy, this.vx);
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
@@ -431,6 +503,63 @@
     }
   }
 
+  /* ---------------- 长线光束（预警 → 沿线打击） ---------------- */
+  class Beam {
+    /** (x,y) 起点，a 方向角，len 长度，w 光束宽 */
+    constructor(x, y, a, len, w, dmg, warn) {
+      this.x = x; this.y = y; this.a = a; this.len = len; this.w = w;
+      this.dmg = dmg;
+      this.t = 0; this.warn = warn || 0.7; this.active = 0.35;
+      this.dealt = false; this.dead = false;
+    }
+    end() {
+      return { x: this.x + Math.cos(this.a) * this.len, y: this.y + Math.sin(this.a) * this.len };
+    }
+    update(dt, g) {
+      this.t += dt;
+      if (this.t >= this.warn && !this.dealt) {
+        this.dealt = true;
+        SFX.zap(); g.shake(8);
+        const p = g.player;
+        const e = this.end();
+        const dx = e.x - this.x, dy = e.y - this.y;
+        const t = clamp(((p.x - this.x) * dx + (p.y - this.y) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+        const cx = this.x + dx * t, cy = this.y + dy * t;
+        burst(g, cx, cy, 10, ['#ff5252', '#fff', '#ffd23b'], 200, 4, 0.35);
+        if (Math.hypot(p.x - cx, p.y - cy) < this.w / 2 + p.radius * 0.7) {
+          p.hurt(this.dmg, g);
+        }
+      }
+      if (this.t > this.warn + this.active) this.dead = true;
+    }
+    render(ctx) {
+      const e = this.end();
+      ctx.save();
+      if (this.t < this.warn) {
+        // 预警虚线
+        const on = Math.floor(this.t * 14) % 2 === 0;
+        if (on) {
+          ctx.strokeStyle = 'rgba(255,70,70,0.8)';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([12, 10]);
+          ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      } else {
+        // 光束本体：白芯 + 红晕，随时间淡出
+        const a = clamp(1 - (this.t - this.warn) / this.active, 0, 1);
+        ctx.globalAlpha = a;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#ff5252'; ctx.lineWidth = this.w;
+        ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = this.w * 0.4;
+        ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+  }
+
   /* ---------------- 玩家：飞虎 ---------------- */
   class Player {
     constructor() {
@@ -470,6 +599,16 @@
       this.bladeDmgLv = 0;    // 刀刃伤害强化等级
       this.bladeAng = 0;      // 环绕角速度累计
       this.bladeCd = new Map();  // 刀刃命中敌人的冷却（键：敌人对象）
+      // 生命条数（初始 3 条，上限 3 条）
+      this.lives = 3;
+      this.maxLives = 3;
+      // 防护罩（成长解锁）
+      this.shieldLv = 0;        // 0 = 未解锁
+      this.shieldChance = 0;    // 触发概率
+      this.shieldReduce = 0;    // 减伤比例
+      this.shieldFlash = 0;     // 触发特效计时
+      // 移动速度强化
+      this.moveSpdLv = 0;
       // 受伤闪红
       this.hurtFlash = 0;
     }
@@ -563,15 +702,45 @@
       });
     }
 
+    /** 受伤：防护罩概率减免，伤害取整；死亡时消耗生命条数 */
     hurt(amount, g) {
       if (this.invT > 0) return;
-      this.hp -= amount;
+      let amt = Math.max(1, Math.round(amount));
+      // 防护罩：概率触发减伤
+      if (this.shieldLv > 0 && Math.random() < this.shieldChance) {
+        amt = Math.max(1, Math.round(amt * (1 - this.shieldReduce)));
+        this.shieldFlash = 0.55;
+        SFX.zap();
+        burst(g, this.x, this.y, 12, ['#7fe7ff', '#fff', '#c9f6ff'], 200, 4, 0.4);
+      }
+      this.hp -= amt;
       this.invT = CFG.player.invincibleTime;
       this.hurtFlash = 0.4;
       SFX.hurt();
       g.shake(8);
       burst(g, this.x, this.y, 10, ['#ff5252', '#fff'], 180, 4, 0.4);
-      if (this.hp <= 0) { this.hp = 0; g.gameOver(); }
+      if (this.hp <= 0) { this.hp = 0; this.die(g); }
+    }
+
+    /** 阵亡：消耗一条生命原地重生，否则游戏结束 */
+    die(g) {
+      if (g.state !== 'playing') return;
+      if (this.lives > 0) {
+        this.lives--;
+        this.hp = this.maxHp;
+        this.invT = 2.6;
+        this.hurtFlash = 0;
+        SFX.explode(true);
+        g.shake(14);
+        g.flashT = 0.45; g.flashColor = '#ffd0d0';
+        burst(g, this.x, this.y, 44, ['#f7941d', '#ffd93b', '#ff5252', '#fff'], 320, 7, 0.9, 140);
+        g.toast(`飞虎阵亡！剩余生命 ×${this.lives}，重生！`, 2.2);
+        // 回到安全位置
+        this.x = clamp(this.x, 80, 260);
+        this.y = CFG.H * 0.4;
+      } else {
+        g.gameOver();
+      }
     }
 
     update(dt, g) {
@@ -579,6 +748,7 @@
       this.wingT += dt;
       this.invT = Math.max(0, this.invT - dt);
       this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+      this.shieldFlash = Math.max(0, this.shieldFlash - dt);
       if (this.meleeT > 0) this.meleeT -= dt;
       if (this.cdT > 0) {
         this.cdT -= dt;
@@ -601,7 +771,7 @@
         if (g.keys.right) mx += 1;
         if (mx || my) { const l = Math.hypot(mx, my); mx /= l; my /= l; }
       }
-      const spd = CFG.player.speed * (1 + (this.sizeMul - 1) * 0.08);
+      const spd = CFG.player.speed * (1 + (this.sizeMul - 1) * 0.08) * (1 + (this.moveSpdLv || 0) * 0.12);
       this.vx = mx * spd; this.vy = my * spd;
       this.x += this.vx * dt; this.y += this.vy * dt;
       this.radius = CFG.player.radius * (0.75 + this.sizeMul * 0.25);
@@ -609,17 +779,16 @@
       this.y = clamp(this.y, CFG.TOP_Y, CFG.GROUND_Y - this.radius * 0.5);
       this.faceTilt += (clamp(this.vy / 900, -0.25, 0.25) - this.faceTilt) * Math.min(1, dt * 10);
 
-      // 地面危险区：贴地持续灼伤
+      // 地面危险区：贴地持续灼伤（走统一受伤通道：取整 + 防护罩判定）
       this.groundTick = (this.groundTick || 0) + dt;
       if (this.y + this.radius * 0.72 >= CFG.GROUND_Y - 4) {
         if (this.groundTick >= 0.4) {
           this.groundTick = 0;
-          this.hp -= 8;
-          this.invT = 0.3;
-          this.hurtFlash = 0.3;
-          g.shake(4);
           burst(g, this.x + rand(-20, 20), CFG.GROUND_Y - 4, 5, ['#67bd57', '#ff7b2e', '#4f9e44'], 120, 4, 0.4, 200);
-          if (this.hp <= 0) { this.hp = 0; g.gameOver(); }
+          const wasInv = this.invT;
+          this.invT = 0;
+          this.hurt(8, g);
+          if (this.invT < wasInv && wasInv > 0) this.invT = 0.3;   // 未实际受伤时保留短无敌
         }
       } else this.groundTick = 0;
 
@@ -688,27 +857,31 @@
             pierce, bombLv: this.bombLv, tier: this.bulletTier
           }));
       });
-      // 尾部弹道：向后射击
+      // 尾部弹道：向后射击 —— 完整继承正面弹道成长（弹数/扩散/弹速/穿透/爆炸）
       if (this.tailWay) {
-        g.bullets.push(new Bullet(
-          this.x - 44 * this.sizeMul, muzzleY,
-          -speed * 0.95, 0,
-          {
-            kind: 'bolt', friendly: true, dmg,
-            r: (4 + this.bulletTier * 2) * bscale,
-            pierce, bombLv: this.bombLv, tier: this.bulletTier
-          }));
+        angles.forEach(an => {
+          g.bullets.push(new Bullet(
+            this.x - 44 * this.sizeMul, muzzleY,
+            -Math.cos(an) * speed * 0.95, Math.sin(an) * speed * 0.95,
+            {
+              kind: 'bolt', friendly: true, dmg,
+              r: (4 + this.bulletTier * 2) * bscale,
+              pierce, bombLv: this.bombLv, tier: this.bulletTier
+            }));
+        });
       }
-      // 下部弹道：向下射击
+      // 下部弹道：向下射击 —— 同样继承正面弹道成长（扩散方向随弹道旋转）
       if (this.downWay) {
-        g.bullets.push(new Bullet(
-          this.x + 8 * this.sizeMul, this.y + 26 * this.sizeMul,
-          0, speed * 0.9,
-          {
-            kind: 'bolt', friendly: true, dmg,
-            r: (4 + this.bulletTier * 2) * bscale,
-            pierce, bombLv: this.bombLv, tier: this.bulletTier
-          }));
+        angles.forEach(an => {
+          g.bullets.push(new Bullet(
+            this.x + 8 * this.sizeMul, this.y + 26 * this.sizeMul,
+            Math.sin(an) * speed * 0.9, Math.cos(an) * speed * 0.9,
+            {
+              kind: 'bolt', friendly: true, dmg,
+              r: (4 + this.bulletTier * 2) * bscale,
+              pierce, bombLv: this.bombLv, tier: this.bulletTier
+            }));
+        });
       }
       SFX.shoot();
     }
@@ -774,6 +947,21 @@
         ctx.restore();
       }
 
+      // 防护罩触发特效：青色光罩扩散
+      if (this.shieldFlash > 0) {
+        const a = clamp(this.shieldFlash / 0.55, 0, 1);
+        const r = this.radius * (1.6 + (1 - a) * 0.7);
+        ctx.save();
+        ctx.globalAlpha = a * 0.8;
+        ctx.strokeStyle = '#7fe7ff';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.stroke();
+        ctx.globalAlpha = a * 0.25;
+        ctx.fillStyle = '#7fe7ff';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+
       // 防护刀刃：青色光剑沿轨道环绕（刀刃沿切线方向）
       if (this.blades > 0) {
         for (let i = 0; i < this.blades; i++) {
@@ -814,6 +1002,7 @@
       this.radius = def.radius;
       this.contactDmg = def.contact;
       this.bulletDmg = def.bulletDmg || 0;
+      this.groundUnit = !!def.ground;      // 地面单位：触碰山石不坠毁
       this.t = rand(0, 10);
       this.flash = 0;
       this.kbX = 0; this.kbY = 0;
@@ -842,6 +1031,28 @@
         this.stops = 0;
         this.stopsTotal = randi(3, 5);
         this.atkT = 0.5;
+      }
+
+      // 炮师：地面推进 → 停点抛射炮弹（3-4 次）→ 向左撤离
+      if (type === 'cannoneer') {
+        this.y = CFG.GROUND_Y - 24;
+        this.baseY = this.y;
+        this.state = 'walk';
+        this.archT = rand(1.6, 2.6);
+        this.stops = 0;
+        this.stopsTotal = randi(3, 4);
+        this.atkT = 0.6;
+      }
+
+      // 飞天骷髅：悬停持续旋转，循环 瞄准连射 / 扇形散射 / 多方向环弹
+      if (type === 'skull') {
+        this.y = rand(CFG.TOP_Y + 50, CFG.GROUND_Y - 140);
+        this.baseY = this.y;
+        this.state = 'hover';
+        this.rotA = rand(0, TAU);      // 头骨旋转角（同时改变攻击角度）
+        this.aimT = rand(0.8, 1.4);
+        this.fanT = rand(2.4, 3.2);
+        this.ringT = rand(4.2, 5.2);
       }
 
       // 自爆骷髅：高速冲入屏幕中部 → 降速持续追击玩家 → 接触自爆
@@ -901,7 +1112,9 @@
         demon: ['#7a3fc9', '#e0453a', '#fff'],
         leigong: ['#2f6fd0', '#ffd23b', '#fff'],
         pig: ['#f4726b', '#ff7b2e', '#ffd23b'],
-        skeleton: ['#e8eef7', '#9aa7bb', '#e0453a', '#ffd23b']
+        skeleton: ['#e8eef7', '#9aa7bb', '#e0453a', '#ffd23b'],
+        skull: ['#e8eef7', '#9aa7bb', '#7fe7ff', '#ff3b5c'],
+        cannoneer: ['#5a6678', '#2c3545', '#ffd23b', '#fff']
       }[this.type] || ['#fff', '#aaa'];
     }
 
@@ -937,6 +1150,8 @@
         case 'leigong': this.aiLeigong(dt, g, p); break;
         case 'pig': this.aiPig(dt, g, p); break;
         case 'archer': this.aiArcher(dt, g, p); break;
+        case 'cannoneer': this.aiCannoneer(dt, g, p); break;
+        case 'skull': this.aiSkull(dt, g, p); break;
         case 'skeleton': this.aiSkeleton(dt, g, p); break;
       }
       // 飞离屏幕清理
@@ -1093,6 +1308,92 @@
       }
     }
 
+    /* 炮师：地面推进 → 停点抛射铁炮弹（爆炸）→ 向左撤离；触碰山石不坠毁 */
+    aiCannoneer(dt, g, p) {
+      this.y = CFG.GROUND_Y - 24;   // 始终踩在地面
+      this.kbY = 0;
+      if (this.state === 'walk') {
+        this.x -= 55 * this.speedMul * dt;
+        this.archT -= dt;
+        if (this.archT <= 0) { this.state = 'stop'; this.archT = rand(1.6, 2.2); this.atkT = 0.2; }
+      } else if (this.state === 'stop') {
+        this.archT -= dt;
+        this.atkT -= dt;
+        if (this.atkT <= 0) {
+          this.atkT = 1.1;
+          this.fireShell(g, p);
+        }
+        if (this.archT <= 0) {
+          this.stops++;
+          if (this.stops >= this.stopsTotal) this.state = 'run';
+          else { this.state = 'walk'; this.archT = rand(2.0, 3.0); }
+        }
+      } else if (this.state === 'run') {
+        this.x -= 160 * this.speedMul * dt;
+      }
+    }
+
+    /** 炮师：抛射铁炮弹 —— 触地/触障碍/触玩家/被我方击中即爆炸 */
+    fireShell(g, p) {
+      const C = CFG.cannoneer;
+      const dx = p.x - this.x;
+      const dy = p.y - (this.y - 10);
+      const d = Math.max(140, Math.hypot(dx, dy));
+      const t = clamp(d / 280, 0.6, 1.4);
+      const vx = dx / t;
+      const vy = (dy - 0.5 * C.shellG * t * t) / t;
+      const dmg = Math.round(this.bulletDmg * g.atkScale);
+      const sh = new Bullet(this.x - 14, this.y - 10, vx, vy,
+        { kind: 'shell', r: 7, dmg, life: 5, grav: C.shellG, volatile: true });
+      sh.onExpire = (gg, b) => gg.shellBlast(b.x, b.y, dmg);
+      g.bullets.push(sh);
+      SFX.enemyShoot();
+    }
+
+    /* 飞天骷髅：悬停持续旋转，循环 瞄准连射 / 扇形散射 / 多方向直线环弹 */
+    aiSkull(dt, g, p) {
+      this.rotA += dt * 1.6;   // 头骨持续旋转 → 攻击角随之偏转
+      // 悬停游弋
+      const wantX = p.x + 300;
+      if (this.x > wantX + 40) this.x -= 95 * this.speedMul * dt;
+      else if (this.x < wantX - 80) this.x += 45 * this.speedMul * dt;
+      this.y = this.baseY + Math.sin(this.t * 2.1) * 40;
+      this.baseY += (clamp(p.y - 40, CFG.TOP_Y + 40, CFG.GROUND_Y - 140) - this.baseY) * dt * 0.4;
+      if (this.x > CFG.W - 30) {
+        // 持续瞄准连射
+        this.aimT -= dt;
+        if (this.aimT <= 0) {
+          this.aimT = rand(0.9, 1.3);
+          this.shootAt(g, 260, 'orb', this.bulletDmg * g.atkScale, 5, false);
+        }
+        // 扇形散射（角度随旋转偏转）
+        this.fanT -= dt;
+        if (this.fanT <= 0) {
+          this.fanT = rand(2.6, 3.4);
+          for (let i = -2; i <= 2; i++) {
+            const a = this.rotA + i * 0.24;
+            g.bullets.push(new Bullet(this.x, this.y,
+              Math.cos(a) * 220, Math.sin(a) * 220,
+              { kind: 'orb', r: 5, dmg: this.bulletDmg * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#e8eef7' }));
+          }
+          SFX.enemyShoot();
+        }
+        // 多方向直线环弹
+        this.ringT -= dt;
+        if (this.ringT <= 0) {
+          this.ringT = rand(4.4, 5.4);
+          const n = 8;
+          for (let i = 0; i < n; i++) {
+            const a = this.rotA + (TAU / n) * i;
+            g.bullets.push(new Bullet(this.x, this.y,
+              Math.cos(a) * 165, Math.sin(a) * 165,
+              { kind: 'orb', r: 6, dmg: this.bulletDmg * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#c9f6ff' }));
+          }
+          SFX.enemyShoot();
+        }
+      }
+    }
+
     /** 抛射箭矢：弹道解算 */
     shootArrow(g, p) {
       const dx = p.x - (this.x - 16);
@@ -1139,6 +1440,26 @@
           drawSprite(ctx, Sprites.archerL, this.x, this.y + bob + 4, 2.0, 2.0, 0, this.flash);
           break;
         }
+        case 'cannoneer': {
+          const moving = this.state !== 'stop';
+          const bob = moving ? Math.abs(Math.sin(t * (this.state === 'run' ? 14 : 8))) * -2 : 0;
+          drawSprite(ctx, Sprites.cannoneerL, this.x, this.y + bob + 4, 2.0, 2.0, 0, this.flash);
+          // 开炮 muzzle flash（炮口朝左）
+          if (this.state === 'stop' && this.atkT > 0.85) {
+            const f = 5 + Math.sin(t * 40) * 2;
+            ctx.fillStyle = '#ffd23b';
+            ctx.fillRect(this.x - 42 - f, this.y + bob - 4, f, 8);
+            ctx.fillStyle = '#ff7b2e';
+            ctx.fillRect(this.x - 42 - f, this.y + bob - 2, f * 0.6, 4);
+          }
+          break;
+        }
+        case 'skull': {
+          // 头骨持续旋转，眼窝红光脉动
+          const pulse = 1 + Math.sin(t * 6) * 0.06;
+          drawSprite(ctx, Sprites.skullhead, this.x, this.y, 2.1 * pulse, 2.1 * pulse, this.rotA, this.flash);
+          break;
+        }
         case 'skeleton': {
           // 追击时爆核急促脉动闪烁，提示即将自爆
           const pulse = this.state === 'chase' ? 1 + Math.sin(t * 16) * 0.08 : 1;
@@ -1158,16 +1479,19 @@
 
   /* ---------------- 地面山石（触碰暴毙） ---------------- */
   const ROCK_DEFS = [
-    { w: 480, h: 130 },   // 大：屏幕宽 1/2
-    { w: 240, h: 86 },    // 中：屏幕宽 1/4
-    { w: 192, h: 66 }     // 小：屏幕宽 1/5
+    { w: 480, h: 130 },               // 大：屏幕宽 1/2
+    { w: 240, h: 86 },                // 中：屏幕宽 1/4
+    { w: 192, h: 66 },                // 小：屏幕宽 1/5
+    { w: 420, h: 118, trap: true },   // 长梯形石：上窄下宽（≤屏幕一半）
+    { w: 250, h: 88, trap: true }     // 短梯形石：上窄下宽
   ];
   class Rock {
-    /** kind: 0 大 / 1 中 / 2 小 */
+    /** kind: 0 大 / 1 中 / 2 小 / 3 长梯形 / 4 短梯形 */
     constructor(x, kind) {
       this.kind = kind;
       this.w = ROCK_DEFS[kind].w;
       this.h = ROCK_DEFS[kind].h;
+      this.trap = !!ROCK_DEFS[kind].trap;
       this.x = x;                         // 中心 x
       this.baseY = CFG.GROUND_Y;
       this.dead = false;
@@ -1175,27 +1499,42 @@
     }
     get left() { return this.x - this.w / 2; }
     get top() { return this.baseY - this.h; }
+    /** 被野鸡撞击 / 炮弹炸毁：障碍爆炸 */
+    destroy(g) {
+      if (this.dead) return;
+      this.dead = true;
+      burst(g, this.x, this.baseY - this.h * 0.4, 30,
+        ['#7d8794', '#a7b3c2', '#5a5f66', '#fff', '#ff7b2e'], 300, 7, 0.8, 260);
+      SFX.explode(false);
+      g.shake(7);
+    }
+    /** 点是否在岩石截面内（梯形按上窄下宽收边） */
+    contains(px, py, pad) {
+      pad = pad || 0;
+      if (px < this.left - pad || px > this.left + this.w + pad) return false;
+      if (py < this.top - pad || py > this.baseY + pad) return false;
+      if (this.trap) {
+        const t = clamp((this.baseY - py) / this.h, 0, 1);
+        const inset = t * this.w * 0.27;
+        return px > this.left + inset - pad && px < this.left + this.w - inset + pad;
+      }
+      return true;
+    }
     update(dt, g) {
       this.x -= 62 * dt;                  // 与地面卷轴同步
       if (this.x < -this.w / 2 - 60) this.dead = true;
-      // 与飞虎碰撞：暴毙
+      // 与飞虎碰撞：暴毙（走生命条数系统）
       const p = g.player;
-      const cx = clamp(p.x, this.left, this.left + this.w);
-      const cy = clamp(p.y, this.top, this.baseY);
-      if ((p.x - cx) ** 2 + (p.y - cy) ** 2 < (p.radius * 0.75) ** 2) {
-        if (p.invT <= 0) {
-          SFX.shock();
-          burst(g, p.x, p.y, 40, ['#7d8794', '#a7b3c2', '#fff', '#f7941d'], 320, 7, 0.9, 260);
-          p.hp = 0;
-          g.gameOver();
-        }
+      if (this.contains(p.x, p.y, p.radius * 0.55) && p.invT <= 0) {
+        SFX.shock();
+        burst(g, p.x, p.y, 40, ['#7d8794', '#a7b3c2', '#fff', '#f7941d'], 320, 7, 0.9, 260);
+        p.hp = 0;
+        p.die(g);
       }
-      // 小怪撞山：坠毁死亡（Boss 不受影响）
+      // 小怪撞山：坠毁死亡（地面单位 / Boss 不受影响）
       for (const e of g.enemies) {
-        if (e.dead) continue;
-        const ex = clamp(e.x, this.left, this.left + this.w);
-        const ey = clamp(e.y, this.top, this.baseY);
-        if ((e.x - ex) ** 2 + (e.y - ey) ** 2 < (e.radius * 0.8) ** 2) {
+        if (e.dead || e.groundUnit) continue;
+        if (this.contains(e.x, e.y, e.radius * 0.7)) {
           const cols = ['#7d8794', '#a7b3c2', '#fff'].concat(e.deathColors());
           burst(g, e.x, e.y, 18, cols, 250, 5, 0.6, 240);
           SFX.explode(false);
@@ -1203,21 +1542,33 @@
           e.die(g);
         }
       }
+      // 可破坏弹（野鸡炮弹/导弹）：命中山石 → 障碍爆炸
+      for (const b of g.bullets) {
+        if (b.friendly || b.dead || !b.rockBreak) continue;
+        if (this.contains(b.x, b.y, b.r + 4)) {
+          b.dead = true;
+          burst(g, b.x, b.y, 12, ['#ff7b2e', '#ffd23b', '#fff'], 220, 5, 0.45, 120);
+          this.destroy(g);
+          break;
+        }
+      }
     }
     render(ctx) {
       const step = 8;   // 像素块
       const x0 = this.left, w = this.w, h = this.h, baseY = this.baseY;
-      // 剪影高度剖面（锯齿岩丘）
+      // 剪影高度剖面（锯齿岩丘 / 上窄下宽梯形石）
       const rows = Math.ceil(h / step);
       for (let r = 0; r < rows; r++) {
         const yy = baseY - r * step;
-        // 顶部锯齿：根据行生成左右收窄
         const t = r / rows;
-        const inset = (1 - t) * w * 0.26 + Math.sin(r * 1.7 + this.kind) * step * 0.5;
+        // 梯形石：底部全宽，向上线性收窄；普通岩丘保持原剖面
+        const inset = this.trap
+          ? t * w * 0.27
+          : (1 - t) * w * 0.26 + Math.sin(r * 1.7 + this.kind) * step * 0.5;
         let rx = x0 + Math.max(0, inset);
         let rw = w - Math.max(0, inset) * 2;
         // 顶部几行加随机缺口（尖峰感）
-        if (r >= rows - 2) {
+        if (!this.trap && r >= rows - 2) {
           rx += step * ((r % 2) ? 2 : 0);
           rw -= step * ((r % 2) ? 4 : 2);
         }
@@ -1231,7 +1582,7 @@
         // 高光点
         if (r >= 3 && (Math.floor(this.x / step) + r) % 5 === 0) {
           ctx.fillStyle = '#a7b3c2';
-          ctx.fillRect(rx + step, yy - step + step / 2, Math.min(step * 2, rw - step * 2), step / 2);
+          ctx.fillRect(rx + step, yy - step + step / 2, Math.min(step * 2, Math.max(2, rw - step * 2)), step / 2);
         }
       }
       // 黑色描边底边 + 裂纹
@@ -1241,5 +1592,5 @@
     }
   }
 
-  window.FT = { Particle, Gem, Bullet, Lightning, Player, Enemy, Rock, burst, drawSprite, rand, randi, clamp, dist };
+  window.FT = { Particle, Gem, Bullet, Lightning, Beam, Player, Enemy, Rock, burst, drawSprite, rand, randi, clamp, dist };
 })();
