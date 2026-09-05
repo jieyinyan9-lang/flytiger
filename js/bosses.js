@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  const { Bullet, Lightning, Beam, burst, drawSprite, rand, randi, clamp, Particle } = window.FT;
+  const { Bullet, Lightning, Beam, CurveBeam, burst, drawSprite, rand, randi, clamp, Particle } = window.FT;
   const TAU = Math.PI * 2;
 
   class Boss {
@@ -1142,13 +1142,32 @@
           }
           SFX.enemyShoot(); g.shake(3);
         }
-        // 眼珠伸长攻击：两条激光
+        // 眼珠伸长攻击：两条 S 型弧线激光（自双眼黑瞳射出，落点为屏幕左缘随机两点）
         this.eyeT -= dt;
         if (this.eyeT <= 0) {
           this.eyeT = rand(3.2, 4.0);
-          const base = Math.atan2(p.y - this.y, p.x - this.x);
-          g.beams.push(new Beam(this.x - 70, this.y - 22, base - 0.12, 1300, 16, Math.round(18 * g.atkScale), 0.85));
-          g.beams.push(new Beam(this.x - 70, this.y + 22, base + 0.12, 1300, 16, Math.round(18 * g.atkScale), 0.85));
+          // 双眼位置：bossHeadL 为 24×22 精灵缩放 13 倍居中绘制，翻转后两个黑色瞳孔
+          // 在精灵坐标 (9,12)/(14,12)，换算为相对中心的局部偏移并随头部微旋
+          const th = Math.sin(this.t * 1.4) * 0.05;
+          const co = Math.cos(th), si = Math.sin(th);
+          const eyeAt = (lx, ly) => ({
+            x: this.x + lx * co - ly * si,
+            y: this.y + lx * si + ly * co
+          });
+          const eyes = [eyeAt(-39, 13), eyeAt(26, 13)];
+          // 屏幕最左竖轴上的两个随机落点，彼此保持一定距离
+          const lo = 80, hi = CFG.GROUND_Y - 60;
+          let y1 = rand(lo, hi), y2 = rand(lo, hi);
+          for (let i = 0; i < 8 && Math.abs(y2 - y1) < 150; i++) y2 = rand(lo, hi);
+          if (Math.abs(y2 - y1) < 150) {
+            y2 = clamp(y1 + (y1 < (lo + hi) / 2 ? 1 : -1) * rand(170, 240), lo, hi);
+          }
+          const lands = [y1, y2];
+          if (Math.random() < 0.5) { eyes.reverse(); }
+          eyes.forEach((e, i) => {
+            g.beams.push(new CurveBeam(e.x, e.y, 0, lands[i],
+              rand(110, 210), 16, Math.round(18 * g.atkScale), 1.0));
+          });
           SFX.warn();
         }
       }

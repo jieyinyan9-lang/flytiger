@@ -305,8 +305,11 @@
       this.shake(18);
       this.flashT = 0.5; this.flashColor = '#fff';
       this.ultWave = { r: 40, a: 1 };
-      // 大招破解无敌：清除所有敌人出场无敌 + Boss 锁血
-      this.enemies.forEach(e => { e.spawnInvuln = 0; });
+      // 大招破解无敌：清除所有敌人出场无敌 + Boss 锁血（草龙本体免疫大招，保留其出场无敌）
+      this.enemies.forEach(e => {
+        if (e.type === 'grassdragon' && !e.isMini) return;
+        e.spawnInvuln = 0;
+      });
       this.bosses.forEach(b => { b.lockHp = false; });
       // 屏幕内小怪全灭
       this.enemies.slice().forEach(e => {

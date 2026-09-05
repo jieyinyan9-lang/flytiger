@@ -162,7 +162,7 @@
   };
 
   class Bullet {
-    /** kind: bolt / orb / shuriken / feather / whirl / flame / fireball / katana / spark / shell / missile / float / cross / knife / axe */
+    /** kind: bolt / orb / shuriken / feather / whirl / flame / fireball / katana / spark / shell / missile / float / apple / cross / knife / axe */
     constructor(x, y, vx, vy, opts) {
       this.x = x; this.y = y; this.vx = vx; this.vy = vy;
       this.kind = opts.kind || 'orb';
@@ -172,6 +172,7 @@
       this.life = opts.life || 6;
       this.dead = false;
       this.t = 0;
+      this.bounces = 0;             // 红苹果触地弹跳次数（弹一次后碎裂）
       this.pierce = opts.pierce || 0;
       this.hitSet = null;
       this.bombLv = opts.bombLv || 0;
@@ -330,6 +331,22 @@
         }
       }
       this.x += this.vx * dt; this.y += this.vy * dt;
+      // 怪客红苹果：受重力下坠，触地向上弹起一段距离，二次触地碎裂
+      if (this.kind === 'apple' && !this.neutralized && !this.dead) {
+        const gy = CFG.GROUND_Y - this.r * 0.7;
+        if (this.y >= gy && this.vy >= 0) {
+          if (this.bounces < 1) {
+            this.bounces = 1;
+            this.y = gy;
+            this.vy = -430;          // 固定弹起速度，弹起约一段距离后再落下
+            this.vx *= 0.45;
+            burst(g, this.x, CFG.GROUND_Y - 4, 4, ['#8a5a2b', '#caa06a'], 90, 3, 0.25);
+          } else {
+            this.dead = true;
+            burst(g, this.x, CFG.GROUND_Y - 6, 10, ['#e02b1e', '#7a1208', '#3f9e3a', '#fff5d0'], 150, 4, 0.4);
+          }
+        }
+      }
       if (this.life <= 0 && !this.dead) {
         if (this.onExpire) this.onExpire(g, this);
         this.dead = true;
@@ -586,6 +603,34 @@
           ctx.fillStyle = `rgba(255,255,255,${clamp(this.hitFlash * 6, 0, 0.85)})`;
           ctx.fillRect(this.x - r, this.y - r, r * 2, r * 2);
         }
+        return;
+      }
+      if (k === 'apple') {
+        // 怪客红苹果：深红描边 → 红果身 → 肩部暗红 → 亮高光，棕柄绿叶轻摆
+        const r = this.r;
+        const f = 1 + Math.sin(this.t * 6) * 0.05;
+        const rr = r * f;
+        ctx.fillStyle = '#6e1208';
+        ctx.beginPath(); ctx.arc(this.x, this.y + rr * 0.05, rr * 1.08, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#e02b1e';
+        ctx.beginPath(); ctx.arc(this.x, this.y, rr, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#b81d14';
+        ctx.beginPath(); ctx.arc(this.x, this.y - rr * 0.28, rr * 0.8, Math.PI * 1.05, Math.PI * 1.95); ctx.fill();
+        ctx.fillStyle = 'rgba(255,178,160,0.95)';
+        ctx.beginPath(); ctx.arc(this.x - rr * 0.34, this.y - rr * 0.3, rr * 0.24, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,240,232,0.95)';
+        ctx.beginPath(); ctx.arc(this.x - rr * 0.4, this.y - rr * 0.4, rr * 0.1, 0, TAU); ctx.fill();
+        // 果柄 + 绿叶（随帧轻摆）
+        ctx.save();
+        ctx.translate(this.x, this.y - rr * 0.92);
+        ctx.rotate(Math.sin(this.t * 3) * 0.18);
+        ctx.fillStyle = '#5a3416';
+        ctx.fillRect(-r * 0.08, -r * 0.42, r * 0.16, r * 0.44);
+        ctx.fillStyle = '#3f9e3a';
+        ctx.beginPath(); ctx.ellipse(r * 0.26, -r * 0.34, r * 0.28, r * 0.13, -0.5, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#7ed46d';
+        ctx.beginPath(); ctx.ellipse(r * 0.22, -r * 0.37, r * 0.14, r * 0.06, -0.5, 0, TAU); ctx.fill();
+        ctx.restore();
         return;
       }
       if (k === 'cross') {
@@ -884,6 +929,102 @@
         ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(e.x, e.y); ctx.stroke();
         ctx.strokeStyle = '#fff'; ctx.lineWidth = this.w * 0.4;
         ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+  }
+
+  /* ---------------- S 型弧线激光（大王眼珠攻击：自眼睛射向屏幕左缘随机落点） ---------------- */
+  class CurveBeam {
+    /** (x,y) 起点（眼睛）；(ex,ey) 终点（屏幕左缘落点）；amp S 波幅；w 束宽；dmg 伤害；warn 预警秒数 */
+    constructor(x, y, ex, ey, amp, w, dmg, warn) {
+      this.x = x; this.y = y; this.ex = ex; this.ey = ey;
+      this.w = w; this.dmg = dmg;
+      this.t = 0; this.warn = warn || 1.0; this.active = 0.45;
+      this.dealt = false; this.dead = false;
+      this.pts = this.makePath(amp);
+    }
+    /** 三次贝塞尔 S 曲线：1/3、2/3 处控制点沿法向反向偏移（控制点 y 钳制在屏内，凸包保证整条曲线不出界） */
+    makePath(amp) {
+      const S = { x: this.x, y: this.y }, E = { x: this.ex, y: this.ey };
+      const dx = E.x - S.x, dy = E.y - S.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;            // 法向单位向量
+      const s1 = rand(0.85, 1.25) * (Math.random() < 0.5 ? 1 : -1);
+      const s2 = -s1 * rand(0.8, 1.15);              // 反向偏移 → S 形
+      const P1 = {
+        x: S.x + dx / 3 + nx * amp * s1,
+        y: clamp(S.y + dy / 3 + ny * amp * s1, 70, CFG.GROUND_Y - 40)
+      };
+      const P2 = {
+        x: S.x + dx * 2 / 3 + nx * amp * s2,
+        y: clamp(S.y + dy * 2 / 3 + ny * amp * s2, 70, CFG.GROUND_Y - 40)
+      };
+      const N = 44, pts = [];
+      for (let i = 0; i <= N; i++) {
+        const u = i / N, u1 = 1 - u;
+        const a = u1 * u1 * u1, b = 3 * u1 * u1 * u, c = 3 * u1 * u * u, d = u * u * u;
+        pts.push({
+          x: a * S.x + b * P1.x + c * P2.x + d * E.x,
+          y: a * S.y + b * P1.y + c * P2.y + d * E.y
+        });
+      }
+      return pts;
+    }
+    /** 玩家是否贴近曲线（grow<1 时只检测已射出的前段折线） */
+    hitTest(p, grow) {
+      const n = grow ? Math.max(2, Math.floor(this.pts.length * grow)) : this.pts.length;
+      const R = this.w / 2 + p.radius * 0.7;
+      for (let i = 1; i < n; i++) {
+        const a = this.pts[i - 1], b = this.pts[i];
+        if (Lightning.distSeg(p.x, p.y, a.x, a.y, b.x, b.y) < R) return true;
+      }
+      return false;
+    }
+    update(dt, g) {
+      this.t += dt;
+      if (this.t >= this.warn && !this.dealt) {
+        this.dealt = true;
+        SFX.zap(); g.shake(8);
+        const p = g.player;
+        if (this.hitTest(p, 1)) p.hurt(this.dmg, g);
+        // 落点冲击爆发 + 眼部发射闪光
+        burst(g, this.ex, this.ey, 12, ['#ff5252', '#fff', '#ffd23b'], 220, 5, 0.4);
+        burst(g, this.x, this.y, 8, ['#ff5252', '#fff'], 160, 4, 0.3);
+      }
+      if (this.t > this.warn + this.active) this.dead = true;
+    }
+    tracePath(ctx, grow) {
+      const n = grow ? Math.max(2, Math.floor(this.pts.length * grow)) : this.pts.length;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const pt = this.pts[i];
+        i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y);
+      }
+    }
+    render(ctx) {
+      ctx.save();
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      if (this.t < this.warn) {
+        // 预警：沿 S 曲线闪烁红色虚线
+        const on = Math.floor(this.t * 12) % 2 === 0;
+        if (on) {
+          ctx.strokeStyle = 'rgba(255,70,70,0.85)';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([14, 12]);
+          this.tracePath(ctx, 1); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      } else {
+        // 光束本体：自眼睛沿 S 曲线快速射出，白芯 + 红晕，随时间淡出
+        const a = clamp(1 - (this.t - this.warn) / this.active, 0, 1);
+        const grow = clamp((this.t - this.warn) / 0.12, 0.15, 1);
+        ctx.globalAlpha = a;
+        this.tracePath(ctx, grow);
+        ctx.strokeStyle = '#ff5252'; ctx.lineWidth = this.w; ctx.stroke();
+        this.tracePath(ctx, grow);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = this.w * 0.4; ctx.stroke();
         ctx.globalAlpha = 1;
       }
       ctx.restore();
@@ -2483,26 +2624,26 @@
       this.turnT = rand(0.9, 2.0);
     }
 
-    /** 小段：钻地巡游 → 移位到玩家附近 → 出土 → 悬停发射龙鳞刺 → 再钻地；数次后离场 */
+    /**
+     * 小段循环（不离场）：
+     * 下钻 dive → 地下巡游 burrow → 移位到玩家附近 moveX → 出土 rise
+     * → 悬停发射龙鳞刺 surface → 飞出空中随机穿梭 air（直角 / 折线 / 弧线）
+     * → 触地 dive … 周而复始。
+     */
     updateMini(dt, g) {
       const sm = this.speedMul;
       const p = g.player;
       if (this.state === 'dive') {
-        this.hx = 0; this.hy = 1;
+        this.ha = Math.PI / 2; this.arcT = 0;
         this.y += GRASS.miniVertSpd * sm * dt;
         if (this.y >= this.burrowY) {
           this.y = this.burrowY;
-          if (this.surfCount >= 4) {
-            this.state = 'escape';
-            this.dir = this.x < CFG.W / 2 ? -1 : 1;
-          } else {
-            this.state = 'burrow';
-            this.burrowT = rand(2.0, 3.2);
-            this.dir = p.x >= this.x ? 1 : -1;
-          }
+          this.state = 'burrow';
+          this.burrowT = rand(1.6, 2.8);
+          this.dir = p.x >= this.x ? 1 : -1;
         }
       } else if (this.state === 'burrow') {
-        this.hx = this.dir; this.hy = 0;
+        this.ha = this.dir > 0 ? 0 : Math.PI; this.arcT = 0;
         this.x += this.dir * GRASS.miniBurrowSpd * sm * dt;
         if (this.x < 60) { this.x = 60; this.dir = 1; }
         else if (this.x > CFG.W - 60) { this.x = CFG.W - 60; this.dir = -1; }
@@ -2513,7 +2654,7 @@
         }
       } else if (this.state === 'moveX') {
         const d = this.surfX - this.x;
-        this.hx = Math.sign(d) || 1; this.hy = 0;
+        this.ha = d >= 0 ? 0 : Math.PI; this.arcT = 0;
         const step = GRASS.miniBurrowSpd * sm * dt;
         if (Math.abs(d) <= step) {
           this.x = this.surfX;
@@ -2521,7 +2662,7 @@
           this.state = 'rise';
         } else this.x += Math.sign(d) * step;
       } else if (this.state === 'rise') {
-        this.hx = 0; this.hy = -1;
+        this.ha = -Math.PI / 2; this.arcT = 0;
         this.y -= GRASS.miniVertSpd * sm * dt;
         if (this.y <= this.surfY) {
           this.y = this.surfY;
@@ -2532,7 +2673,7 @@
           this.surfCount++;
         }
       } else if (this.state === 'surface') {
-        this.hx = 0; this.hy = -1;
+        this.ha = -Math.PI / 2; this.arcT = 0;
         this.y = this.surfY + Math.sin(this.t * 4) * 4;
         this.atkT -= dt;
         if (this.atkT <= 0 && this.volleys < 2) {
@@ -2541,12 +2682,42 @@
           this.atkT = 0.7;
         }
         this.surfaceT -= dt;
-        if (this.surfaceT <= 0) this.state = 'dive';
-      } else if (this.state === 'escape') {
-        this.hx = this.dir; this.hy = 0;
-        this.x += this.dir * GRASS.miniBurrowSpd * sm * dt;
-        if ((this.dir < 0 && this.x < -70) || (this.dir > 0 && this.x > CFG.W + 70)) this.dead = true;
+        if (this.surfaceT <= 0) {
+          // 射击完毕：飞出空中穿梭（朝向远离近侧墙的水平方向）
+          this.state = 'air';
+          this.airT = rand(5, 8);
+          this.ha = (this.x < CFG.W / 2 ? 0 : Math.PI) + rand(-0.3, 0.3);
+          this.turnT = rand(0.8, 1.6);
+          this.arcT = 0;
+        }
+      } else if (this.state === 'air') {
+        // 与本体相同的随机穿梭：弧线平滑转 / 直角急转 / 任意角折线
+        if (this.arcT > 0) {
+          const diff = normAng(this.targetHa - this.ha);
+          const step = this.arcRate * dt;
+          if (Math.abs(diff) <= Math.abs(step)) { this.ha = this.targetHa; this.arcT = 0; }
+          else this.ha += step;
+        }
+        const sp = GRASS.sweepSpd * 1.12 * sm;
+        this.x += Math.cos(this.ha) * sp * dt;
+        this.y += Math.sin(this.ha) * sp * dt;
+        if (this.x < this.xL && Math.cos(this.ha) < 0) { this.x = this.xL; this.ha = Math.PI - this.ha; this.arcT = 0; }
+        if (this.x > this.xR && Math.cos(this.ha) > 0) { this.x = this.xR; this.ha = Math.PI - this.ha; this.arcT = 0; }
+        if (this.y < 56 && Math.sin(this.ha) < 0) { this.y = 56; this.ha = -this.ha; this.arcT = 0; }
+        this.ha = normAng(this.ha);
+        if (this.y >= CFG.GROUND_Y - 6) {
+          // 触地：钻回地下，巡游后再出土射击
+          this.y = CFG.GROUND_Y + rand(10, 22);
+          this.state = 'dive';
+        } else {
+          this.turnT -= dt;
+          this.airT -= dt;
+          if (this.turnT <= 0) this.pickAirTurn();
+          // 在空中盘旋过久：压头朝下主动钻地
+          if (this.airT <= 0) { this.ha = Math.PI / 2 + rand(-0.25, 0.25); this.arcT = 0; }
+        }
       }
+      this.hx = Math.cos(this.ha); this.hy = Math.sin(this.ha);
     }
 
     /** 龙鳞刺：细长梭形绿色高速直线弹（3 发小幅扇形） */
@@ -2650,7 +2821,20 @@
     }
     /** 连锁闪电等：伤害离龙头最近的露出节 */
     takeDamage(dmg, g) {
-      if (dmg >= 10000) { this.killAll(g); return; }   // 大招清屏：全节粉碎
+      if (dmg >= 10000) {
+        // 大招强光波：草龙本体完全免疫；分裂小段被削去 50% 血量（每节减半）
+        if (!this.isMini) return;
+        for (let i = 0; i < this.segments.length; i++) {
+          const s = this.segments[i];
+          if (s.dead) continue;
+          s.hp -= s.maxHp * 0.5;
+          s.flash = 0.2;
+          burst(g, s.x, s.y, 3, ['#fff', '#bff5d6', '#ffd93b'], 140, 3, 0.25);
+          if (s.hp <= 0) { this.killSegment(i, g); if (this.dead) return; }
+        }
+        this.hurtT = 0.2;
+        return;
+      }
       const ne = this.nearestExposed(this.x, this.y);
       if (ne) this.damageSegment(ne.i, dmg, g, null, '');
     }
@@ -3000,5 +3184,5 @@
     return s.dead ? null : s;
   }
 
-  window.FT = { Particle, Gem, Bullet, Lightning, Beam, Player, Enemy, Rock, GrassDragon, burst, drawSprite, rand, randi, clamp, dist };
+  window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, GrassDragon, burst, drawSprite, rand, randi, clamp, dist };
 })();
