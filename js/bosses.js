@@ -970,7 +970,7 @@
         this.hp = Math.ceil(this.maxHp * 0.5);
         this.hands.forEach(h => { h.state = 'idle'; h.t = 0; });
         g.shake(16); g.flashT = 0.4; g.flashColor = '#fff';
-        SFX.phaseRise();   // 阶段转换：电流上行 + 爆点
+        SFX.bossDarkTransform();   // 黑暗变身：痛苦嘶吼悲号 + 次声震动 + 能量爆裂（3秒）
         g.toast('大王的身体碎裂了！', 2.2);
         burst(g, this.x, this.y, 44, ['#8d96a3', '#2b2f3a', '#fff', '#ffd23b'], 320, 7, 0.9, 150);
       }
@@ -1265,7 +1265,7 @@
     { cls: DogKing, weight: 3, minOrd: 1, chance: 0.3, music: 'boss' },     // 第 1 轮起 30% 概率出现
     { cls: GiantPheasant, weight: 3, minOrd: 2, music: 'pheasant' },       // 野鸡王：鸡叫融合电音
     { cls: Homelander, weight: 3, minOrd: 2, chance: 0.3, music: 'hero' },  // 祖国人：军乐+电磁声
-    { cls: BossMan, weight: 3, minOrd: 1, maxOrd: 3, forceChance: { 1: 0.6, 2: 0.4, 3: 0.4 }, music: 'boss' },  // 大王：首轮 60% 直接出场
+    { cls: BossMan, weight: 3, minOrd: 1, maxOrd: 3, forceChance: { 1: 0.6, 2: 0.4, 3: 0.4 }, music: 'imperial' },  // 大王：首轮 60% 直接出场，帝王军乐
     { cls: Stranger, weight: 3, minOrd: 1, maxOrd: 3, music: 'boss' }      // 怪客：仅 1-3 轮
   ];
 })();

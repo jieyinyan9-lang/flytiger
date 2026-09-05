@@ -467,7 +467,8 @@
       this.el.bossName.textContent = `${b.bossName}（${b.title}）`;
       this.el.bossHud.classList.remove('hidden');
       this.toast(`${b.bossName} 出现！`, 2);
-      SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
+      if (b.musicTheme === 'imperial') SFX.bossArmy();   // 大王登场：万军齐吼"好！好！好！" + 战鼓号角
+      else SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
       this.shake(6);
     }
     onBossDefeated(boss) {

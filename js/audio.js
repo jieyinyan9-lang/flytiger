@@ -160,6 +160,110 @@
       noiseAt(0, 1.0, 0.2, 'lowpass', 2400, 300);
       tone(95, 0.5, 'sine', 0.24, 32, 0.05);          // 重击
     },
+    /** 大王登场：3秒震撼登场 —— 万人齐吼"好！好！好！"（人声堆叠+旷野回声）+ 低沉战鼓 + 远处号角 */
+    bossArmy() {
+      if (muted) return;
+      const c = ac(); if (!c) return;
+      const now = c.currentTime;
+      // 空间感：反馈延迟回声总线（模拟旷野齐声回荡）
+      const echo = c.createDelay(0.6); echo.delayTime.value = 0.17;
+      const fb = c.createGain(); fb.gain.value = 0.34;
+      const wet = c.createGain(); wet.gain.value = 0.38;
+      echo.connect(fb); fb.connect(echo); echo.connect(wet); wet.connect(c.destination);
+
+      // 一声万人齐吼"好！"：多个失谐锯齿/方波"人声"经带通共鸣腔，起扬后降调
+      const shout = (t, base) => {
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.5, t + 0.06);
+        g.gain.setValueAtTime(0.5, t + 0.3);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.68);
+        const bp = c.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 850; bp.Q.value = 0.7;
+        g.connect(bp); bp.connect(c.destination); bp.connect(echo);
+        for (let i = 0; i < 8; i++) {
+          const o = c.createOscillator();
+          o.type = i % 3 ? 'sawtooth' : 'square';
+          const f = base * (1 + (Math.random() - 0.5) * 0.14);
+          o.frequency.setValueAtTime(f * 1.14, t);
+          o.frequency.exponentialRampToValueAtTime(f * 0.8, t + 0.55);
+          const vg = c.createGain(); vg.gain.value = (0.4 + Math.random() * 0.6) / 8;
+          o.connect(vg); vg.connect(g);
+          o.start(t + Math.random() * 0.04); o.stop(t + 0.7);
+        }
+        // 群体气声
+        const n = Math.floor(c.sampleRate * 0.4);
+        const buf = c.createBuffer(1, n, c.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+        const ns = c.createBufferSource(); ns.buffer = buf;
+        const nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 1300;
+        const ng = c.createGain();
+        ng.gain.setValueAtTime(0.09, t);
+        ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+        ns.connect(nf); nf.connect(ng); ng.connect(g);
+        ns.start(t);
+      };
+      // 三声"好！好！好！"：每声前战鼓重击，音高逐声抬升（朝拜气势层层推进）
+      for (let i = 0; i < 3; i++) {
+        const dt0 = i * 1.0;
+        tone(72, 0.5, 'sine', 0.32, 30, dt0);                    // 战鼓
+        tone(45, 0.4, 'sine', 0.2, 24, dt0 + 0.02);
+        noiseAt(dt0, 0.22, 0.13, 'lowpass', 600, 130);
+        shout(now + dt0 + 0.16, 196 + i * 22);                   // G3 → A3 → B3
+      }
+      // 远处号角：低音铜管长鸣两遍（渐强）
+      tone(87, 1.7, 'sawtooth', 0.055, 82, 0.1);
+      tone(131, 1.5, 'sawtooth', 0.04, 124, 0.2);
+      tone(98, 1.5, 'sawtooth', 0.06, 92, 1.55);
+      tone(147, 1.3, 'sawtooth', 0.045, 139, 1.65);
+      noiseAt(0, 2.8, 0.045, 'lowpass', 420, 160);               // 旷野空气底
+    },
+    /** 大王变身：3秒黑暗蜕变 —— 痛苦嘶吼悲号（人兽混声）+ 次声震动 + 能量爆裂 */
+    bossDarkTransform() {
+      if (muted) return;
+      const c = ac(); if (!c) return;
+      const now = c.currentTime;
+      // 次声震动（身体崩坏的低频颤抖）
+      const sub = c.createOscillator(); sub.type = 'sine';
+      sub.frequency.setValueAtTime(36, now);
+      sub.frequency.linearRampToValueAtTime(48, now + 1.5);
+      sub.frequency.linearRampToValueAtTime(28, now + 2.9);
+      const sg = c.createGain();
+      sg.gain.setValueAtTime(0.001, now);
+      sg.gain.exponentialRampToValueAtTime(0.3, now + 0.5);
+      sg.gain.setValueAtTime(0.3, now + 2.1);
+      sg.gain.exponentialRampToValueAtTime(0.0001, now + 3.0);
+      sub.connect(sg); sg.connect(c.destination);
+      sub.start(now); sub.stop(now + 3.0);
+      // 兽性嘶吼：锯齿 + 7.5Hz 痛苦颤音，持续下滑
+      const roar = c.createOscillator(); roar.type = 'sawtooth';
+      roar.frequency.setValueAtTime(215, now + 0.25);
+      roar.frequency.exponentialRampToValueAtTime(150, now + 1.4);
+      roar.frequency.exponentialRampToValueAtTime(66, now + 2.6);
+      const lfo = c.createOscillator(); lfo.frequency.value = 7.5;
+      const lg = c.createGain(); lg.gain.value = 26;
+      lfo.connect(lg); lg.connect(roar.frequency);
+      const rf = c.createBiquadFilter(); rf.type = 'lowpass'; rf.frequency.value = 680;
+      const rg = c.createGain();
+      rg.gain.setValueAtTime(0.0001, now + 0.25);
+      rg.gain.exponentialRampToValueAtTime(0.22, now + 0.5);
+      rg.gain.setValueAtTime(0.22, now + 2.0);
+      rg.gain.exponentialRampToValueAtTime(0.0001, now + 2.6);
+      roar.connect(rf); rf.connect(rg); rg.connect(c.destination);
+      roar.start(now + 0.25); roar.stop(now + 2.6);
+      lfo.start(now + 0.25); lfo.stop(now + 2.6);
+      // 人性悲号：三角波哭腔三段呜咽下滑
+      tone(659, 0.75, 'triangle', 0.085, 415, 0.35);
+      tone(523, 0.85, 'triangle', 0.075, 294, 1.2);
+      tone(440, 0.6, 'triangle', 0.06, 233, 2.0);
+      // 能量聚集（噪声上行扫频 + 高频电流躁动）→ 末端爆裂
+      noiseAt(0.1, 1.9, 0.1, 'bandpass', 280, 3600);
+      noiseAt(0.15, 2.0, 0.05, 'highpass', 3800, 8200);
+      noiseAt(2.1, 0.85, 0.3, 'lowpass', 2600, 140);
+      tone(50, 0.95, 'sine', 0.34, 24, 2.1);          // 爆点重击
+      tone(1661, 0.55, 'sawtooth', 0.055, 5230, 2.1); // 能量尖啸迸发
+    },
     bossDie() {
       noise(1.0, 0.5, 500);
       tone(100, 0.9, 'sawtooth', 0.2, 30);
