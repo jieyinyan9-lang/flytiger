@@ -2911,8 +2911,8 @@
     miniR: 11,             // 分裂小节半径
     segSpace: 16,          // 本体节间距
     miniSpace: 15,         // 小节间距
-    segHp: 15,             // 每节基础血量（再乘难度系数）
-    miniHp: 12,
+    segHp: 45,             // 本体每节基础血量（未分裂整龙 3 倍强化；再乘难度系数）
+    miniHp: 12,            // 分裂小段每节血量（保持原值不变）
     sweepSpd: 155,         // 天上穿梭速度
     vertSpd: 215,          // 出土 / 下钻垂直段速度
     burrowSpd: 275,        // 钻地高速
@@ -4083,11 +4083,11 @@
       this.hx = Math.cos(this.ha); this.hy = Math.sin(this.ha);
     }
 
-    /** 主题刺弹：高速直线弹（3 发小幅扇形），外形按地图主题区分 */
+    /** 主题刺弹：高速直线弹（3 发小幅扇形），外形按地图主题区分；仅分裂小段发射，伤害为原值 1/3 */
     fireSpikes(g) {
       const p = g.player;
       const base = Math.atan2(p.y - this.y, p.x - this.x);
-      const dmg = Math.round(this.bulletDmg * g.atkScale);
+      const dmg = Math.max(1, Math.round(this.bulletDmg * g.atkScale / 3));
       for (let i = -1; i <= 1; i++) {
         const a = base + i * 0.15;
         g.bullets.push(new Bullet(this.x - 2, this.y - 6,
