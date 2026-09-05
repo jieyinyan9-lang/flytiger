@@ -162,7 +162,7 @@
   };
 
   class Bullet {
-    /** kind: bolt / orb / shuriken / feather / whirl / flame / fireball / katana / spark / shell / missile */
+    /** kind: bolt / orb / shuriken / feather / whirl / flame / fireball / katana / spark / shell / missile / float / cross / knife */
     constructor(x, y, vx, vy, opts) {
       this.x = x; this.y = y; this.vx = vx; this.vy = vy;
       this.kind = opts.kind || 'orb';
@@ -185,8 +185,12 @@
       this.fade = 1;             // 失效后逐渐淡出
       this.volatile = !!opts.volatile;        // 炮弹：被我方子弹击中也会引爆
       this.rockBreak = !!opts.rockBreak;      // 该弹可破坏障碍山石
-      this.homing = !!opts.homing;            // 追踪导弹
-      this.turnRate = opts.turnRate || 2.2;   // 导弹转向速率
+      this.homing = !!opts.homing;            // 追踪导弹 / 漂浮弹
+      this.turnRate = opts.turnRate || 2.2;   // 转向速率
+      this.hp = opts.hp || 0;                 // 可被击爆的弹：承受命中次数（>0 生效）
+      this.hitFlash = 0;                       // 被击中闪白
+      this.hitCd = 0;                          // 被我方子弹命中的间隔（防穿透弹一帧多次计数）
+      this.bscale = opts.bscale || 1;          // 弹体缩放（大型导弹等）
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -197,13 +201,15 @@
     update(dt, g) {
       this.t += dt; this.life -= dt;
       this.spin += dt * 9;
+      this.hitFlash = Math.max(0, this.hitFlash - dt);
+      this.hitCd = Math.max(0, this.hitCd - dt);
       if (this.neutralized) {
         this.fade = Math.max(0, this.fade - dt * 1.15);
         this.vx *= (1 - dt * 2.2); this.vy *= (1 - dt * 2.2);
         if (this.fade <= 0) { this.dead = true; return; }
       }
       if (this.grav) { this.vy += this.grav * dt; }
-      // 追踪导弹：按转向速率缓慢修正朝向玩家
+      // 追踪导弹 / 漂浮弹：按转向速率缓慢修正朝向玩家
       if (this.homing && !this.neutralized) {
         const p = g.player;
         const ta = Math.atan2(p.y - this.y, p.x - this.x);
@@ -215,12 +221,15 @@
         const sp = Math.hypot(this.vx, this.vy);
         this.vx = Math.cos(cur) * sp; this.vy = Math.sin(cur) * sp;
         this.angle = cur;
-        this.trail += dt;
-        if (this.trail > 0.05) {
-          this.trail = 0;
-          g.particles.push(new Particle(this.x, this.y,
-            rand(-20, 20), rand(-20, 20), 0.3, rand(2, 4),
-            Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
+        // 尾焰仅导弹有
+        if (this.kind === 'missile') {
+          this.trail += dt;
+          if (this.trail > 0.05) {
+            this.trail = 0;
+            g.particles.push(new Particle(this.x, this.y,
+              rand(-20, 20), rand(-20, 20), 0.3, rand(2, 4),
+              Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
+          }
         }
       }
       if (this.kind === 'arrow') {
@@ -302,11 +311,16 @@
       }
       if (k === 'shuriken') {
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.spin);
-        ctx.fillStyle = '#cfd8e3';
+        // 黑边外框（亮天空下清晰）
+        ctx.fillStyle = '#101018';
+        ctx.fillRect(-3, -10, 6, 20); ctx.fillRect(-10, -3, 20, 6);
+        // 银白刃身
+        ctx.fillStyle = '#e8eef7';
         ctx.fillRect(-2, -9, 4, 18); ctx.fillRect(-9, -2, 18, 4);
-        ctx.fillStyle = '#5a6678';
-        ctx.fillRect(-2, -7, 4, 3); ctx.fillRect(-2, 4, 4, 3);
-        ctx.fillRect(-7, -2, 3, 4); ctx.fillRect(4, -2, 3, 4);
+        // 黄色刃尖
+        ctx.fillStyle = '#ffd23b';
+        ctx.fillRect(-2, -9, 4, 3); ctx.fillRect(-2, 6, 4, 3);
+        ctx.fillRect(-9, -2, 3, 4); ctx.fillRect(6, -2, 3, 4);
         ctx.restore();
         return;
       }
@@ -347,22 +361,22 @@
       if (k === 'whirl') {
         ctx.save(); ctx.translate(this.x, this.y);
         const rr = this.r + 5;
-        // 三道旋转风刃：黑边 + 青芯，明亮天空下依然醒目
+        // 三道旋转风刃：黑边 + 红芯，明亮天空下依然醒目
         for (let i = 0; i < 3; i++) {
           const a0 = this.spin + (i * TAU / 3);
-          ctx.strokeStyle = '#0e2430';
+          ctx.strokeStyle = '#101018';
           ctx.lineWidth = 7;
           ctx.beginPath(); ctx.arc(0, 0, rr, a0, a0 + 1.55); ctx.stroke();
-          ctx.strokeStyle = '#35d4ff';
+          ctx.strokeStyle = '#ff3b3b';
           ctx.lineWidth = 3.5;
           ctx.beginPath(); ctx.arc(0, 0, rr, a0, a0 + 1.55); ctx.stroke();
         }
-        // 中心核：黑边亮芯
-        ctx.fillStyle = '#0e2430';
+        // 中心核：黑边亮黄芯
+        ctx.fillStyle = '#101018';
         ctx.fillRect(-5, -5, 10, 10);
-        ctx.fillStyle = '#bff4ff';
+        ctx.fillStyle = '#ffe9a8';
         ctx.fillRect(-3, -3, 6, 6);
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = '#ffd23b';
         ctx.fillRect(-1, -1, 2, 2);
         ctx.restore();
         return;
@@ -404,18 +418,64 @@
       }
       if (k === 'missile') {
         const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
+        const ms = this.bscale || 1;
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
-        // 弹体
-        ctx.fillStyle = '#141418'; ctx.fillRect(-10, -3, 20, 6);
-        ctx.fillStyle = '#8d96a3'; ctx.fillRect(-9, -2, 16, 4);
-        // 弹头（红）
-        ctx.fillStyle = '#e0453a'; ctx.fillRect(7, -2, 4, 4);
+        // 弹体（黑边 + 灰甲）
+        ctx.fillStyle = '#141418'; ctx.fillRect(-11 * ms, -4 * ms, 22 * ms, 8 * ms);
+        ctx.fillStyle = '#8d96a3'; ctx.fillRect(-9 * ms, -2 * ms, 16 * ms, 4 * ms);
+        // 弹头（红，黑边）
+        ctx.fillStyle = '#141418'; ctx.fillRect(6 * ms, -4 * ms, 6 * ms, 8 * ms);
+        ctx.fillStyle = '#e0453a'; ctx.fillRect(7 * ms, -2 * ms, 4 * ms, 4 * ms);
         // 尾焰
         ctx.fillStyle = Math.floor(this.t * 20) % 2 ? '#ffd23b' : '#ff7b2e';
-        ctx.fillRect(-14, -2, 4, 4);
+        ctx.fillRect(-16 * ms, -2 * ms, 5 * ms, 4 * ms);
         // 尾翼
+        ctx.fillStyle = '#141418';
+        ctx.fillRect(-11 * ms, -7 * ms, 4 * ms, 3 * ms); ctx.fillRect(-11 * ms, 4 * ms, 4 * ms, 3 * ms);
         ctx.fillStyle = '#3d4654';
-        ctx.fillRect(-10, -5, 3, 2); ctx.fillRect(-10, 3, 3, 2);
+        ctx.fillRect(-10 * ms, -6 * ms, 2 * ms, 2 * ms); ctx.fillRect(-10 * ms, 4 * ms, 2 * ms, 2 * ms);
+        ctx.restore();
+        return;
+      }
+      if (k === 'float') {
+        // 大王漂浮弹：巨大暗红方弹，缓慢逼近，被击中闪白
+        const f = 1 + Math.sin(this.t * 5) * 0.08;
+        const r = this.r * f;
+        ctx.fillStyle = '#101018'; ctx.fillRect(this.x - r - 3, this.y - r - 3, (r + 3) * 2, (r + 3) * 2);
+        ctx.fillStyle = '#7a1622'; ctx.fillRect(this.x - r, this.y - r, r * 2, r * 2);
+        ctx.fillStyle = '#e0453a'; ctx.fillRect(this.x - r * 0.72, this.y - r * 0.72, r * 1.44, r * 1.44);
+        ctx.fillStyle = '#ffd23b'; ctx.fillRect(this.x - r * 0.3, this.y - r * 0.3, r * 0.6, r * 0.6);
+        ctx.fillStyle = '#fff'; ctx.fillRect(this.x - r * 0.12, this.y - r * 0.12, r * 0.24, r * 0.24);
+        if (this.hitFlash > 0) {
+          ctx.fillStyle = `rgba(255,255,255,${clamp(this.hitFlash * 6, 0, 0.85)})`;
+          ctx.fillRect(this.x - r, this.y - r, r * 2, r * 2);
+        }
+        return;
+      }
+      if (k === 'cross') {
+        // 怪客巨型十字弹：黑边红十字黄芯
+        const s = this.r;
+        const arm = s * 1.5, th = s * 0.62;
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(Math.sin(this.t * 2) * 0.12);
+        ctx.fillStyle = '#101018';
+        ctx.fillRect(-arm - 2, -th / 2 - 2, arm * 2 + 4, th + 4);
+        ctx.fillRect(-th / 2 - 2, -arm - 2, th + 4, arm * 2 + 4);
+        ctx.fillStyle = '#e0453a';
+        ctx.fillRect(-arm, -th / 2, arm * 2, th);
+        ctx.fillRect(-th / 2, -arm, th, arm * 2);
+        ctx.fillStyle = '#ffd23b';
+        ctx.fillRect(-th / 2 + 2, -th / 2 + 2, th - 4, th - 4);
+        ctx.restore();
+        return;
+      }
+      if (k === 'knife') {
+        // 怪客飞刀：黑边银刃红柄
+        const a = Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a + Math.sin(this.t * 10) * 0.3);
+        ctx.fillStyle = '#101018'; ctx.fillRect(-10, -2, 17, 4);
+        ctx.fillStyle = '#dfe6ee'; ctx.fillRect(-9, -1, 13, 2);
+        ctx.fillStyle = '#101018'; ctx.fillRect(4, -3, 5, 6);
+        ctx.fillStyle = '#c0392b'; ctx.fillRect(5, -2, 3, 4);
         ctx.restore();
         return;
       }
@@ -436,25 +496,49 @@
     }
   }
 
-  /* ---------------- 闪电（预警 → 打击） ---------------- */
+  /* ---------------- 闪电（预警 → 打击）：通用线段闪电，支持纵向/横向/对角 ---------------- */
   class Lightning {
-    /** x: 柱中心, w: 柱宽 */
-    constructor(x, w, dmg) {
-      this.x = x; this.w = w; this.dmg = dmg;
+    /** 通用构造：线段 (x1,y1)→(x2,y2)，w 宽度，dmg 伤害 */
+    constructor(x1, y1, x2, y2, w, dmg) {
+      this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2;
+      this.w = w; this.dmg = dmg;
       this.t = 0; this.warn = 0.95; this.strike = 0.3;
       this.dealt = false; this.dead = false;
       this.bolt = this.makeBolt();
     }
+    /** 纵向落雷（柱中心 x） */
+    static vertical(x, w, dmg) {
+      return new Lightning(x, -10, x, CFG.GROUND_Y + 10, w, dmg);
+    }
+    /** 横向闪电（水平线 y） */
+    static horizontal(y, w, dmg) {
+      return new Lightning(-10, y, CFG.W + 10, y, w, dmg);
+    }
+    /** 对角闪电：过点 (px,py)、角度 a，向两端延伸出屏 */
+    static diagonal(px, py, a, w, dmg) {
+      const dx = Math.cos(a), dy = Math.sin(a), L = 1600;
+      return new Lightning(px - dx * L, py - dy * L, px + dx * L, py + dy * L, w, dmg);
+    }
     makeBolt() {
       const pts = [];
-      let y = -10;
-      let x = this.x + rand(-6, 6);
-      while (y < CFG.GROUND_Y) {
-        pts.push({ x, y });
-        y += rand(18, 34);
-        x = this.x + rand(-this.w / 2, this.w / 2);
+      const len = Math.hypot(this.x2 - this.x1, this.y2 - this.y1);
+      const steps = Math.max(6, Math.floor(len / 30));
+      const dx = (this.x2 - this.x1) / steps, dy = (this.y2 - this.y1) / steps;
+      const nl = Math.hypot(dx, dy) || 1;
+      const nx = -dy / nl, ny = dx / nl;   // 法向单位向量
+      for (let i = 0; i <= steps; i++) {
+        const j = (i === 0 || i === steps) ? 0 : rand(-this.w / 2, this.w / 2);
+        pts.push({ x: this.x1 + dx * i + nx * j, y: this.y1 + dy * i + ny * j });
       }
       return pts;
+    }
+    /** 点到线段距离 */
+    static distSeg(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const l2 = dx * dx + dy * dy || 1;
+      let t = ((px - x1) * dx + (py - y1) * dy) / l2;
+      t = clamp(t, 0, 1);
+      return Math.hypot(px - (x1 + dx * t), py - (y1 + dy * t));
     }
     update(dt, g) {
       this.t += dt;
@@ -462,10 +546,10 @@
         this.dealt = true;
         SFX.shock();
         g.shake(10);
-        burst(g, this.x + rand(-this.w / 2, this.w / 2), CFG.GROUND_Y - 40, 18,
-          ['#ffe066', '#fff', '#7fe7ff'], 260, 5, 0.5, 200);
+        const mx = (this.x1 + this.x2) / 2, my = (this.y1 + this.y2) / 2;
+        burst(g, mx, my, 18, ['#ffe066', '#fff', '#7fe7ff'], 260, 5, 0.5, 200);
         const p = g.player;
-        if (Math.abs(p.x - this.x) < this.w / 2 + p.radius * 0.6 && p.y < CFG.GROUND_Y) {
+        if (Lightning.distSeg(p.x, p.y, this.x1, this.y1, this.x2, this.y2) < this.w / 2 + p.radius * 0.7) {
           p.hurt(this.dmg, g);
         }
       }
@@ -473,44 +557,53 @@
     }
     render(ctx) {
       if (this.t < this.warn) {
-        // 预警柱（闪烁虚线）
+        // 预警：沿线段闪烁虚线
         const on = Math.floor(this.t * 14) % 2 === 0;
         if (on) {
-          ctx.globalAlpha = 0.35;
-          ctx.fillStyle = '#ffe066';
-          ctx.fillRect(this.x - this.w / 2, 0, this.w, CFG.GROUND_Y);
-          ctx.globalAlpha = 0.8;
-          ctx.fillStyle = '#fff';
-          for (let y = 0; y < CFG.GROUND_Y; y += 28) {
-            ctx.fillRect(this.x - this.w / 2, y, 4, 12);
-            ctx.fillRect(this.x + this.w / 2 - 4, y + 14, 4, 12);
-          }
-          ctx.globalAlpha = 1;
+          ctx.save();
+          ctx.globalAlpha = 0.4;
+          ctx.strokeStyle = '#ffe066';
+          ctx.lineWidth = this.w * 0.8;
+          ctx.lineCap = 'round';
+          ctx.setLineDash([16, 14]);
+          ctx.beginPath(); ctx.moveTo(this.x1, this.y1); ctx.lineTo(this.x2, this.y2); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 0.9;
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([10, 12]);
+          ctx.beginPath(); ctx.moveTo(this.x1, this.y1); ctx.lineTo(this.x2, this.y2); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
         }
       } else {
-        // 闪电本体
+        // 闪电本体：白芯 + 黄边
         const a = clamp(1 - (this.t - this.warn) / this.strike, 0, 1);
+        ctx.save();
         ctx.globalAlpha = a;
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
         ctx.strokeStyle = '#fff'; ctx.lineWidth = this.w * 0.5;
-        ctx.lineJoin = 'miter';
         ctx.beginPath();
         this.bolt.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
         ctx.stroke();
         ctx.strokeStyle = '#ffe066'; ctx.lineWidth = this.w * 0.22;
+        ctx.beginPath();
+        this.bolt.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
         ctx.stroke();
-        ctx.globalAlpha = 1;
+        ctx.restore();
       }
     }
   }
 
   /* ---------------- 长线光束（预警 → 沿线打击） ---------------- */
   class Beam {
-    /** (x,y) 起点，a 方向角，len 长度，w 光束宽 */
-    constructor(x, y, a, len, w, dmg, warn) {
+    /** (x,y) 起点，a 方向角，len 长度，w 光束宽；rockBreak：光束触山炸毁山石 */
+    constructor(x, y, a, len, w, dmg, warn, rockBreak) {
       this.x = x; this.y = y; this.a = a; this.len = len; this.w = w;
       this.dmg = dmg;
       this.t = 0; this.warn = warn || 0.7; this.active = 0.35;
       this.dealt = false; this.dead = false;
+      this.rockBreak = !!rockBreak;
     }
     end() {
       return { x: this.x + Math.cos(this.a) * this.len, y: this.y + Math.sin(this.a) * this.len };
@@ -528,6 +621,21 @@
         burst(g, cx, cy, 10, ['#ff5252', '#fff', '#ffd23b'], 200, 4, 0.35);
         if (Math.hypot(p.x - cx, p.y - cy) < this.w / 2 + p.radius * 0.7) {
           p.hurt(this.dmg, g);
+        }
+        // 光束触山：沿光路采样，命中即炸毁山石
+        if (this.rockBreak) {
+          for (const r of g.rocks) {
+            if (r.dead) continue;
+            for (let s = 0; s <= 1.001; s += 0.08) {
+              const sx = this.x + Math.cos(this.a) * this.len * s;
+              const sy = this.y + Math.sin(this.a) * this.len * s;
+              if (r.contains(sx, sy, 8)) {
+                burst(g, sx, sy, 18, ['#7d8794', '#a7b3c2', '#fff', '#ff7b2e'], 260, 6, 0.6, 220);
+                r.destroy(g);
+                break;
+              }
+            }
+          }
         }
       }
       if (this.t > this.warn + this.active) this.dead = true;
@@ -597,6 +705,7 @@
       // 防护刀刃（环绕光剑）
       this.blades = 0;        // 环绕光剑数量
       this.bladeDmgLv = 0;    // 刀刃伤害强化等级
+      this.bladeLenLv = 0;    // 剑刃延展等级（0-2，长度倍率 1/2/3）
       this.bladeAng = 0;      // 环绕角速度累计
       this.bladeCd = new Map();  // 刀刃命中敌人的冷却（键：敌人对象）
       // 生命条数（初始 3 条，上限 3 条）
@@ -613,25 +722,29 @@
       this.hurtFlash = 0;
     }
 
-    /** 刀刃 i 当前位置/角度（沿轨道环绕飞虎） */
+    /** 刀刃长度倍率（剑刃延展：1/2/3 倍） */
+    get bladeLenMul() { return 1 + (this.bladeLenLv || 0); }
+
+    /** 刀刃 i 当前位置/角度（沿轨道环绕飞虎；延展后轨道半径同步增大） */
     bladePos(i) {
-      const R = CFG.blade.orbitR * (0.9 + this.sizeMul * 0.15);
+      const R = CFG.blade.orbitR * this.bladeLenMul * (0.9 + this.sizeMul * 0.15);
       const a = this.bladeAng + (TAU / this.blades) * i;
       return { x: this.x + Math.cos(a) * R, y: this.y + Math.sin(a) * R, a };
     }
 
-    /** 防护刀刃：旋转伤害接触敌人 + 50% 概率格挡敌方子弹 */
+    /** 防护刀刃：旋转伤害接触敌人 + 50% 概率格挡敌方子弹（导弹被剑击中 1 次必爆） */
     updateBlades(dt, g) {
       if (this.blades <= 0) return;
       this.bladeAng += CFG.blade.spin * dt;
       const dmg = CFG.blade.baseDmg + CFG.blade.dmgPerLv * (this.bladeDmgLv - 1);
+      const lenMul = this.bladeLenMul;
       // 接触敌人造成伤害（每敌 0.5s 一次）
       g.targets().forEach(e => {
         if (e.dead) return;
         if (e.isBoss && e.state === 'enter') return;   // Boss 入场免伤
         for (let i = 0; i < this.blades; i++) {
           const bp = this.bladePos(i);
-          const rr = CFG.blade.hitR + e.radius;
+          const rr = (CFG.blade.hitR + e.radius) * (0.7 + lenMul * 0.3);
           if ((e.x - bp.x) ** 2 + (e.y - bp.y) ** 2 < rr * rr) {
             const now = g.time;
             if (now - (this.bladeCd.get(e) ?? -1) > 0.5) {
@@ -643,15 +756,19 @@
           }
         }
       });
-      // 格挡敌方子弹：单颗子弹仅判定一次
+      // 格挡敌方子弹：单颗子弹仅判定一次；导弹被剑擦中立即引爆
       for (const b of g.bullets) {
         if (b.friendly || b.dead || b.neutralized || b.bladeRolled) continue;
         for (let i = 0; i < this.blades; i++) {
           const bp = this.bladePos(i);
-          const rr = CFG.blade.blockR + b.r;
+          const rr = (CFG.blade.blockR + b.r) * (0.7 + lenMul * 0.3);
           if ((b.x - bp.x) ** 2 + (b.y - bp.y) ** 2 < rr * rr) {
             b.bladeRolled = true;
-            if (Math.random() < CFG.blade.blockChance) {
+            if (b.kind === 'missile') {
+              // 旋转剑击中导弹：1 次必定引爆
+              b.dead = true;
+              g.shellBlast(b.x, b.y, b.dmg);
+            } else if (Math.random() < CFG.blade.blockChance) {
               b.dead = true;
               burst(g, b.x, b.y, 6, ['#7fe7ff', '#fff', '#ffd93b'], 180, 4, 0.3);
               SFX.melee();
@@ -969,7 +1086,7 @@
           ctx.save();
           ctx.translate(bp.x, bp.y);
           ctx.rotate(bp.a + Math.PI / 2);
-          const L = 17 + Math.min(this.blades, 6) * 1.2;   // 光剑长度随数量略增
+          const L = (17 + Math.min(this.blades, 6) * 1.2) * this.bladeLenMul;   // 光剑长度：随数量略增 + 剑刃延展（最高 3 倍）
           // 外圈光晕
           ctx.fillStyle = 'rgba(127,231,255,0.30)';
           ctx.fillRect(-6, -L, 12, L * 2);
@@ -1022,9 +1139,9 @@
       this.hoverX = 0; this.hoverY = 0; this.baseY = this.y;
       this.animT = rand(0, TAU);
 
-      // 小弓箭手：地面行走 → 停 3-5 次射箭 → 一直向左奔跑
+      // 小弓箭手：地面行走 → 停 3-5 次射箭 → 一直向左奔跑（体积×2）
       if (type === 'archer') {
-        this.y = CFG.GROUND_Y - 22;
+        this.y = CFG.GROUND_Y - 34;
         this.baseY = this.y;
         this.state = 'walk';
         this.archT = rand(1.8, 3.0);   // 独立倒数计时（stateT 在基类中为累加）
@@ -1033,9 +1150,9 @@
         this.atkT = 0.5;
       }
 
-      // 炮师：地面推进 → 停点抛射炮弹（3-4 次）→ 向左撤离
+      // 炮师：地面推进 → 停点抛射炮弹（3-4 次）→ 向左撤离（体积×2）
       if (type === 'cannoneer') {
-        this.y = CFG.GROUND_Y - 24;
+        this.y = CFG.GROUND_Y - 34;
         this.baseY = this.y;
         this.state = 'walk';
         this.archT = rand(1.6, 2.6);
@@ -1114,7 +1231,8 @@
         pig: ['#f4726b', '#ff7b2e', '#ffd23b'],
         skeleton: ['#e8eef7', '#9aa7bb', '#e0453a', '#ffd23b'],
         skull: ['#e8eef7', '#9aa7bb', '#7fe7ff', '#ff3b5c'],
-        cannoneer: ['#5a6678', '#2c3545', '#ffd23b', '#fff']
+        cannoneer: ['#5a6678', '#2c3545', '#ffd23b', '#fff'],
+        superboy: ['#2f6fd0', '#e0453a', '#ffd23b', '#fff']
       }[this.type] || ['#fff', '#aaa'];
     }
 
@@ -1128,7 +1246,7 @@
         const a = base + off;
         g.bullets.push(new Bullet(this.x - 14, this.y,
           Math.cos(a) * speed, Math.sin(a) * speed,
-          { kind: kind || 'orb', r: r || 5, dmg: dmg, dmgScale: g.atkScale, life: 7 }));
+          { kind: kind || 'orb', r: r || 6, dmg: dmg, dmgScale: g.atkScale, life: 7 }));
       }
       SFX.enemyShoot();
     }
@@ -1153,6 +1271,7 @@
         case 'cannoneer': this.aiCannoneer(dt, g, p); break;
         case 'skull': this.aiSkull(dt, g, p); break;
         case 'skeleton': this.aiSkeleton(dt, g, p); break;
+        case 'superboy': this.aiSuperboy(dt, g, p); break;
       }
       // 飞离屏幕清理
       if (this.x < -80 || this.y > CFG.H + 100 || this.y < -160) this.dead = true;
@@ -1230,7 +1349,7 @@
         const cols = g.round >= 4 ? 2 : 1;
         for (let i = 0; i < cols; i++) {
           const lx = clamp(p.x + (i === 0 ? 0 : (Math.random() < 0.5 ? -90 : 90)), 60, CFG.W - 60);
-          g.lightnings.push(new Lightning(lx, 56, this.bulletDmg * g.atkScale));
+          g.lightnings.push(Lightning.vertical(lx, 56, this.bulletDmg * g.atkScale));
         }
       }
     }
@@ -1263,7 +1382,7 @@
 
     /* 小弓箭手：地面行走 → 停留抛射箭矢（3-5 次）→ 向左疾奔 */
     aiArcher(dt, g, p) {
-      this.y = CFG.GROUND_Y - 22;   // 始终踩在地面
+      this.y = CFG.GROUND_Y - 34;   // 始终踩在地面（体积×2 后中心上移）
       this.kbY = 0;
       if (this.state === 'walk') {
         this.x -= 78 * this.speedMul * dt;
@@ -1308,9 +1427,9 @@
       }
     }
 
-    /* 炮师：地面推进 → 停点抛射铁炮弹（爆炸）→ 向左撤离；触碰山石不坠毁 */
+    /* 炮师：地面推进 → 停点抛射炮弹（3-4 次）→ 向左撤离 */
     aiCannoneer(dt, g, p) {
-      this.y = CFG.GROUND_Y - 24;   // 始终踩在地面
+      this.y = CFG.GROUND_Y - 34;   // 始终踩在地面（体积×2 后中心上移）
       this.kbY = 0;
       if (this.state === 'walk') {
         this.x -= 55 * this.speedMul * dt;
@@ -1387,10 +1506,28 @@
             const a = this.rotA + (TAU / n) * i;
             g.bullets.push(new Bullet(this.x, this.y,
               Math.cos(a) * 165, Math.sin(a) * 165,
-              { kind: 'orb', r: 6, dmg: this.bulletDmg * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#c9f6ff' }));
+              { kind: 'orb', r: 6, dmg: this.bulletDmg * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#ffb02e' }));
           }
           SFX.enemyShoot();
         }
+      }
+    }
+
+    /* 小超人：飞行逼近悬停，周期发射单束激光（激光遇障碍炸碎山石） */
+    aiSuperboy(dt, g, p) {
+      // 悬停游弋：保持在玩家右上方
+      const wantX = p.x + 280, wantY = clamp(p.y - 60, CFG.TOP_Y + 60, CFG.GROUND_Y - 120);
+      if (this.x > wantX + 30) this.x -= 105 * this.speedMul * dt;
+      else if (this.x < wantX - 60) this.x += 63 * this.speedMul * dt;
+      this.y += (wantY - this.y) * dt * 1.2 + Math.sin(this.t * 3.2) * 14 * dt;
+      this.y = clamp(this.y, CFG.TOP_Y + 40, CFG.GROUND_Y - 80);
+      this.atkT -= dt;
+      if (this.atkT <= 0 && this.x < CFG.W - 20) {
+        this.atkT = rand(2.2, 3.0);
+        // 朝玩家方向发射一束细激光（预警后激活，光路中的山石被炸毁）
+        const a = Math.atan2(p.y - this.y, p.x - this.x);
+        g.beams.push(new Beam(this.x, this.y, a, 1300, 10, Math.round(this.bulletDmg * g.atkScale), 0.85, true));
+        SFX.enemyShoot();
       }
     }
 
@@ -1436,22 +1573,27 @@
           break;
         case 'archer': {
           const moving = this.state !== 'stop';
-          const bob = moving ? Math.abs(Math.sin(t * (this.state === 'run' ? 16 : 9))) * -2 : 0;
-          drawSprite(ctx, Sprites.archerL, this.x, this.y + bob + 4, 2.0, 2.0, 0, this.flash);
+          const bob = moving ? Math.abs(Math.sin(t * (this.state === 'run' ? 16 : 9))) * -4 : 0;
+          drawSprite(ctx, Sprites.archerL, this.x, this.y + bob + 8, 4.0, 4.0, 0, this.flash);
           break;
         }
         case 'cannoneer': {
           const moving = this.state !== 'stop';
-          const bob = moving ? Math.abs(Math.sin(t * (this.state === 'run' ? 14 : 8))) * -2 : 0;
-          drawSprite(ctx, Sprites.cannoneerL, this.x, this.y + bob + 4, 2.0, 2.0, 0, this.flash);
-          // 开炮 muzzle flash（炮口朝左）
+          const bob = moving ? Math.abs(Math.sin(t * (this.state === 'run' ? 14 : 8))) * -4 : 0;
+          drawSprite(ctx, Sprites.cannoneerL, this.x, this.y + bob + 8, 4.0, 4.0, 0, this.flash);
+          // 开炮 muzzle flash（炮口朝左，体积×2 后偏移同步放大）
           if (this.state === 'stop' && this.atkT > 0.85) {
-            const f = 5 + Math.sin(t * 40) * 2;
+            const f = 10 + Math.sin(t * 40) * 4;
             ctx.fillStyle = '#ffd23b';
-            ctx.fillRect(this.x - 42 - f, this.y + bob - 4, f, 8);
+            ctx.fillRect(this.x - 84 - f, this.y + bob - 8, f, 16);
             ctx.fillStyle = '#ff7b2e';
-            ctx.fillRect(this.x - 42 - f, this.y + bob - 2, f * 0.6, 4);
+            ctx.fillRect(this.x - 84 - f, this.y + bob - 4, f * 0.6, 8);
           }
+          break;
+        }
+        case 'superboy': {
+          // 少年超人：面朝玩家（左），悬停起伏
+          drawSprite(ctx, Sprites.superboyL, this.x, this.y + Math.sin(t * 3.2) * 3, 2.6, 2.6, Math.sin(t * 3.2) * 0.05, this.flash);
           break;
         }
         case 'skull': {

@@ -71,6 +71,7 @@
       blockR: 24,          // 挡弹判定半径
       blockChance: 0.5,    // 格挡概率
       maxBlades: 10,       // 光剑数量上限
+      maxLenLv: 2,         // 剑刃延展等级上限（2 级 = 3 倍长度）
       baseDmg: 26,         // 基础接触伤害
       dmgPerLv: 14         // 每级"刀刃强化"提升伤害
     },
@@ -100,11 +101,15 @@
       },
       archer: {
         name: '小弓箭手', hp: 46, speed: 75, contact: 10,
-        bulletDmg: 11, xp: 8, score: 18, radius: 15, weight: 7, minBossKills: 2, elite: false, ground: true
+        bulletDmg: 11, xp: 8, score: 18, radius: 30, weight: 7, minBossKills: 2, elite: false, ground: true
       },
       cannoneer: {
         name: '炮师', hp: 62, speed: 60, contact: 12,
-        bulletDmg: 16, xp: 12, score: 26, radius: 18, weight: 7, minBossKills: 3, elite: false, ground: true
+        bulletDmg: 16, xp: 12, score: 26, radius: 36, weight: 7, minBossKills: 3, elite: false, ground: true
+      },
+      superboy: {
+        name: '小超人', hp: 52, speed: 105, contact: 14,
+        bulletDmg: 13, xp: 10, score: 24, radius: 24, weight: 6, minBossKills: 2, elite: false
       },
       leigong: {
         name: '雷公', hp: 130, speed: 70, contact: 18,
@@ -228,6 +233,13 @@
         can(p, g) { return g && g.round >= 4 && p.blades >= 1 && p.blades < CFG.blade.maxBlades; },
         apply(p) { p.blades++; },
         level(p) { return p.blades; }
+      },
+      {
+        id: 'bladeL', icon: '╏', cls: 'c-spd', name: '剑刃延展',
+        desc: '环绕光剑长度翻倍（最长 3 倍），杀伤与格挡距离大幅延伸',
+        can(p, g) { return g && g.round >= 4 && p.blades >= 1 && (p.bladeLenLv || 0) < CFG.blade.maxLenLv; },
+        apply(p) { p.bladeLenLv = (p.bladeLenLv || 0) + 1; },
+        level(p) { return p.bladeLenLv || 0; }
       },
       /* —— 移动速度强化 —— */
       {

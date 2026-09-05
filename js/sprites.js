@@ -546,6 +546,167 @@
     return cv;
   }
 
+  /* ---------------- 小超人（少年超人，蓝战衣红披风，面朝右） ---------------- */
+  function buildSuperboy() {
+    const cv = document.createElement('canvas');
+    cv.width = 24; cv.height = 24;
+    const c = cv.getContext('2d');
+    const px = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const K = '#101018', S = '#f2c9a0', B = '#2f6fd0', b = '#1e4d92',
+          R = '#e0453a', Y = '#ffd23b', W = '#f7f7f2';
+    // 红披风（身后左侧飘动）
+    px(2, 8, 7, 3, K); px(2, 11, 6, 3, K); px(3, 14, 5, 3, K);
+    px(3, 9, 5, 2, R); px(3, 12, 4, 2, R); px(4, 15, 3, 1, R);
+    // 头
+    px(12, 2, 9, 3, K); px(19, 1, 2, 2, K);            // 黑发 + 额前卷
+    px(12, 3, 9, 8, K);
+    px(13, 4, 7, 6, S);
+    px(17, 5, 2, 2, K);                                // 眼
+    // 身体（蓝战衣）
+    px(9, 10, 11, 8, K);
+    px(10, 11, 9, 5, B);
+    px(13, 11, 4, 4, K); px(14, 12, 2, 2, Y);          // 胸盾
+    px(10, 16, 9, 2, Y);                               // 黄腰带
+    px(12, 17, 5, 2, R);                               // 红裤
+    // 前冲拳（右）
+    px(19, 11, 4, 4, K); px(20, 12, 3, 2, S);
+    // 后拳（左）
+    px(6, 12, 4, 4, K); px(7, 13, 2, 2, S);
+    // 腿 + 红靴
+    px(10, 18, 4, 5, K); px(11, 19, 2, 3, b); px(9, 22, 5, 2, K); px(9, 22, 5, 2, R);
+    px(15, 18, 4, 5, K); px(16, 19, 2, 3, b); px(14, 22, 5, 2, K); px(14, 22, 5, 2, R);
+    return cv;
+  }
+
+  /* ---------------- 祖国人（大型超人：金发蓝战衣红披风，面朝右） ---------------- */
+  function buildHomelander() {
+    const cv = document.createElement('canvas');
+    cv.width = 30; cv.height = 32;
+    const c = cv.getContext('2d');
+    const px = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const K = '#101018', S = '#f2c9a0', B = '#2f6fd0', b = '#1e4d92',
+          R = '#e0453a', Y = '#ffd23b', W = '#f7f7f2';
+    // 大红披风
+    px(3, 9, 10, 4, K); px(3, 13, 9, 4, K); px(4, 17, 8, 4, K); px(5, 21, 6, 2, K);
+    px(4, 10, 8, 2, R); px(4, 14, 7, 2, R); px(5, 18, 6, 2, R); px(6, 21, 4, 1, R);
+    // 金发头
+    px(15, 2, 11, 3, K);
+    px(15, 3, 10, 9, K);
+    px(16, 4, 8, 2, Y);                                // 金发顶
+    px(16, 6, 8, 5, S);                                // 脸
+    px(22, 7, 2, 2, K); px(23, 7, 1, 1, R);           // 眼 + 激光红瞳
+    px(20, 10, 3, 1, K);                               // 紧抿嘴
+    // 身体
+    px(10, 12, 14, 9, K);
+    px(11, 13, 12, 6, B);
+    px(15, 13, 6, 6, K); px(16, 14, 4, 4, W); px(17, 15, 2, 2, R);  // 胸盾
+    px(11, 19, 12, 2, Y);                              // 腰带
+    px(14, 20, 7, 2, R);                               // 红裤
+    // 前拳
+    px(23, 13, 5, 5, K); px(24, 14, 4, 3, S);
+    // 后拳
+    px(6, 14, 5, 5, K); px(7, 15, 3, 3, S);
+    // 腿 + 红靴
+    px(12, 21, 5, 7, K); px(13, 22, 3, 5, b); px(11, 28, 7, 3, K); px(11, 28, 7, 3, R);
+    px(18, 21, 5, 7, K); px(19, 22, 3, 5, b); px(17, 28, 7, 3, K); px(17, 28, 7, 3, R);
+    return cv;
+  }
+
+  /* ---------------- 大王（西装革履男子，面朝右） ---------------- */
+  function buildBossMan() {
+    const cv = document.createElement('canvas');
+    cv.width = 30; cv.height = 38;
+    const c = cv.getContext('2d');
+    const px = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const K = '#0d0f16', D = '#23262f', S = '#f2c9a0',
+          W = '#f4f1e8', R = '#c0392b';
+    // 油头
+    px(9, 1, 13, 3, K); px(9, 3, 3, 3, K); px(19, 3, 3, 3, K);
+    // 脸
+    px(10, 3, 11, 10, K);
+    px(11, 5, 9, 7, S);
+    px(12, 6, 3, 2, K); px(17, 6, 3, 2, K);            // 怒眉
+    px(13, 8, 2, 2, K); px(17, 8, 2, 2, K);            // 眼
+    px(14, 11, 4, 1, K);                               // 紧嘴
+    // 西装身
+    px(7, 12, 17, 14, K);
+    px(8, 13, 15, 12, D);
+    // 白衬衫 + 红领带 + 翻领
+    px(13, 13, 5, 9, W);
+    px(15, 13, 2, 2, R); px(15, 15, 2, 6, R);
+    px(12, 13, 2, 9, K); px(17, 13, 2, 9, K);
+    // 双臂（西装袖 + 白袖口 + 手）
+    px(4, 13, 4, 10, K); px(5, 14, 3, 7, D); px(5, 21, 3, 2, W); px(4, 23, 4, 4, K); px(5, 23, 3, 3, S);
+    px(23, 13, 4, 10, K); px(24, 14, 3, 7, D); px(24, 21, 3, 2, W); px(23, 23, 4, 4, K); px(24, 23, 3, 3, S);
+    // 西裤 + 皮鞋
+    px(9, 26, 6, 9, K); px(10, 27, 4, 7, D); px(8, 34, 8, 3, K);
+    px(17, 26, 6, 9, K); px(18, 27, 4, 7, D); px(16, 34, 8, 3, K);
+    return cv;
+  }
+
+  /* ---------------- 大王巨头（变身后，面朝右） ---------------- */
+  function buildBossHead() {
+    const cv = document.createElement('canvas');
+    cv.width = 24; cv.height = 22;
+    const c = cv.getContext('2d');
+    const px = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const K = '#0d0f16', S = '#f2c9a0', W = '#f4f1e8', R = '#c0392b';
+    // 油头
+    px(4, 1, 17, 4, K); px(2, 4, 3, 4, K); px(20, 4, 3, 4, K);
+    // 脸
+    px(4, 4, 17, 15, K);
+    px(5, 6, 15, 12, S);
+    // 耳
+    px(3, 9, 2, 4, K); px(4, 10, 1, 2, S);
+    px(20, 9, 2, 4, K); px(20, 10, 1, 2, S);
+    // 怒眉
+    px(7, 8, 5, 2, K); px(13, 8, 5, 2, K);
+    // 眼白 + 瞳
+    px(8, 10, 4, 3, W); px(13, 10, 4, 3, W);
+    px(9, 11, 2, 2, K); px(14, 11, 2, 2, K);
+    // 鼻
+    px(11, 12, 1, 3, K); px(12, 14, 3, 1, K);
+    // 咬牙嘴
+    px(7, 16, 11, 3, K); px(8, 16, 9, 1, W);
+    // 下颌
+    px(6, 18, 13, 2, S);
+    return cv;
+  }
+
+  /* ---------------- 怪客（持续跳动的光头男子，面朝右） ---------------- */
+  function buildStranger() {
+    const cv = document.createElement('canvas');
+    cv.width = 28; cv.height = 36;
+    const c = cv.getContext('2d');
+    const px = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const K = '#0d0f16', P = '#e6ddc8', J = '#3a4152', j = '#2a3040',
+          W = '#f4f1e8', R = '#ff3b3b';
+    // 光头
+    px(7, 1, 14, 3, K);
+    px(7, 3, 14, 13, K);
+    px(8, 4, 12, 11, P);
+    // 眉骨 + 怒眼（红瞳）
+    px(8, 8, 12, 2, K);
+    px(10, 9, 3, 2, K); px(16, 9, 3, 2, K);
+    px(11, 9, 1, 1, R); px(17, 9, 1, 1, R);
+    // 鼻
+    px(13, 11, 2, 3, K);
+    // 咧嘴牙
+    px(9, 14, 11, 3, K); px(10, 14, 9, 2, W);
+    px(12, 14, 1, 2, K); px(15, 14, 1, 2, K); px(18, 14, 1, 2, K);
+    // 身躯（拘束衣感深夹克）
+    px(6, 15, 17, 12, K);
+    px(7, 16, 15, 10, J);
+    px(10, 16, 3, 10, j); px(16, 16, 3, 10, j);       // 绑带
+    // 大拳头
+    px(2, 17, 5, 9, K); px(3, 18, 4, 6, J); px(2, 25, 6, 5, K); px(3, 26, 4, 3, P);
+    px(22, 17, 5, 9, K); px(23, 18, 4, 6, J); px(21, 25, 6, 5, K); px(22, 26, 4, 3, P);
+    // 腿 + 鞋
+    px(9, 27, 5, 7, K); px(10, 28, 3, 5, J); px(8, 33, 7, 3, K);
+    px(16, 27, 5, 7, K); px(17, 28, 3, 5, J); px(15, 33, 7, 3, K);
+    return cv;
+  }
+
   const Sprites = {
     cat: null,   // 白猫主角：assets/cat.png 原图（异步加载）
     eagleA: buildEagle(0, EAGLE_PAL),
@@ -565,6 +726,11 @@
     swordEagleB: buildEagle(1, SWORD_EAGLE_PAL),
     dogHead: buildDogHead(),
     pheasant: buildPheasant(),
+    superboy: buildSuperboy(),
+    homelander: buildHomelander(),
+    bossMan: buildBossMan(),
+    bossHead: buildBossHead(),
+    stranger: buildStranger(),
   };
 
   // 敌人统一朝向：翻转成朝左
@@ -584,6 +750,11 @@
   Sprites.swordEagleBL = flip(Sprites.swordEagleB);
   Sprites.dogHeadL = flip(Sprites.dogHead);
   Sprites.pheasantL = flip(Sprites.pheasant);
+  Sprites.superboyL = flip(Sprites.superboy);
+  Sprites.homelanderL = flip(Sprites.homelander);
+  Sprites.bossManL = flip(Sprites.bossMan);
+  Sprites.bossHeadL = flip(Sprites.bossHead);
+  Sprites.strangerL = flip(Sprites.stranger);
 
   // 白猫主角：直接加载原图文件渲染（保证与素材 100% 一致）
   Sprites.whenReady = new Promise(resolve => {

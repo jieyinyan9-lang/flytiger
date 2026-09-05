@@ -108,6 +108,11 @@
         this.mouse.y = (e.clientY - rect.top) / rect.height * CFG.H;
         this.mouse.active = true;
       });
+
+      // 首次交互解锁音频（浏览器自动播放策略）：菜单背景音乐随手势启动
+      const unlockAudio = () => { SFX.unlock(); if (window.Music) Music.unlock(); };
+      window.addEventListener('pointerdown', unlockAudio);
+      window.addEventListener('keydown', unlockAudio);
     }
 
     toggleMute() {
@@ -125,8 +130,29 @@
     }
 
     togglePause() {
-      if (this.state === 'playing') { this.state = 'paused'; this.el.pause.classList.remove('hidden'); }
-      else if (this.state === 'paused') { this.state = 'playing'; this.el.pause.classList.add('hidden'); }
+      if (this.state === 'playing') {
+        this.state = 'paused'; this.el.pause.classList.remove('hidden');
+        if (window.Music) Music.setDuck(0.2);   // 暂停时音乐压低
+      } else if (this.state === 'paused') {
+        this.state = 'playing'; this.el.pause.classList.add('hidden');
+        if (window.Music) Music.setDuck(1);
+      }
+    }
+
+    /* ---------------- 背景音乐场景路由 ----------------
+     * casual 日常休闲（菜单/局外 + 打小怪） / tide 怪物潮 / boss 通用Boss
+     * pheasant 巨型野鸡王 / eagle 咬剑鹰 / hero 祖国人 */
+    musicScene() {
+      if (this.state === 'menu' || this.state === 'gameover') return 'casual';
+      if (this.warnT > 0) return this.pendingBossMusic || 'boss';
+      if (this.bosses.length) return this.bosses[0].musicTheme || 'boss';
+      if (this.state === 'playing') return this.isTide ? 'tide' : 'casual';
+      return null;   // 三选一/暂停：保持当前曲目
+    }
+    updateMusic() {
+      if (!window.Music) return;
+      const scene = this.musicScene();
+      if (scene) Music.play(scene);
     }
 
     /* ---------------- 开局 / 重置 ---------------- */
@@ -162,6 +188,7 @@
       this.bossT = rand(CFG.boss.firstMin, CFG.boss.firstMax);
       this.warnT = 0;
       this.pendingBoss = null;
+      this.pendingBossMusic = null;   // 预警中 Boss 对应曲目（boss/eagle/pheasant/hero）
       this.shakeMag = 0;
       this.timeScale = 1;
       this.slowmoT = 0;
@@ -348,17 +375,18 @@
       // 排斥规则：上一只出现的 Boss 本次不再出现
       // chance：部分 Boss（骷髅王/狗王）即使解锁也只有 30% 概率进入候选池
       const ord = this.bossSpawned + 1;
+      const ordOk = b => b.minOrd <= ord && (b.maxOrd === undefined || ord <= b.maxOrd);
       let pool = window.BOSS_LIST.filter(b =>
-        b.minOrd <= ord &&
+        ordOk(b) &&
         b.cls.name !== this.lastBossCls &&
         (b.chance === undefined || Math.random() < b.chance));
       if (!pool.length) {
         // 兜底1：忽略概率权重（防止空池）
-        pool = window.BOSS_LIST.filter(b => b.minOrd <= ord && b.cls.name !== this.lastBossCls);
+        pool = window.BOSS_LIST.filter(b => ordOk(b) && b.cls.name !== this.lastBossCls);
       }
       if (!pool.length) {
         // 兜底2：当前序号无其他可选 Boss 时，允许重复出现（防止空池卡死）
-        pool = window.BOSS_LIST.filter(b => b.minOrd <= ord);
+        pool = window.BOSS_LIST.filter(b => ordOk(b));
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
       const pick = pool[Math.floor(Math.random() * pool.length)];
@@ -447,6 +475,10 @@
       const d = Math.hypot(p.x - x, p.y - y);
       if (d < R + p.radius) {
         p.hurt(Math.round(dmg * (d < R * 0.55 ? 1 : 0.6)), this);
+      }
+      // 爆炸波及范围内的山石一并炸毁
+      for (const r of this.rocks) {
+        if (!r.dead && r.contains(x, y, R * 0.6)) r.destroy(this);
       }
     }
 
@@ -548,6 +580,7 @@
         } else if (this.state === 'gameover') {
           this.updateFx(dt);   // 死亡爆炸特效继续播放
         }
+        this.updateMusic();    // 场景→曲目路由（菜单/小怪/怪物潮/各类Boss）
         this.render();
       } catch (err) {
         // 单帧异常不得冻结整个游戏：记录首个错误堆栈，后续帧照常调度
@@ -667,17 +700,35 @@
           }
         }
       }
-      // 我方子弹 vs 可引爆敌方炮弹：击中即引爆
+      // 我方子弹 vs 敌方炮弹/可击爆弹：
+      //  - 炮弹（volatile）：击中即引爆
+      //  - 可击爆弹（hp>0，如巨型导弹/漂浮弹）：累计命中次数，达到后引爆（旋转剑在 entities 中 1 击必爆）
       for (const fb of this.bullets) {
         if (!fb.friendly || fb.dead) continue;
         for (const eb of this.bullets) {
-          if (eb.friendly || eb.dead || !eb.volatile) continue;
+          if (eb.friendly || eb.dead || eb.neutralized) continue;
+          if (!eb.volatile && !(eb.hp > 0)) continue;
           const rr = fb.r + eb.r + 2;
           if ((fb.x - eb.x) ** 2 + (fb.y - eb.y) ** 2 < rr * rr) {
-            fb.dead = true;
-            eb.dead = true;
-            this.shellBlast(eb.x, eb.y, eb.dmg);
-            break;
+            if (eb.volatile) {
+              fb.dead = true;
+              eb.dead = true;
+              this.shellBlast(eb.x, eb.y, eb.dmg);
+            } else {
+              if (eb.hitCd > 0) continue;
+              eb.hitCd = 0.08;
+              eb.hp--;
+              eb.hitFlash = 0.12;
+              burst(this, eb.x, eb.y, 4, ['#fff', '#ffd23b'], 150, 3, 0.2);
+              fb.pierce--;
+              if (fb.pierce < 0) fb.dead = true;
+              if (eb.hp <= 0) {
+                eb.dead = true;
+                if (eb.onBreak) eb.onBreak(this, eb);
+                else this.shellBlast(eb.x, eb.y, eb.dmg);
+              }
+            }
+            if (fb.dead) break;
           }
         }
       }
@@ -690,6 +741,10 @@
             b.dead = true;
             this.explodeFireball(b.x, b.y, 12, b.dmg * 0.75, 90);
           } else if (b.kind === 'shell') {
+            b.dead = true;
+            this.shellBlast(b.x, b.y, b.dmg);
+          } else if (b.kind === 'missile' || b.kind === 'float') {
+            // 可击爆弹撞到玩家：直接引爆
             b.dead = true;
             this.shellBlast(b.x, b.y, b.dmg);
           } else {

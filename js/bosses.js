@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  const { Bullet, Lightning, Beam, burst, drawSprite, rand, clamp, Particle } = window.FT;
+  const { Bullet, Lightning, Beam, burst, drawSprite, rand, randi, clamp, Particle } = window.FT;
   const TAU = Math.PI * 2;
 
   class Boss {
@@ -33,7 +33,7 @@
       this.deathCols = ['#fff', '#ffd23b', '#ff7b2e'];
     }
     takeDamage(dmg, g, kb) {
-      if (this.dead || this.state === 'enter') return;   // 入场免伤
+      if (this.dead || this.state === 'enter' || this.lockHp) return;   // 入场免伤；变身期锁血
       this.hp -= dmg;
       this.flash = 0.08;
       if (kb) { this.kbX += kb.x * 0.25; this.kbY += kb.y * 0.25; }
@@ -107,13 +107,15 @@
     }
   }
 
-  /* ================ A2. 雷公巨兽（精英） ================ */
+  /* ================ A2. 雷公巨兽（精英） ================
+   * 三段攻击轮换：纵向三连落雷 / 横向双道闪电 / 对角 X 形斜闪电 */
   class ThunderBehemoth extends Boss {
     constructor(g) {
       super(g, 24, 64);
       this.bossName = '雷公巨兽';
       this.title = '精英强化型';
       this.atkT = 2.2;
+      this.atkMode = 0;
       this.deathCols = ['#2f6fd0', '#ffe066', '#7fe7ff', '#fff'];
     }
     update(dt, g) {
@@ -134,11 +136,26 @@
       this.atkT -= dt;
       if (this.atkT <= 0) {
         this.atkT = rand(2.2, 2.8);
-        const offs = [0, -120, 120];
-        offs.forEach(off => {
-          const lx = clamp(p.x + off, 70, CFG.W - 70);
-          g.lightnings.push(new Lightning(lx, 92, 22 * g.atkScale));
-        });
+        const dmg = Math.round(22 * g.atkScale);
+        const mode = this.atkMode % 3;
+        this.atkMode++;
+        if (mode === 0) {
+          // 纵向三连落雷（玩家位置 + 左右偏移）
+          const offs = [0, -120, 120];
+          offs.forEach(off => {
+            const lx = clamp(p.x + off, 70, CFG.W - 70);
+            g.lightnings.push(Lightning.vertical(lx, 92, dmg));
+          });
+        } else if (mode === 1) {
+          // 横向闪电 ×2：贴玩家上下方扫过，逼走位
+          g.lightnings.push(Lightning.horizontal(clamp(p.y - 95, 90, CFG.GROUND_Y - 60), 70, dmg));
+          g.lightnings.push(Lightning.horizontal(clamp(p.y + 95, 120, CFG.GROUND_Y - 30), 70, dmg));
+        } else {
+          // 对角斜向闪电 ×2：X 形交叉点落在玩家附近
+          const a = rand(0.6, 0.78);
+          g.lightnings.push(Lightning.diagonal(p.x, p.y, a, 76, dmg));
+          g.lightnings.push(Lightning.diagonal(p.x, p.y, -a, 76, dmg));
+        }
         SFX.warn();
       }
     }
@@ -263,6 +280,7 @@
       this.title = '特殊机制型';
       this.hoverX = 680;
       this.featherT = 1.4;
+      this.featherVolley = 0;   // 齐射计数：每 3 次有 1 发稀疏弹
       this.whirlT = 7.0;
       this.rushT = 12.0;
       this.spiralA = 0;
@@ -286,16 +304,27 @@
         this.y = this.baseY + Math.sin(this.t * 3.2) * 60;
         this.x = this.hoverX + Math.sin(this.t * 1.4) * 90;
 
-        // 羽毛扇形射击
+        // 羽毛扇形射击：密度差异化 —— 每 3 次齐射有 1 次稀疏（3 发大间隔），其余 9 发密集
         this.featherT -= dt;
         if (this.featherT <= 0) {
-          this.featherT = rand(1.6, 2.1);
+          this.featherVolley++;
+          const sparse = this.featherVolley % 3 === 0;
+          this.featherT = sparse ? rand(2.1, 2.6) : rand(1.6, 2.1);
           const base = Math.atan2(p.y - this.y, p.x - this.x);
-          for (let i = -4; i <= 4; i++) {
-            const a = base + i * 0.11;
-            g.bullets.push(new Bullet(this.x - 24, this.y,
-              Math.cos(a) * 320, Math.sin(a) * 320,
-              { kind: 'feather', r: 7, dmg: 10 * g.atkScale, life: 6 }));
+          if (sparse) {
+            for (let i = -1; i <= 1; i++) {
+              const a = base + i * 0.5;
+              g.bullets.push(new Bullet(this.x - 24, this.y,
+                Math.cos(a) * 320, Math.sin(a) * 320,
+                { kind: 'feather', r: 7, dmg: 10 * g.atkScale, life: 6 }));
+            }
+          } else {
+            for (let i = -4; i <= 4; i++) {
+              const a = base + i * 0.11;
+              g.bullets.push(new Bullet(this.x - 24, this.y,
+                Math.cos(a) * 320, Math.sin(a) * 320,
+                { kind: 'feather', r: 7, dmg: 10 * g.atkScale, life: 6 }));
+            }
           }
           SFX.enemyShoot();
         }
@@ -417,7 +446,7 @@
           const a = this.rotA + (TAU / n) * i;
           g.bullets.push(new Bullet(this.x, this.y,
             Math.cos(a) * 175, Math.sin(a) * 175,
-            { kind: 'orb', r: 6, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 7, color: '#c9f6ff' }));
+            { kind: 'orb', r: 6, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 7, color: '#ffb02e' }));
         }
         SFX.enemyShoot();
         g.shake(4);
@@ -625,11 +654,11 @@
    * 仅地面移动、巡逻范围小；身体与弹道都会炸毁山石障碍 */
   class GiantPheasant extends Boss {
     constructor(g) {
-      super(g, 26, 52);
+      super(g, 30, 96);
       this.bossName = '巨型野鸡王';
       this.title = '地面突击型';
       this.x = CFG.W + 120;
-      this.y = CFG.GROUND_Y - 44;
+      this.y = CFG.GROUND_Y - 88;
       this.baseY = this.y;
       this.patrolMin = CFG.W * 0.52;
       this.patrolMax = CFG.W - 95;
@@ -654,8 +683,8 @@
         if (this.x < this.patrolMin) { this.x = this.patrolMin; this.dir = 1; }
         if (this.x > this.patrolMax) { this.x = this.patrolMax; this.dir = -1; }
       }
-      this.y = this.baseY + Math.abs(Math.sin(this.t * 7)) * -3;   // 走路颠簸
-      this.y = Math.min(this.y, CFG.GROUND_Y - 40);
+      this.y = this.baseY + Math.abs(Math.sin(this.t * 7)) * -6;   // 走路颠簸
+      this.y = Math.min(this.y, CFG.GROUND_Y - 80);
 
       // 身体撞毁山石
       g.rocks.forEach(r => {
@@ -669,9 +698,9 @@
       if (this.shotT <= 0) {
         this.shotT = rand(1.3, 1.7);
         const a = Math.atan2(p.y - this.y, p.x - this.x);
-        g.bullets.push(new Bullet(this.x - 40, this.y - 8,
+        g.bullets.push(new Bullet(this.x - 80, this.y - 16,
           Math.cos(a) * 500, Math.sin(a) * 500,
-          { kind: 'orb', r: 8, dmg: 15 * g.atkScale, dmgScale: g.atkScale, life: 4, color: '#ffd23b', rockBreak: true }));
+          { kind: 'orb', r: 9, dmg: 15 * g.atkScale, dmgScale: g.atkScale, life: 4, color: '#ffd23b', rockBreak: true }));
         SFX.enemyShoot();
         g.shake(3);
       }
@@ -682,43 +711,488 @@
         const base = Math.atan2(p.y - this.y, p.x - this.x);
         for (let i = -2; i <= 3; i++) {
           const a = base + i * 0.19;
-          g.bullets.push(new Bullet(this.x - 36, this.y - 6,
+          g.bullets.push(new Bullet(this.x - 72, this.y - 12,
             Math.cos(a) * 290, Math.sin(a) * 290,
-            { kind: 'orb', r: 6, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ff9d2e', rockBreak: true }));
+            { kind: 'orb', r: 7, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ff9d2e', rockBreak: true }));
         }
         SFX.enemyShoot();
       }
-      // 尾部喷出追踪导弹
+      // 尾部喷出巨型追踪导弹（体积×3：被子弹击中 3 次爆炸，被旋转剑击中 1 次必爆）
       this.missileT -= dt;
       if (this.missileT <= 0) {
         this.missileT = rand(3.4, 4.4);
-        g.bullets.push(new Bullet(this.x + 44, this.y - 26,
+        const m = new Bullet(this.x + 88, this.y - 52,
           160, -120,
-          { kind: 'missile', r: 6, dmg: 16 * g.atkScale, dmgScale: g.atkScale, life: 5.5, homing: true, turnRate: 2.3, rockBreak: true }));
+          { kind: 'missile', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 6,
+            homing: true, turnRate: 2.3, rockBreak: true, bscale: 3, hp: 3 });
+        m.onBreak = (gg, b) => gg.shellBlast(b.x, b.y, b.dmg);
+        m.onExpire = (gg, b) => gg.shellBlast(b.x, b.y, b.dmg);
+        g.bullets.push(m);
         SFX.dash();
       }
     }
     render(ctx) {
-      const bob = Math.abs(Math.sin(this.t * 7)) * -3;
-      // 尾羽微摆
-      drawSprite(ctx, Sprites.pheasantL, this.x, this.y + bob, 3.4, 3.4, Math.sin(this.t * 3) * 0.05, this.flash);
+      const bob = Math.abs(Math.sin(this.t * 7)) * -6;
+      // 尾羽微摆（体型×2）
+      drawSprite(ctx, Sprites.pheasantL, this.x, this.y + bob, 6.8, 6.8, Math.sin(this.t * 3) * 0.05, this.flash);
       // 冲冠怒气尘土
       if (Math.floor(this.t * 9) % 3 === 0) {
         ctx.fillStyle = 'rgba(140,110,70,0.5)';
-        ctx.fillRect(this.x - this.radius + rand(-6, 6), CFG.GROUND_Y - 6, 6, 5);
+        ctx.fillRect(this.x - this.radius + rand(-6, 6), CFG.GROUND_Y - 6, 10, 8);
       }
     }
   }
 
-  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant };
+  /* ================ D1. 祖国人（特殊机制：3 束激光扫射 / 落地冲刺 / 慢速旋转激光） ================
+   * 激光遇障碍炸碎山石；旋转激光整局最多 3 次，自转速度很慢 */
+  class Homelander extends Boss {
+    constructor(g) {
+      super(g, 28, 80);
+      this.bossName = '祖国人';
+      this.title = '特殊机制型';
+      this.hoverX = 660;
+      this.atkT = 1.8;
+      this.spinUsed = 0;      // 旋转激光使用次数（上限 3）
+      this.rotA = 0;
+      this.spinFire = 0;
+      this.deathCols = ['#e8c34a', '#2f6fd0', '#e0453a', '#fff'];
+    }
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const p = g.player;
+
+      if (this.state === 'enter') {
+        this.x -= 100 * dt;
+        this.y += Math.sin(this.t * 2) * 30 * dt;
+        if (this.x <= this.hoverX) { this.state = 'fight'; this.stateT = 0; }
+        return;
+      }
+
+      if (this.state === 'fight') {
+        // 空中悬停
+        this.baseY += (clamp(p.y - 50, 120, CFG.GROUND_Y - 170) - this.baseY) * dt * 1.4;
+        this.y = this.baseY + Math.sin(this.t * 2.2) * 22;
+        this.x = this.hoverX + Math.sin(this.t * 0.9) * 36;
+        this.atkT -= dt;
+        if (this.atkT <= 0) {
+          const roll = Math.random();
+          if (this.spinUsed < 3 && roll < 0.26) {
+            // 慢速旋转激光（最多 3 次）
+            this.state = 'spin'; this.stateT = 0;
+            this.spinUsed++;
+            this.rotA = Math.atan2(p.y - this.y, p.x - this.x);
+            this.spinFire = 0.25;
+            g.toast(`祖国人开始旋转扫射！（${this.spinUsed}/3）`, 1.8);
+          } else if (roll < 0.60) {
+            // 落地冲刺
+            this.state = 'land'; this.stateT = 0;
+          } else {
+            // 三束扇形激光扫射
+            this.fireBeamSweep(g, p);
+            this.state = 'beam3'; this.stateT = 0;
+          }
+        }
+      }
+      else if (this.state === 'beam3') {
+        this.x = this.hoverX + Math.sin(this.t * 0.9) * 36;
+        if (this.stateT > 2.0) { this.state = 'fight'; this.stateT = 0; this.atkT = rand(1.4, 2.2); }
+      }
+      else if (this.state === 'land') {
+        const gy = CFG.GROUND_Y - 90;
+        this.y += (gy - this.y) * dt * 3.2;
+        this.x += (this.hoverX + 40 - this.x) * dt * 2;
+        if (this.stateT > 0.85) {
+          this.state = 'dash'; this.stateT = 0;
+          const ty = clamp(p.y, CFG.GROUND_Y - 110, CFG.GROUND_Y - 50);
+          const a = Math.atan2(ty - this.y, p.x - this.x);
+          this.dashVx = Math.cos(a) * 680; this.dashVy = Math.sin(a) * 320;
+          SFX.dash(); g.shake(8);
+        }
+      }
+      else if (this.state === 'dash') {
+        // 贴地快速冲刺
+        this.x += this.dashVx * dt; this.y += this.dashVy * dt;
+        this.y = clamp(this.y, CFG.GROUND_Y - 120, CFG.GROUND_Y - 50);
+        g.particles.push(new Particle(this.x + 24, this.y, rand(-80, 0), rand(-50, 20), 0.35, 5, '#ffd23b'));
+        if (this.stateT > 0.95 || this.x < 80) { this.state = 'retreat'; this.stateT = 0; }
+      }
+      else if (this.state === 'retreat') {
+        this.x += (this.hoverX - this.x) * dt * 2.4;
+        this.baseY += (clamp(p.y - 50, 120, CFG.GROUND_Y - 170) - this.baseY) * dt * 2.4;
+        this.y += (this.baseY - this.y) * dt * 2.4;
+        if (this.stateT > 1.1) { this.state = 'fight'; this.stateT = 0; this.atkT = rand(1.6, 2.4); }
+      }
+      else if (this.state === 'spin') {
+        // 空中缓慢自转，周期发射激光
+        this.rotA += dt * 1.25;
+        this.x = this.hoverX + Math.sin(this.t * 0.7) * 30;
+        this.y += Math.sin(this.t * 1.8) * 16 * dt;
+        this.y = clamp(this.y, 140, CFG.GROUND_Y - 190);
+        this.spinFire -= dt;
+        if (this.spinFire <= 0) {
+          this.spinFire = 0.5;
+          g.beams.push(new Beam(this.x, this.y, this.rotA, 1400, 13, Math.round(15 * g.atkScale), 0.65, true));
+          SFX.zap();
+        }
+        if (this.stateT > 5.5) { this.state = 'fight'; this.stateT = 0; this.atkT = rand(1.8, 2.6); }
+      }
+    }
+    fireBeamSweep(g, p) {
+      const base = Math.atan2(p.y - this.y, p.x - this.x);
+      for (let i = -1; i <= 1; i++) {
+        g.beams.push(new Beam(this.x - 24, this.y, base + i * 0.26, 1400, 15, Math.round(17 * g.atkScale), 0.8, true));
+      }
+      SFX.warn(); g.shake(4);
+    }
+    render(ctx) {
+      const ang = this.state === 'spin' ? this.rotA : Math.sin(this.t * 2) * 0.06;
+      drawSprite(ctx, Sprites.homelanderL, this.x, this.y, 6.2, 6.2, ang, this.flash);
+      // 旋转激光蓄力：双眼红光
+      if (this.state === 'spin') {
+        ctx.fillStyle = Math.floor(this.t * 10) % 2 ? '#ff3b3b' : '#ffd23b';
+        ctx.fillRect(this.x - 30, this.y - 14, 8, 5);
+        ctx.fillRect(this.x - 30, this.y + 9, 8, 5);
+      }
+    }
+  }
+
+  /* ================ D2. 大王（两阶段：西装巨人召唤/双手射击/漂浮弹 → 半血碎裂变身巨头） ================ */
+  class BossMan extends Boss {
+    constructor(g) {
+      super(g, 32, 120);
+      this.bossName = '大王';
+      this.title = '特殊机制型';
+      this.hoverX = CFG.W - 190;
+      this.phase = 1;
+      this.lockHp = false;
+      this.actT = 2.4;
+      this.actIdx = 0;
+      this.summoned = false;
+      // 双手（锚点相对身体）
+      this.hands = [
+        { ox: -40, oy: -80, px: 0, py: 0, tx: 0, ty: 0, state: 'idle', t: 0, fireT: 0 },
+        { ox: -40, oy: 80, px: 0, py: 0, tx: 0, ty: 0, state: 'idle', t: 0, fireT: 0 }
+      ];
+      this.ringT = 2.0;
+      this.eyeT = 3.0;
+      this.deathCols = ['#2b2f3a', '#e8eef7', '#ffd23b', '#e0453a'];
+    }
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const p = g.player;
+
+      if (this.state === 'enter') {
+        this.x -= 90 * dt;
+        if (this.x <= this.hoverX) { this.state = 'fight'; this.stateT = 0; }
+        return;
+      }
+
+      // 半血变身（阶段1）：锁血碎裂
+      if (this.phase === 1 && this.state !== 'transform' && this.hp <= this.maxHp * 0.5) {
+        this.state = 'transform'; this.stateT = 0;
+        this.lockHp = true;
+        this.hp = Math.ceil(this.maxHp * 0.5);
+        this.hands.forEach(h => { h.state = 'idle'; h.t = 0; });
+        g.shake(16); g.flashT = 0.4; g.flashColor = '#fff';
+        g.toast('大王的身体碎裂了！', 2.2);
+        burst(g, this.x, this.y, 44, ['#8d96a3', '#2b2f3a', '#fff', '#ffd23b'], 320, 7, 0.9, 150);
+      }
+
+      if (this.state === 'transform') {
+        for (let i = 0; i < 3; i++) {
+          g.particles.push(new Particle(this.x + rand(-80, 80), this.y + rand(-90, 90),
+            rand(-130, 130), rand(-170, 30), 0.7, rand(4, 8),
+            ['#8d96a3', '#2b2f3a', '#ffd23b'][randi(0, 2)]));
+        }
+        this.x += (CFG.W * 0.74 - this.x) * dt;
+        this.y += (CFG.H * 0.44 - this.y) * dt;
+        if (this.stateT > 2.4) {
+          this.phase = 2; this.state = 'fight'; this.stateT = 0;
+          this.lockHp = false;
+          this.ringT = 1.2; this.eyeT = 2.6;
+          g.shake(14);
+          burst(g, this.x, this.y, 34, ['#fff', '#ffd23b', '#e0453a'], 300, 7, 0.8, 150);
+        }
+        return;
+      }
+
+      if (this.phase === 1) {
+        if (this.state === 'fight') {
+          // 屏幕右侧悬停
+          this.baseY += (clamp(p.y - 40, 140, CFG.GROUND_Y - 200) - this.baseY) * dt * 1.2;
+          this.y = this.baseY + Math.sin(this.t * 1.8) * 16;
+          this.x += (this.hoverX - this.x) * dt * 1.6;
+          // 开局召唤 5 个地面类敌人
+          if (!this.summoned) {
+            this.summoned = true;
+            for (let i = 0; i < 5; i++) {
+              setTimeout(() => { if (g.state === 'playing') g.spawnEnemy(i % 2 ? 'archer' : 'cannoneer'); }, 400 + i * 350);
+            }
+            g.toast('大王召唤了部下！', 2);
+          }
+          this.actT -= dt;
+          if (this.actT <= 0) {
+            if (this.actIdx % 2 === 0) {
+              this.launchFloaters(g);
+              this.actT = rand(3.4, 4.2);
+            } else {
+              this.state = 'toCenter'; this.stateT = 0; this.actT = 0;
+            }
+            this.actIdx++;
+          }
+        }
+        else if (this.state === 'toCenter') {
+          // 移动到屏幕中心
+          const cx = CFG.W * 0.52, cy = CFG.H * 0.42;
+          this.x += (cx - this.x) * dt * 2.2;
+          this.y += (cy - this.y) * dt * 2.2;
+          if (this.stateT > 0.9) {
+            this.state = 'handsOut'; this.stateT = 0;
+            this.hands.forEach((h, i) => {
+              h.state = 'out'; h.t = 0; h.fireT = 0.35;
+              h.tx = i === 0 ? CFG.W * 0.16 : CFG.W * 0.92;
+              h.ty = clamp(this.y + (i === 0 ? -100 : 100), 120, CFG.GROUND_Y - 80);
+            });
+          }
+        }
+        else if (this.state === 'handsOut') {
+          this.stepHands(dt, g);
+          if (this.stateT > 2.6) { this.state = 'handsBack'; this.stateT = 0; this.hands.forEach(h => h.t = 0); }
+        }
+        else if (this.state === 'handsBack') {
+          this.stepHands(dt, g);
+          // 射击后回到屏幕右侧
+          this.x += (this.hoverX - this.x) * dt * 2.4;
+          this.baseY += (clamp(p.y - 40, 140, CFG.GROUND_Y - 200) - this.baseY) * dt * 2;
+          this.y += (this.baseY - this.y) * dt * 2;
+          if (this.stateT > 1.0) {
+            this.state = 'fight'; this.stateT = 0; this.actT = rand(2.4, 3.2);
+            this.hands.forEach(h => { h.state = 'idle'; h.t = 0; });
+          }
+        }
+      } else {
+        // 阶段2：巨头在屏幕靠右中心区域漂浮
+        const cx = CFG.W * 0.74, cy = CFG.H * 0.44;
+        this.x += (cx - this.x) * dt * 1.4;
+        this.y = cy + Math.sin(this.t * 1.4) * 26;
+        // 环形弹幕
+        this.ringT -= dt;
+        if (this.ringT <= 0) {
+          this.ringT = rand(2.4, 3.0);
+          const n = 16;
+          for (let i = 0; i < n; i++) {
+            const a = this.t * 0.8 + (TAU / n) * i;
+            g.bullets.push(new Bullet(this.x, this.y,
+              Math.cos(a) * 175, Math.sin(a) * 175,
+              { kind: 'orb', r: 7, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 7, color: '#ff5252' }));
+          }
+          SFX.enemyShoot(); g.shake(3);
+        }
+        // 眼珠伸长攻击：两条激光
+        this.eyeT -= dt;
+        if (this.eyeT <= 0) {
+          this.eyeT = rand(3.2, 4.0);
+          const base = Math.atan2(p.y - this.y, p.x - this.x);
+          g.beams.push(new Beam(this.x - 70, this.y - 22, base - 0.12, 1300, 16, Math.round(18 * g.atkScale), 0.85));
+          g.beams.push(new Beam(this.x - 70, this.y + 22, base + 0.12, 1300, 16, Math.round(18 * g.atkScale), 0.85));
+          SFX.warn();
+        }
+      }
+    }
+    /** 双手飞出/收回：就位后向左右连射弹幕 */
+    stepHands(dt, g) {
+      this.hands.forEach((h, i) => {
+        if (h.state === 'idle') return;
+        h.t += dt;
+        const ax = this.x + h.ox, ay = this.y + h.oy;
+        const out = h.state === 'out';
+        const k = out ? Math.min(1, h.t / 0.4) : Math.max(0, 1 - h.t / 0.4);
+        h.px = ax + (h.tx - ax) * k;
+        h.py = ay + (h.ty - ay) * k;
+        if (out && k >= 1) {
+          h.fireT -= dt;
+          if (h.fireT <= 0) {
+            h.fireT = 0.45;
+            const dir = i === 0 ? Math.PI : 0;   // 左手向左、右手向右
+            for (let s = -1; s <= 1; s++) {
+              g.bullets.push(new Bullet(h.px, h.py,
+                Math.cos(dir + s * 0.18) * 300, Math.sin(dir + s * 0.18) * 300,
+                { kind: 'orb', r: 8, dmg: 14 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ffd23b' }));
+            }
+            SFX.enemyShoot();
+          }
+        }
+      });
+    }
+    /** 五颗巨大漂浮弹：缓慢追踪玩家，被击中 6 次爆炸 */
+    launchFloaters(g) {
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + (i - 2) * 0.5;
+        const b = new Bullet(this.x - 50, this.y - 30,
+          Math.cos(a) * 60, Math.sin(a) * 60,
+          { kind: 'float', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 9,
+            hp: 6, homing: true, turnRate: 0.55 });
+        b.onBreak = (gg, bb) => gg.shellBlast(bb.x, bb.y, bb.dmg);
+        b.onExpire = (gg, bb) => gg.shellBlast(bb.x, bb.y, bb.dmg);
+        g.bullets.push(b);
+      }
+      SFX.warn();
+    }
+    render(ctx) {
+      if (this.phase === 2) {
+        // 变身后巨头（占据近半屏）
+        const pulse = 1 + Math.sin(this.t * 4) * 0.02;
+        drawSprite(ctx, Sprites.bossHeadL, this.x, this.y, 13 * pulse, 13 * pulse, Math.sin(this.t * 1.4) * 0.05, this.flash);
+        return;
+      }
+      if (this.state !== 'transform') {
+        // 西装身体（占据近半屏）
+        drawSprite(ctx, Sprites.bossManL, this.x, this.y, 9.0, 9.0, Math.sin(this.t * 1.6) * 0.03, this.flash);
+        // 双手：袖管 + 拳头
+        this.hands.forEach(h => {
+          if (h.state === 'idle') return;
+          const ax = this.x + h.ox, ay = this.y + h.oy;
+          ctx.strokeStyle = '#1c1f27'; ctx.lineWidth = 20; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(h.px, h.py); ctx.stroke();
+          ctx.fillStyle = '#101018'; ctx.fillRect(h.px - 14, h.py - 14, 28, 28);
+          ctx.fillStyle = '#e8eef7'; ctx.fillRect(h.px - 11, h.py - 11, 22, 22);
+          ctx.fillStyle = '#1c1f27'; ctx.fillRect(h.px - 11, h.py - 11, 22, 5);
+        });
+      } else {
+        // 碎裂中：身体闪烁崩坏
+        drawSprite(ctx, Sprites.bossManL, this.x, this.y, 9.0, 9.0, 0, Math.floor(this.t * 14) % 2 ? 0.6 : this.flash);
+      }
+    }
+  }
+
+  /* ================ D3. 怪客（跳动光头巨汉：S 型冲刺 / 顶端飞刀散射 / 巨型十字弹 / 召唤雷公） ================ */
+  class Stranger extends Boss {
+    constructor(g) {
+      super(g, 30, 100);
+      this.bossName = '怪客';
+      this.title = '特殊机制型';
+      this.hoverX = CFG.W - 170;
+      this.actT = 1.8;
+      this.actIdx = 0;
+      this.knifeFireT = 0;
+      this.sy = 0;
+      this.deathCols = ['#d9b38c', '#8d96a3', '#e0453a', '#ffd23b'];
+    }
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const p = g.player;
+
+      if (this.state === 'enter') {
+        this.x -= 100 * dt;
+        if (this.x <= this.hoverX) { this.state = 'fight'; this.stateT = 0; }
+        return;
+      }
+
+      if (this.state === 'fight') {
+        this.baseY += (clamp(p.y - 30, 140, CFG.GROUND_Y - 190) - this.baseY) * dt * 1.4;
+        this.y = this.baseY;
+        this.x += (this.hoverX - this.x) * dt * 1.6;
+        this.actT -= dt;
+        if (this.actT <= 0) {
+          const act = this.actIdx % 4;
+          this.actIdx++;
+          if (act === 0) {
+            // S 型高速冲刺
+            this.state = 'sdash'; this.stateT = 0;
+            this.sy = this.y;
+            SFX.dash(); g.shake(6);
+          } else if (act === 1) {
+            this.state = 'toTop'; this.stateT = 0;
+          } else if (act === 2) {
+            this.state = 'cross'; this.stateT = 0;
+          } else {
+            // 召唤 3 只雷公小怪
+            for (let i = 0; i < 3; i++) {
+              setTimeout(() => { if (g.state === 'playing') g.spawnEnemy('leigong'); }, 300 + i * 320);
+            }
+            g.toast('怪客召唤了雷公小怪！', 2);
+            this.actT = rand(2.8, 3.6);
+          }
+        }
+      }
+      else if (this.state === 'sdash') {
+        // S 型路线：x 高速左冲，y 正弦摆动
+        this.x -= 640 * dt;
+        this.y = clamp(this.sy + Math.sin(this.stateT * 9) * 130, 100, CFG.GROUND_Y - 100);
+        g.particles.push(new Particle(this.x + 30, this.y, rand(-90, 0), rand(-50, 50), 0.3, 6, '#ffd23b'));
+        if (this.stateT > 1.7 || this.x < 110) { this.state = 'back'; this.stateT = 0; }
+      }
+      else if (this.state === 'toTop') {
+        // 移动到屏幕顶端
+        const tx = CFG.W * 0.5, ty = 120;
+        this.x += (tx - this.x) * dt * 2.4;
+        this.y += (ty - this.y) * dt * 2.4;
+        if (this.stateT > 0.8) { this.state = 'knives'; this.stateT = 0; this.knifeFireT = 0.25; }
+      }
+      else if (this.state === 'knives') {
+        // 顶端向下散射飞刀
+        this.x = CFG.W * 0.5 + Math.sin(this.t * 1.2) * 70;
+        this.y = 120;
+        this.knifeFireT -= dt;
+        if (this.knifeFireT <= 0) {
+          this.knifeFireT = 0.22;
+          for (let i = -2; i <= 2; i++) {
+            const a = Math.PI / 2 + i * 0.2;
+            g.bullets.push(new Bullet(this.x, this.y + 50,
+              Math.cos(a) * 330, Math.sin(a) * 330,
+              { kind: 'knife', r: 8, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5 }));
+          }
+          SFX.enemyShoot();
+        }
+        if (this.stateT > 2.6) { this.state = 'back'; this.stateT = 0; }
+      }
+      else if (this.state === 'cross') {
+        // 回到屏幕右侧
+        this.x += (this.hoverX - this.x) * dt * 2.6;
+        this.baseY += (clamp(p.y - 30, 140, CFG.GROUND_Y - 190) - this.baseY) * dt * 2;
+        this.y += (this.baseY - this.y) * dt * 2;
+        if (this.stateT > 0.9) {
+          this.state = 'back'; this.stateT = 0;
+          // 向左发射巨大十字型子弹
+          const a = Math.atan2(p.y - this.y, p.x - this.x);
+          g.bullets.push(new Bullet(this.x - 60, this.y,
+            Math.cos(a) * 210, Math.sin(a) * 210,
+            { kind: 'cross', r: 26, dmg: 22 * g.atkScale, dmgScale: g.atkScale, life: 6 }));
+          SFX.dash(); g.shake(6);
+        }
+      }
+      else if (this.state === 'back') {
+        this.x += (this.hoverX - this.x) * dt * 2.2;
+        this.baseY += (clamp(p.y - 30, 140, CFG.GROUND_Y - 190) - this.baseY) * dt * 2.2;
+        this.y += (this.baseY - this.y) * dt * 2.2;
+        if (this.stateT > 1.0) { this.state = 'fight'; this.stateT = 0; this.actT = rand(1.8, 2.6); }
+      }
+    }
+    render(ctx) {
+      // 持续跳动
+      const bob = Math.abs(Math.sin(this.t * 5)) * -12;
+      drawSprite(ctx, Sprites.strangerL, this.x, this.y + bob, 8.5, 8.5, Math.sin(this.t * 3) * 0.04, this.flash);
+    }
+  }
+
+  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger };
   /** minOrd：按 Boss 出场序号解锁（1=首只）；chance：即使解锁也只有该概率进入候选池 */
   window.BOSS_LIST = [
-    { cls: PigKing, weight: 3, minOrd: 1 },
-    { cls: ThunderBehemoth, weight: 3, minOrd: 2 },
-    { cls: Samurai, weight: 3, minOrd: 2 },
-    { cls: SwordEagle, weight: 3, minOrd: 3 },
-    { cls: SkullKing, weight: 3, minOrd: 1, chance: 0.3 },        // 第 1 轮起 30% 概率出现
-    { cls: DogKing, weight: 3, minOrd: 1, chance: 0.3 },          // 第 1 轮起 30% 概率出现
-    { cls: GiantPheasant, weight: 3, minOrd: 2 }
+    { cls: PigKing, weight: 3, minOrd: 1, music: 'boss' },
+    { cls: ThunderBehemoth, weight: 3, minOrd: 2, music: 'boss' },
+    { cls: Samurai, weight: 3, minOrd: 2, music: 'boss' },
+    { cls: SwordEagle, weight: 3, minOrd: 3, music: 'eagle' },        // 咬剑鹰：广州鼓点+鹰叫
+    { cls: SkullKing, weight: 3, minOrd: 1, chance: 0.3, music: 'boss' },   // 第 1 轮起 30% 概率出现
+    { cls: DogKing, weight: 3, minOrd: 1, chance: 0.3, music: 'boss' },     // 第 1 轮起 30% 概率出现
+    { cls: GiantPheasant, weight: 3, minOrd: 2, music: 'pheasant' },       // 野鸡王：鸡叫融合电音
+    { cls: Homelander, weight: 3, minOrd: 2, chance: 0.3, music: 'hero' },  // 祖国人：军乐+电磁声
+    { cls: BossMan, weight: 3, minOrd: 1, maxOrd: 3, music: 'boss' },      // 大王：仅 1-3 轮
+    { cls: Stranger, weight: 3, minOrd: 1, maxOrd: 3, music: 'boss' }      // 怪客：仅 1-3 轮
   ];
 })();
