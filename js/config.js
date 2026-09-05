@@ -146,7 +146,7 @@
         id: 'way', icon: '※', cls: 'c-way', name: '弹道强化',
         desc: '子弹数量 +1，形成散射 / 多方向弹幕（上限 20 发）',
         can(p) { return p.bulletCount < 20; },
-        apply(p) { p.bulletCount = Math.min(20, p.bulletCount + 1); p.wayLv++; },
+        apply(p) { p.bulletCount++; p.wayLv++; },
         level(p) { return p.wayLv; }
       },
       {
@@ -283,44 +283,56 @@
         apply(p) { p.lives++; },
         level(p) { return p.lives; }
       },
-      /* —— 元素弹道（击败 Boss 后解锁，各最多 3 条） —— */
-      // 首次必定出现（guaranteed），拥有后降低出现概率（10%）
-      // 某种弹道达到 3 条时，该成长项不再出现
+      /* —— 元素弹道（击败 Boss 后解锁，总最多 3 条，FIFO 替换最早获得的） —— */
+      // 选新弹道时如果已有 3 条，移除最早获得的那条（队首），新弹道加入队尾
+      // 某种弹道已有 3 条（即队列全是它）时，该成长项不再出现
       {
         id: 'flame', icon: '🔥', cls: 'c-atk', name: '火焰弹道',
-        desc: '额外增加一条火焰弹道（最多 3 条）。命中后 3s 持续伤害，1s 破解敌人无敌',
+        desc: '额外增加一条火焰弹道。命中后 3s 持续伤害，1s 破解敌人无敌。满 3 条时替换最早弹道',
         can(p, g) {
-          if (p.flameWay >= 3) return false;
-          if (p.flameWay === 0) return true;
+          const cnt = p.elementWay.filter(x => x === 'flame').length;
+          if (cnt >= 3) return false;       // 队列全是火焰，不再出现
+          if (cnt === 0) return true;
           return Math.random() < 0.10;
         },
-        apply(p) { p.flameWay++; },
-        level(p) { return p.flameWay; },
-        guaranteed(p, g) { return g.bossCount >= 1 && p.flameWay === 0; }
+        apply(p) {
+          if (p.elementWay.length >= 3) p.elementWay.shift();  // 满三条时销毁最早获得的一条
+          p.elementWay.push('flame');
+        },
+        level(p) { return p.elementWay.filter(x => x === 'flame').length; },
+        guaranteed(p, g) { return g.bossCount >= 1 && p.elementWay.indexOf('flame') < 0; }
       },
       {
         id: 'poison', icon: '☠', cls: 'c-atk', name: '毒液弹道',
-        desc: '额外增加一条毒液弹道（最多 3 条）。命中后 6s 持续伤害，3s 破解敌人无敌',
+        desc: '额外增加一条毒液弹道。命中后 6s 持续伤害，3s 破解敌人无敌。满 3 条时替换最早弹道',
         can(p, g) {
-          if (p.poisonWay >= 3) return false;
-          if (p.poisonWay === 0) return true;
+          const cnt = p.elementWay.filter(x => x === 'poison').length;
+          if (cnt >= 3) return false;
+          if (cnt === 0) return true;
           return Math.random() < 0.10;
         },
-        apply(p) { p.poisonWay++; },
-        level(p) { return p.poisonWay; },
-        guaranteed(p, g) { return g.round >= 2 && p.poisonWay === 0; }
+        apply(p) {
+          if (p.elementWay.length >= 3) p.elementWay.shift();
+          p.elementWay.push('poison');
+        },
+        level(p) { return p.elementWay.filter(x => x === 'poison').length; },
+        guaranteed(p, g) { return g.round >= 2 && p.elementWay.indexOf('poison') < 0; }
       },
       {
         id: 'ice', icon: '❄', cls: 'c-spd', name: '寒冰弹道',
-        desc: '额外增加一条寒冰弹道（最多 3 条）。命中后 2s 持续伤害，冻结敌人 4s',
+        desc: '额外增加一条寒冰弹道。命中后 2s 持续伤害，冻结敌人 4s。满 3 条时替换最早弹道',
         can(p, g) {
-          if (p.iceWay >= 3) return false;
-          if (p.iceWay === 0) return true;
+          const cnt = p.elementWay.filter(x => x === 'ice').length;
+          if (cnt >= 3) return false;
+          if (cnt === 0) return true;
           return Math.random() < 0.10;
         },
-        apply(p) { p.iceWay++; },
-        level(p) { return p.iceWay; },
-        guaranteed(p, g) { return g.round >= 4 && p.iceWay === 0; }
+        apply(p) {
+          if (p.elementWay.length >= 3) p.elementWay.shift();
+          p.elementWay.push('ice');
+        },
+        level(p) { return p.elementWay.filter(x => x === 'ice').length; },
+        guaranteed(p, g) { return g.round >= 4 && p.elementWay.indexOf('ice') < 0; }
       }
     ],
 

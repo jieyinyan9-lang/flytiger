@@ -731,10 +731,8 @@
       // 额外弹道解锁
       this.tailWay = false;   // 尾部向后弹道
       this.downWay = false;   // 下部向下弹道
-      // 元素弹道（击败 Boss 后解锁，各最多 3 条）
-      this.flameWay = 0;      // 火焰弹道数量
-      this.poisonWay = 0;     // 毒液弹道数量
-      this.iceWay = 0;        // 寒冰弹道数量
+      // 元素弹道（击败 Boss 后解锁，总最多 3 条，FIFO 替换最早获得的）
+      this.elementWay = [];     // ['flame', 'poison', 'ice', ...] 顺序代表获得先后
       // 闪电子弹（闪电链）
       this.chainJumps = 0;    // 链接敌人数量（0=未解锁）
       this.chainDmgLv = 0;    // 闪电伤害强化等级
@@ -1039,32 +1037,19 @@
             }));
         });
       }
-      // 元素弹道：火焰（向上偏角发射，每条独立角度）
-      for (let w = 0; w < this.flameWay; w++) {
-        const off = (this.flameWay === 1 ? 0 : (w - (this.flameWay - 1) / 2) * 0.28);
+      // 元素弹道：遍历 elementWay 队列，按获得顺序发射（总最多 3 条）
+      const elemCount = this.elementWay.length;
+      for (let w = 0; w < elemCount; w++) {
+        const off = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 0.28);
+        const el = this.elementWay[w];
+        let vy = 0, vx = Math.cos(off) * speed * 0.88;
+        if (el === 'flame') vy = Math.sin(off) * speed * 0.85 - 60;
+        else if (el === 'poison') vy = Math.sin(off) * speed * 0.85 + 60;
+        else vy = Math.sin(off) * speed * 0.88;
         g.bullets.push(new Bullet(
-          muzzleX, muzzleY,
-          Math.cos(off) * speed * 0.85, Math.sin(off) * speed * 0.85 - 60,
+          muzzleX, muzzleY, vx, vy,
           { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
-            pierce: 0, element: 'flame', life: 4 }));
-      }
-      // 元素弹道：毒液（向下偏角发射）
-      for (let w = 0; w < this.poisonWay; w++) {
-        const off = (this.poisonWay === 1 ? 0 : (w - (this.poisonWay - 1) / 2) * 0.28);
-        g.bullets.push(new Bullet(
-          muzzleX, muzzleY,
-          Math.cos(off) * speed * 0.85, Math.sin(off) * speed * 0.85 + 60,
-          { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
-            pierce: 0, element: 'poison', life: 4 }));
-      }
-      // 元素弹道：寒冰（水平发射，略带角度）
-      for (let w = 0; w < this.iceWay; w++) {
-        const off = (this.iceWay === 1 ? 0 : (w - (this.iceWay - 1) / 2) * 0.28);
-        g.bullets.push(new Bullet(
-          muzzleX, muzzleY,
-          Math.cos(off) * speed * 0.9, Math.sin(off) * speed * 0.9,
-          { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
-            pierce: 0, element: 'ice', life: 4 }));
+            pierce: 0, element: el, life: 4 }));
       }
       SFX.shoot();
     }
