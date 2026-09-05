@@ -1522,14 +1522,24 @@
         this.y += Math.sin(this.t * 30) * 30 * dt;
         if (this.stateT > 0.4) {
           this.state = 'dive'; this.stateT = 0;
+          this.diveFar = Math.random() < 0.5;   // 50% 概率一直冲到屏幕最左边
           const a = Math.atan2(this.lockY - this.y, this.lockX - this.x);
-          this.diveVx = Math.cos(a) * 420 * this.speedMul;
-          this.diveVy = Math.sin(a) * 420 * this.speedMul;
+          const spd = (this.diveFar ? 500 : 420) * this.speedMul;
+          this.diveVx = Math.cos(a) * spd;
+          this.diveVy = Math.sin(a) * spd;
+          if (this.diveFar) this.diveVx = -spd;  // 长冲固定全速朝左扫场（避免近垂直角时水平速度归零）
         }
       } else if (this.state === 'dive') {
         this.x += this.diveVx * dt; this.y += this.diveVy * dt;
-        this.diveVy += 500 * dt;   // 俯冲下坠
-        if (this.stateT > 1.1 || this.y > CFG.GROUND_Y - 20) { this.state = 'recover'; this.stateT = 0; }
+        if (this.diveFar) {
+          // 超长冲锋：前0.45s保留俯冲下坠，之后拉平机身水平扫场，直到飞出屏幕左缘（由飞离清理移除）
+          if (this.stateT < 0.45) this.diveVy += 500 * dt;
+          else this.diveVy *= Math.pow(0.05, dt);
+          if (this.y > CFG.GROUND_Y - 46) { this.y = CFG.GROUND_Y - 46; this.diveVy = Math.min(this.diveVy, 0); }
+        } else {
+          this.diveVy += 500 * dt;   // 俯冲下坠（冲刺距离加长：1.1s → 1.6s）
+          if (this.stateT > 1.6 || this.y > CFG.GROUND_Y - 20) { this.state = 'recover'; this.stateT = 0; }
+        }
       } else if (this.state === 'recover') {
         this.x += 180 * dt; this.y -= 150 * dt;
         if (this.x > CFG.W - 140 || this.stateT > 1.6) { this.state = 'hover'; this.stateT = 0; this.baseY = clamp(this.y, 80, CFG.GROUND_Y - 100); }
