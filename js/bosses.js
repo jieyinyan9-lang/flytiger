@@ -755,7 +755,7 @@
           const t = (i / (N - 1)) - 0.5;   // -0.5 ~ 0.5
           const a = baseA + t * 1.1;        // 扇形张角约 63°
           const weight = 1 - Math.abs(t) * 1.4;  // 中间粗（1.0）两端细（0.3）
-          const sp = rand(260, 420) * (0.6 + weight * 0.5);
+          const sp = rand(650, 1050) * (0.6 + weight * 0.5);
           const px = mouthX + Math.cos(a) * rand(0, 20);
           const py = mouthY + Math.sin(a) * rand(0, 20);
           const colors = ['#ff2a0a', '#ff5a1a', '#ff9d2e', '#ffd23b', '#fff5d0'];
@@ -763,12 +763,12 @@
           const pr = rand(5, 12) * (0.5 + weight * 0.6);
           g.particles.push(new Particle(px, py,
             Math.cos(a) * sp, Math.sin(a) * sp,
-            rand(0.3, 0.6), pr, col));
+            rand(0.5, 0.85), pr, col));
         }
-        // 喷火伤害判定：弧形区域内对玩家造成伤害
+        // 喷火伤害判定：弧形区域内对玩家造成伤害（覆盖至屏幕最左侧）
         const dx = p.x - mouthX, dy = p.y - mouthY;
         const dist = Math.hypot(dx, dy);
-        if (dist < 320) {
+        if (dist < mouthX) {
           const ang = Math.atan2(dy, dx);
           let da = ang - baseA;
           while (da > Math.PI) da -= TAU;

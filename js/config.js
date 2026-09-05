@@ -70,7 +70,7 @@
       hitR: 30,            // 刀刃碰撞半径
       blockR: 24,          // 挡弹判定半径
       blockChance: 0.5,    // 格挡概率
-      maxBlades: 10,       // 光剑数量上限
+      maxBlades: 4,        // 光剑数量上限
       maxLenLv: 2,         // 剑刃延展等级上限（2 级 = 3 倍长度）
       baseDmg: 26,         // 基础接触伤害
       dmgPerLv: 14         // 每级"刀刃强化"提升伤害
@@ -229,7 +229,7 @@
       },
       {
         id: 'bladeN', icon: '‡', cls: 'c-spd', name: '刀刃环绕',
-        desc: '环绕光剑数量 +1（最高 10 把），格挡与杀伤范围全面覆盖',
+        desc: '环绕光剑数量 +1（最高 4 把），格挡与杀伤范围全面覆盖',
         can(p, g) { return g && g.round >= 4 && p.blades >= 1 && p.blades < CFG.blade.maxBlades; },
         apply(p) { p.blades++; },
         level(p) { return p.blades; }

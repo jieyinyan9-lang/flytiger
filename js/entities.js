@@ -227,6 +227,15 @@
         this.orbit = null;
       }
       if (this.grav) { this.vy += this.grav * dt; }
+      // S 形弹道：飞行方向绕基准角正弦摆动（飞刀线性 S 走向）
+      if (this.sineWave && !this.neutralized) {
+        const s = this.sineWave;
+        if (!s.inited) { s.inited = true; s.baseA = Math.atan2(this.vy, this.vx); }
+        const spd = Math.hypot(this.vx, this.vy);
+        const a = s.baseA + Math.sin(this.t * s.freq + s.phase) * s.amp;
+        this.vx = Math.cos(a) * spd; this.vy = Math.sin(a) * spd;
+        this.angle = a;
+      }
       // 追踪导弹 / 漂浮弹：按转向速率缓慢修正朝向玩家
       if (this.homing && !this.neutralized) {
         const p = g.player;
@@ -517,6 +526,33 @@
         ctx.fillRect(-24, -3, 44, 2);
         ctx.fillStyle = '#c0392b';
         ctx.fillRect(16, -6, 6, 12);
+        ctx.restore();
+        return;
+      }
+      if (k === 'wave') {
+        // 鹤鸣声波：淡青脉动光球，黑边在亮天空下醒目
+        const f = 1 + Math.sin(this.t * 12) * 0.18;
+        const r = this.r * f;
+        ctx.fillStyle = '#101820';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r + 1.6, 0, TAU); ctx.fill();
+        ctx.fillStyle = this.color || '#bfe9ff';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.beginPath(); ctx.arc(this.x - r * 0.28, this.y - r * 0.28, r * 0.32, 0, TAU); ctx.fill();
+        return;
+      }
+      if (k === 'blackKnife') {
+        // 大型蝙蝠黑色飞刀：黑刃 + 灰刃高光 + 红尾坠
+        const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        ctx.fillStyle = '#0a0a10';
+        ctx.fillRect(-12, -2.5, 20, 5);
+        ctx.fillStyle = '#454c5c';
+        ctx.fillRect(-11, -1, 15, 2);
+        ctx.fillStyle = '#0a0a10';
+        ctx.fillRect(6, -4, 4, 8);
+        ctx.fillStyle = '#ff3b3b';
+        ctx.fillRect(9, -1.5, 3, 3);
         ctx.restore();
         return;
       }
@@ -1269,6 +1305,13 @@
       if (type === 'eagle') this.spawnInvuln = 3;
       // 小超人：出场 7s 无敌
       if (type === 'superboy') this.spawnInvuln = 7;
+      // 大型蝙蝠：飞行精英，悬停甩黑色飞刀（S 形弹/散射）
+      if (type === 'bigbat') {
+        this.state = 'hover';
+        this.atkT = rand(1.4, 2.2);
+        this.volley = 0;
+        this.spawnInvuln = 2;
+      }
     }
 
     /** 自爆骷髅：接触玩家引爆（无能量掉落，纯爆炸伤害） */
@@ -1327,7 +1370,8 @@
         skeleton: ['#e8eef7', '#9aa7bb', '#e0453a', '#ffd23b'],
         skull: ['#e8eef7', '#9aa7bb', '#7fe7ff', '#ff3b5c'],
         cannoneer: ['#5a6678', '#2c3545', '#ffd23b', '#fff'],
-        superboy: ['#2f6fd0', '#e0453a', '#ffd23b', '#fff']
+        superboy: ['#2f6fd0', '#e0453a', '#ffd23b', '#fff'],
+        bigbat: ['#4a3566', '#2b1f3d', '#ff5d73', '#fff']
       }[this.type] || ['#fff', '#aaa'];
     }
 
@@ -1550,28 +1594,28 @@
       }
     }
 
-    /* 炮师：地面推进 → 停点抛射炮弹（3-4 次）→ 向左撤离 */
+    /* 炮师：持续奔跑入场 → 停点快速连射炮弹（3-4 次）→ 向左疾奔撤离 */
     aiCannoneer(dt, g, p) {
       this.y = CFG.GROUND_Y - 34;   // 始终踩在地面（体积×2 后中心上移）
       this.kbY = 0;
       if (this.state === 'walk') {
-        this.x -= 55 * this.speedMul * dt;
+        this.x -= 128 * this.speedMul * dt;
         this.archT -= dt;
-        if (this.archT <= 0) { this.state = 'stop'; this.archT = rand(1.6, 2.2); this.atkT = 0.2; }
+        if (this.archT <= 0) { this.state = 'stop'; this.archT = rand(1.2, 1.6); this.atkT = 0.15; }
       } else if (this.state === 'stop') {
         this.archT -= dt;
         this.atkT -= dt;
         if (this.atkT <= 0) {
-          this.atkT = 1.1;
+          this.atkT = 0.5;          // 快速射击
           this.fireShell(g, p);
         }
         if (this.archT <= 0) {
           this.stops++;
           if (this.stops >= this.stopsTotal) this.state = 'run';
-          else { this.state = 'walk'; this.archT = rand(2.0, 3.0); }
+          else { this.state = 'walk'; this.archT = rand(1.4, 2.2); }
         }
       } else if (this.state === 'run') {
-        this.x -= 160 * this.speedMul * dt;
+        this.x -= 285 * this.speedMul * dt;
       }
     }
 
@@ -1654,6 +1698,44 @@
       }
     }
 
+    /* 大型蝙蝠：保持中距悬停，交替甩出 S 形黑色飞刀（单发）/ 散射飞刀群（5 发小幅 S 走向） */
+    aiBigBat(dt, g, p) {
+      const sp = 105 * this.speedMul;
+      const wantX = p.x + 330;
+      if (this.state === 'enter') {
+        this.x -= sp * dt;
+        if (this.x < CFG.W - 130) { this.state = 'hover'; this.stateT = 0; this.baseY = this.y; }
+        return;
+      }
+      if (this.x > wantX + 40) this.x -= sp * dt;
+      else if (this.x < wantX - 60) this.x += sp * 0.5 * dt;
+      this.baseY += (clamp(p.y - 30, CFG.TOP_Y + 60, CFG.GROUND_Y - 150) - this.baseY) * dt * 1.1;
+      this.y = this.baseY + Math.sin(this.t * 2.4) * 34;
+      this.atkT -= dt;
+      if (this.atkT <= 0 && this.x < CFG.W - 30) {
+        this.volley++;
+        const base = Math.atan2(p.y - this.y, p.x - this.x);
+        const dmg = this.bulletDmg * g.atkScale;
+        if (this.volley % 2 === 1) {
+          // 单发：大幅 S 形黑色飞刀
+          const spd = 330;
+          const b = new Bullet(this.x - 18, this.y, Math.cos(base) * spd, Math.sin(base) * spd,
+            { kind: 'blackKnife', r: 8, dmg, life: 6, sine: { amp: 0.55, freq: 7, phase: 0 } });
+          g.bullets.push(b);
+          this.atkT = rand(1.6, 2.2);
+        } else {
+          // 散射：5 把飞刀，各带小幅 S 摆尾与错相
+          for (let i = -2; i <= 2; i++) {
+            const a = base + i * 0.2;
+            g.bullets.push(new Bullet(this.x - 18, this.y, Math.cos(a) * 300, Math.sin(a) * 300,
+              { kind: 'blackKnife', r: 8, dmg, life: 6, sine: { amp: 0.3, freq: 9, phase: i * 1.1 } }));
+          }
+          this.atkT = rand(2.1, 2.9);
+        }
+        SFX.enemyShoot();
+      }
+    }
+
     /** 抛射箭矢：弹道解算 */
     shootArrow(g, p) {
       const dx = p.x - (this.x - 16);
@@ -1726,7 +1808,13 @@
         case 'skeleton': {
           // 黑色骷髅头模型，体积变大（scale 2.0→3.2）
           const pulse = this.state === 'chase' ? 1 + Math.sin(t * 16) * 0.08 : 1;
-          drawSprite(ctx, Sprites.blackSkelL, this.x, this.y + 3, 3.2 * pulse, 3.2 * pulse, 0, this.flash);
+          const tremble = this.state === 'windup' ? Math.sin(t * 42) * 3 : 0;
+          drawSprite(ctx, Sprites.blackSkelL, this.x + tremble, this.y + 3, 3.2 * pulse, 3.2 * pulse, 0, this.flash);
+          break;
+        }
+        case 'bigbat': {
+          const spr = Math.floor(t * 9) % 2 === 0 ? Sprites.bigbatA : Sprites.bigbatB;
+          drawSprite(ctx, spr, this.x, this.y + Math.sin(t * 3) * 4, 3.4, 3.4, Math.sin(t * 1.8) * 0.06, this.flash);
           break;
         }
       }
