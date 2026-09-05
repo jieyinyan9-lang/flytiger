@@ -1797,6 +1797,6 @@
     { cls: BossMan, weight: 3, minOrd: 1, maxOrd: 3, forceChance: { 1: 0.6, 2: 0.4, 3: 0.4 }, music: 'imperial' },  // 大王：首轮 60% 直接出场，帝王军乐
     { cls: Stranger, weight: 3, minOrd: 1, maxOrd: 3, music: 'boss' },      // 怪客：仅 1-3 轮
     { cls: FrogKing, weight: 3, minOrd: 3, music: 'boss' },                 // 蛙哥：地面巨兽，第 3 轮起
-    { cls: CraneSage, weight: 3, minOrd: 4, music: 'boss' }                 // 鹤仙：五技特殊型，第 4 轮起
+    { cls: CraneSage, weight: 3, minOrd: 4, music: 'crane' }                 // 鹤仙：五技特殊型，第 4 轮起
   ];
 })();

@@ -141,7 +141,7 @@
 
     /* ---------------- 背景音乐场景路由 ----------------
      * casual 日常休闲（菜单/局外 + 打小怪） / tide 怪物潮 / boss 通用Boss
-     * pheasant 巨型野鸡王 / eagle 咬剑鹰 / hero 祖国人 */
+     * pheasant 巨型野鸡王 / eagle 咬剑鹰 / hero 祖国人 / imperial 大王 / crane 鹤仙 */
     musicScene() {
       if (this.state === 'menu' || this.state === 'gameover') return 'casual';
       if (this.warnT > 0) return this.pendingBossMusic || 'boss';

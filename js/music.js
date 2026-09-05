@@ -8,6 +8,7 @@
  *   eagle    广州鼓点 + 鹰叫（咬剑鹰）
  *   hero     军乐 + 电磁声（祖国人）
  *   imperial 帝王军乐（大王：苏军进行曲风格）
+ *   crane    悲壮像素摇滚（鹤仙：170BPM 小调，失真吉他+哭腔主音）
  * ============================================================ */
 (function () {
   'use strict';
@@ -258,6 +259,97 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
     o.connect(g); g.connect(dest);
     o.start(t); o.stop(t + 0.2);
+  }
+
+  /* ---------------- 摇滚乐器（鹤仙：悲壮 16-bit 像素摇滚） ---------------- */
+  /** tanh 软削波失真曲线（模拟电吉他破音箱头） */
+  function distCurve(amount) {
+    const n = 512, curve = new Float32Array(n);
+    const norm = Math.tanh(amount);
+    for (let i = 0; i < n; i++) {
+      const x = i / n * 2 - 1;
+      curve[i] = Math.tanh(x * amount) / norm;
+    }
+    return curve;
+  }
+
+  /** 失真节奏吉他：根+五度+八度强力和弦，三锯齿 → 波形整形破音 → 低通收齿 */
+  function gtr(rootM, t, dur, vol, dest) {
+    const g = ctx.createGain();
+    const ws = ctx.createWaveShaper();
+    ws.curve = distCurve(3.4); ws.oversample = '2x';
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(2700, t);
+    f.frequency.exponentialRampToValueAtTime(1300, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.008);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * 0.55), t + dur * 0.55);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    [rootM, rootM + 7, rootM + 12].forEach((m, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = mf(m);
+      o.detune.value = i === 0 ? -7 : (i === 1 ? 7 : 0);
+      o.connect(ws);
+      o.start(t); o.stop(t + dur + 0.05);
+    });
+    ws.connect(f); f.connect(g); g.connect(dest);
+  }
+
+  /** 哭腔主音吉他：FM 粗砺调制 + 双锯齿 + 方波高八度，渐入颤音；
+   *  bend 为起始音高偏移（半音）：负值=从低处推弦上来（哭腔/嘶吼），正值=从高处滑落 */
+  function cry(m, t, dur, vol, bend, dest) {
+    const f0 = mf(m);
+    const car = ctx.createOscillator(); car.type = 'sawtooth';
+    const car2 = ctx.createOscillator(); car2.type = 'sawtooth'; car2.detune.value = 9;
+    const sq = ctx.createOscillator(); sq.type = 'square';
+    const sqg = ctx.createGain(); sqg.gain.value = 0.22;
+    // FM 粗砺：2 倍频调制器制造嘶吼边带
+    const mod = ctx.createOscillator(); mod.type = 'sine'; mod.frequency.value = f0 * 2.01;
+    const mg = ctx.createGain(); mg.gain.value = f0 * 0.32;
+    mod.connect(mg); mg.connect(car.frequency); mg.connect(car2.frequency);
+    // 颤音：随延音渐深（吉他揉弦）
+    const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5.6;
+    const lg = ctx.createGain();
+    lg.gain.setValueAtTime(f0 * 0.002, t);
+    lg.gain.exponentialRampToValueAtTime(f0 * 0.013, t + Math.min(0.5, dur * 0.55));
+    lfo.connect(lg); lg.connect(car.frequency); lg.connect(car2.frequency);
+    // 推弦：从 bend 偏移滑到本音
+    if (bend) {
+      const fb = mf(m + bend);
+      car.frequency.setValueAtTime(fb, t);
+      car2.frequency.setValueAtTime(fb, t);
+      car.frequency.exponentialRampToValueAtTime(f0, t + Math.min(0.3, dur * 0.45));
+      car2.frequency.exponentialRampToValueAtTime(f0, t + Math.min(0.3, dur * 0.45));
+    } else {
+      car.frequency.value = f0; car2.frequency.value = f0;
+    }
+    sq.frequency.value = f0 * 2;
+    const ws = ctx.createWaveShaper();
+    ws.curve = distCurve(1.7); ws.oversample = '2x';
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 4600;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.02);
+    g.gain.setValueAtTime(Math.max(0.0002, vol), t + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    car.connect(ws); car2.connect(ws); sq.connect(sqg); sqg.connect(ws);
+    ws.connect(f); f.connect(g); g.connect(dest);
+    [car, car2, sq, mod, lfo].forEach(o => { o.start(t); o.stop(t + dur + 0.05); });
+  }
+
+  /** 蓄力上扫：锯齿低频急升，副歌爆发前的压抑推进 */
+  function riser(t, dur, dest) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(170, t);
+    o.frequency.exponentialRampToValueAtTime(1500, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + dur * 0.85);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.06);
+    o.connect(g); g.connect(dest);
+    o.start(t); o.stop(t + dur + 0.1);
   }
 
   /* ---------------- 曲目数据（4 小节循环，每小节 16 个 16 分音符步） ---------------- */
@@ -512,6 +604,78 @@
           R(['K', '.', 'r', 'S', 'K', '.', 'r', 'r', 'K', '.', 'r', 'S', 'S', 'S', 'r', 'r'])
         ]
       }
+    },
+
+    /* 8. 鹤仙：A 小调 170BPM 悲壮像素摇滚，i-iv-VI-V 忧郁进行；
+     *    前两小节压抑蓄力（稀疏吉他/低音区哭腔），后两小节副歌爆发（高速踩镲/强力和弦/高音嘶吼）；
+     *    哭腔主音带 FM 嘶吼、渐深颤音与推弦，和声小调 G# 制造黑暗英雄感 */
+    crane: {
+      bpm: 170,
+      lead: {
+        wave: 'cry', vol: 0.09, vel: [0.62, 0.82, 1.22, 1.34],
+        bars: [
+          // Am：低回哀诉，B 音二度推弦哭泣
+          R([69, 0, 0, { n: 72, b: -1 }, 0, { n: 71, b: -2 }, 0, 69, 67, 0, 0, 0, 64, 0, 0, 0]),
+          // Dm：爬升与不甘，长推弦压在蓄力上扫之上
+          R([74, 0, 0, 76, 0, { n: 77, b: -1 }, 0, 76, 74, 0, 72, 0, { n: 74, b: -2 }, 0, 0, 0]),
+          // F：副歌爆发，A5→C6 二度嘶吼推弦，高举后坠落
+          R([81, 0, 0, { n: 84, b: -2 }, 0, 83, 0, 81, 79, 0, 81, 0, { n: 77, b: -1 }, 0, 0, 0]),
+          // E（和声小调 V）：G# 黑暗导音，C6 最后嘶吼，E5 滑落收束、死战到底
+          R([80, 0, 0, 81, 0, 0, { n: 84, b: -1 }, 0, 83, 0, 81, 0, 80, 0, { n: 76, b: 1 }, 0])
+        ]
+      },
+      gtr: {
+        vol: 0.1,
+        bars: [
+          // Am：长音和弦，空旷哀悼
+          R([45, 0, 0, 0, 0, 0, 0, 0, 45, 0, 0, 0, 0, 0, 0, 0]),
+          // Dm：由疏到密的闷音切分，逼近爆发
+          R([38, 0, 0, 0, 0, 0, 38, 0, 38, 0, 38, 0, 38, 38, 38, 38]),
+          // F：副歌八分音符推进
+          R([41, 0, 41, 0, 41, 0, 41, 0, 41, 0, 41, 0, 41, 0, 41, 41]),
+          // E：高潮十六分全速碾弦
+          R([40, 0, 40, 0, 40, 0, 40, 0, 40, 0, 40, 0, 40, 40, 40, 40])
+        ]
+      },
+      bass: {
+        wave: 'sawtooth', vol: 0.12,
+        bars: [
+          R([33, 0, 33, 0, 33, 0, 45, 0, 33, 0, 33, 0, 33, 0, 45, 0]),
+          R([38, 0, 38, 0, 38, 0, 50, 0, 38, 0, 38, 38, 38, 38, 38, 38]),
+          R([29, 0, 29, 0, 29, 0, 41, 0, 29, 0, 29, 0, 41, 0, 29, 0]),
+          R([28, 0, 28, 0, 28, 0, 40, 0, 28, 0, 28, 0, 40, 0, 28, 40])
+        ]
+      },
+      arp: {
+        wave: 'square', vol: 0.042,
+        bars: [
+          // 首小节留白：只留哀诉旋律
+          R([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+          // Dm：侵略性芯片琶音渐入
+          R([50, 53, 57, 62, 57, 53, 50, 53, 57, 62, 57, 53, 50, 53, 57, 62]),
+          // F：副歌全速 16 分琶音
+          R([53, 57, 60, 65, 60, 57, 53, 57, 60, 65, 60, 57, 53, 57, 60, 65]),
+          // E：G# 和声小调琶音，黑暗高悬
+          R([52, 56, 59, 64, 59, 56, 52, 56, 59, 64, 59, 56, 52, 56, 59, 64])
+        ]
+      },
+      drum: {
+        vol: 1.0,
+        bars: [
+          // 基础摇滚反拍，稀疏踩镲
+          R(['K', '.', 'h', '.', 'S', '.', 'h', '.', 'K', '.', 'h', '.', 'S', '.', 'h', '.']),
+          // 军鼓滚奏 + 加密踩镲，蓄力导入副歌
+          R(['K', '.', 'h', '.', 'S', '.', 'h', '.', 'K', '.', 'h', 'h', 'S', 'r', 'r', 'r']),
+          // 开镲当镲片砸下，16 分踩镲全速驱动
+          R(['H', 'h', 'h', 'h', 'S', 'h', 'h', 'h', 'K', 'h', 'h', 'K', 'S', 'h', 'h', 'h']),
+          // 双踩 + 末点开镲，死战高潮
+          R(['H', 'h', 'h', 'h', 'S', 'h', 'h', 'K', 'K', 'h', 'h', 'h', 'S', 'h', 'h', 'H'])
+        ]
+      },
+      /** 第 2 小节后半蓄力上扫，在副歌强拍与开镲同时爆发 */
+      onBar(bar, t, spb, dest) {
+        if (bar === 1) riser(t + spb * 8, spb * 8, dest);
+      }
     }
   };
 
@@ -534,10 +698,31 @@
     const bar = r.bar, step = r.step;
 
     if (d.lead) {
-      const n = d.lead.bars[bar][step];
-      if (n) {
+      const raw = d.lead.bars[bar][step];
+      if (raw) {
         const vel = d.lead.vel ? d.lead.vel[bar] : 1;
-        tone(d.lead.wave, mf(n), t, spb * 1.7, d.lead.vol * vel, r.gain);
+        if (d.lead.wave === 'cry') {
+          // 哭腔主音：支持 {n:音高, b:推弦偏移} 对象音符；延音扫到下一音，让颤音/推弦充分展开
+          const n = (typeof raw === 'object') ? raw.n : raw;
+          const bend = (typeof raw === 'object') ? raw.b : 0;
+          let ring = 1;
+          const lrow = d.lead.bars[bar];
+          for (let k = step + 1; k < 16; k++) { if (lrow[k]) break; ring++; }
+          const cdur = spb * Math.min(8, Math.max(1.9, ring * 1.85));
+          cry(n, t, cdur, d.lead.vol * vel, bend, r.gain);
+        } else {
+          tone(d.lead.wave, mf(raw), t, spb * 1.7, d.lead.vol * vel, r.gain);
+        }
+      }
+    }
+    if (d.gtr) {
+      const n = d.gtr.bars[bar][step];
+      if (n) {
+        // 延音长度：扫到下一个和弦为止（长和弦轰鸣 / 短闷音切分）
+        let ring = 1;
+        const row = d.gtr.bars[bar];
+        for (let k = step + 1; k < 16; k++) { if (row[k]) break; ring++; }
+        gtr(n, t, spb * Math.max(1.1, ring * 0.95), d.gtr.vol, r.gain);
       }
     }
     if (d.bass) {
@@ -546,7 +731,7 @@
     }
     if (d.arp) {
       const n = d.arp.bars[bar][step];
-      if (n) tone('triangle', mf(n), t, spb * 0.8, d.arp.vol, r.gain);
+      if (n) tone(d.arp.wave || 'triangle', mf(n), t, spb * 0.8, d.arp.vol, r.gain);
     }
     if (d.drum) {
       const c = d.drum.bars[bar][step];
