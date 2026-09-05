@@ -284,17 +284,14 @@
         level(p) { return p.lives; }
       },
       /* —— 元素弹道（击败 Boss 后解锁，各最多 3 条） —— */
-      // 三种元素弹道全部拥有后，这组成长项不再出现
-      // 首次必定出现（guaranteed），拥有后降低出现概率（最低 10%）
+      // 首次必定出现（guaranteed），拥有后降低出现概率（10%）
+      // 某种弹道达到 3 条时，该成长项不再出现
       {
         id: 'flame', icon: '🔥', cls: 'c-atk', name: '火焰弹道',
         desc: '额外增加一条火焰弹道（最多 3 条）。命中后 3s 持续伤害，1s 破解敌人无敌',
         can(p, g) {
           if (p.flameWay >= 3) return false;
-          // 三种全有后不再出现
-          if (p.flameWay > 0 && p.poisonWay > 0 && p.iceWay > 0) return false;
-          if (p.flameWay === 0) return true;   // 首次由 guaranteed 保证
-          // 拥有后 10% 概率出现
+          if (p.flameWay === 0) return true;
           return Math.random() < 0.10;
         },
         apply(p) { p.flameWay++; },
@@ -306,7 +303,6 @@
         desc: '额外增加一条毒液弹道（最多 3 条）。命中后 6s 持续伤害，3s 破解敌人无敌',
         can(p, g) {
           if (p.poisonWay >= 3) return false;
-          if (p.flameWay > 0 && p.poisonWay > 0 && p.iceWay > 0) return false;
           if (p.poisonWay === 0) return true;
           return Math.random() < 0.10;
         },
@@ -319,7 +315,6 @@
         desc: '额外增加一条寒冰弹道（最多 3 条）。命中后 2s 持续伤害，冻结敌人 4s',
         can(p, g) {
           if (p.iceWay >= 3) return false;
-          if (p.flameWay > 0 && p.poisonWay > 0 && p.iceWay > 0) return false;
           if (p.iceWay === 0) return true;
           return Math.random() < 0.10;
         },
