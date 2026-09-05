@@ -728,14 +728,14 @@
         }
         SFX.enemyShoot();
       }
-      // 尾部喷出巨型追踪导弹（体积×3：发射后 6s 无敌，之后被子弹击中 3 次爆炸，被旋转剑击中 1 次必爆）
+      // 尾部喷出巨型追踪导弹（体积×3：发射后 4s 无敌，之后被子弹击中 3 次爆炸，被旋转剑击中 1 次必爆）
       this.missileT -= dt;
       if (this.missileT <= 0) {
         this.missileT = rand(3.4, 4.4);
         const m = new Bullet(this.x + 88, this.y - 52,
           160, -120,
           { kind: 'missile', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 12,
-            homing: true, turnRate: 2.3, rockBreak: true, bscale: 3, hp: 3, invuln: 6 });
+            homing: true, turnRate: 2.3, rockBreak: true, bscale: 3, hp: 3, invuln: 4 });
         m.onBreak = (gg, b) => gg.shellBlast(b.x, b.y, b.dmg);
         m.onExpire = (gg, b) => gg.shellBlast(b.x, b.y, b.dmg);
         g.bullets.push(m);
