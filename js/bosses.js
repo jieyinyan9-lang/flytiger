@@ -169,7 +169,7 @@
       this.title = '精英强化型';
       this.atkT = 2.2;
       this.atkMode = 0;
-      this.rageT = 0.6;      // 狂暴后持续竖雷计时
+      this.rageT = 2.2;      // 狂暴后持续竖雷计时（频率与常态攻击一致）
       this.deathCols = ['#2f6fd0', '#ffe066', '#7fe7ff', '#fff'];
     }
     update(dt, g) {
@@ -190,34 +190,38 @@
       this.atkT -= dt;
       if (this.atkT <= 0) {
         this.atkT = rand(2.2, 2.8);
-        const dmg = Math.round(22 * g.atkScale);
-        const mode = this.atkMode % 3;
-        this.atkMode++;
-        if (mode === 0) {
-          // 纵向三连落雷（玩家位置 + 左右偏移）
-          const offs = [0, -120, 120];
-          offs.forEach(off => {
-            const lx = clamp(p.x + off, 70, CFG.W - 70);
-            g.lightnings.push(Lightning.vertical(lx, 92, dmg));
-          });
-        } else if (mode === 1) {
-          // 横向闪电 ×2：贴玩家上下方扫过，逼走位
-          g.lightnings.push(Lightning.horizontal(clamp(p.y - 95, 90, CFG.GROUND_Y - 60), 70, dmg));
-          g.lightnings.push(Lightning.horizontal(clamp(p.y + 95, 120, CFG.GROUND_Y - 30), 70, dmg));
-        } else {
-          // 对角斜向闪电 ×2：X 形交叉点落在玩家附近
-          const a = rand(0.6, 0.78);
-          g.lightnings.push(Lightning.diagonal(p.x, p.y, a, 76, dmg));
-          g.lightnings.push(Lightning.diagonal(p.x, p.y, -a, 76, dmg));
+        if (!this.enraged) {
+          // 常态：纵向三连落雷 / 横向双道闪电 / 对角 X 形斜闪电 三段轮换
+          // 狂暴后不再触发，由下方 rageT 竖雷接管（同一节奏，且只有竖雷一种）
+          const dmg = Math.round(22 * g.atkScale);
+          const mode = this.atkMode % 3;
+          this.atkMode++;
+          if (mode === 0) {
+            // 纵向三连落雷（玩家位置 + 左右偏移）
+            const offs = [0, -120, 120];
+            offs.forEach(off => {
+              const lx = clamp(p.x + off, 70, CFG.W - 70);
+              g.lightnings.push(Lightning.vertical(lx, 92, dmg));
+            });
+          } else if (mode === 1) {
+            // 横向闪电 ×2：贴玩家上下方扫过，逼走位
+            g.lightnings.push(Lightning.horizontal(clamp(p.y - 95, 90, CFG.GROUND_Y - 60), 70, dmg));
+            g.lightnings.push(Lightning.horizontal(clamp(p.y + 95, 120, CFG.GROUND_Y - 30), 70, dmg));
+          } else {
+            // 对角斜向闪电 ×2：X 形交叉点落在玩家附近
+            const a = rand(0.6, 0.78);
+            g.lightnings.push(Lightning.diagonal(p.x, p.y, a, 76, dmg));
+            g.lightnings.push(Lightning.diagonal(p.x, p.y, -a, 76, dmg));
+          }
+          SFX.warn();
         }
-        SFX.warn();
       }
 
       // 狂暴（血量 ≤30%）后：持续竖雷打击 —— 玩家头顶 1 道（更粗）+ 左右随机 2 道夹击
       if (this.enraged) {
         this.rageT -= dt;
         if (this.rageT <= 0) {
-          this.rageT = rand(0.42, 0.65);
+          this.rageT = rand(2.2, 2.8);   // 狂暴竖雷频率与常态攻击一致
           const dmgR = Math.round(16 * g.atkScale);
           const side = () => clamp(p.x + rand(130, 280) * (Math.random() < 0.5 ? -1 : 1), 60, CFG.W - 60);
           g.lightnings.push(Lightning.vertical(clamp(p.x, 60, CFG.W - 60), 84, dmgR));
