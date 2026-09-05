@@ -1867,7 +1867,786 @@
     }
   }
 
-  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage };
+  /* ================ S1. 狮身人面像（沙漠专属：三循环 × 三阶段） ================
+   * 循环 cycle 1-3，每循环 P1 双爪拍击 → P2 神眼扫射 → P3 狮王狂怒
+   * 任意阶段 HP 打空立即跳过（新阶段回满血）；P3 后 cycle<3 回血 100% 进下一循环，cycle3 死亡
+   * ---------------------------------------------------------------- */
+  class Sphinx extends Boss {
+    constructor(g) {
+      super(g, 26, 92);
+      this.bossName = '狮身人面像';
+      this.title = '沙漠远古守护神';
+      // 单循环血条：目标 40s 交战（整场 3 循环），按玩家 DPS 动态缩放
+      this.maxHp = Math.round(g.playerDps() * 40 * g.bossHpMul());
+      this.hp = this.maxHp;
+      this.cycle = 1;            // 循环 1-3
+      this.phase = 'p1';         // p1 / p2 / p3
+      this.act = null;           // 阶段内子动作
+      this.actT = 0;
+      this.hazards = [];         // 地面冲击波环 {x,y,r,vr,band,maxR,life,t,dmg,dealt,seed}
+      this.marks = [];           // 爪击落点预警 {x,y,t}
+      this.debris = [];          // 环绕浮石 {ang,rad,spd,sz}
+      this.pendingSlam = null;   // {t, pts:[{x,y}], kind}
+      this.clawSeq = 0;
+      this.clawTimer = 1.0;
+      this.slamFlash = 0;
+      this.spinAng = 0;
+      this.spirA = 0;
+      this.beamT = 0;
+      this.ringT = 0;
+      this.ringRot = 0;
+      this.wpIdx = 0;
+      this.movingDir = 0;
+      this.deathCols = ['#7fe0ff', '#9fd8ff', '#ffd98a', '#c9a45c', '#fff'];
+      this.xpValue = 260;
+    }
+
+    /* ---------------- 状态机 ---------------- */
+    update(dt, g) {
+      this.t += dt; this.stateT += dt; this.actT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.slamFlash = Math.max(0, this.slamFlash - dt);
+      this.commonMove(dt);
+      const dir = this.x - (this._lastX || this.x);
+      if (Math.abs(dir) > 0.5) this.movingDir = dir > 0 ? 1 : -1;
+      this._lastX = this.x;
+
+      if (this.state === 'enter') {
+        const tx = CFG.W / 2, ty = 150;
+        this.x += (tx - this.x) * Math.min(1, dt * 2.2);
+        this.y += (ty - this.y) * Math.min(1, dt * 2.2);
+        if (Math.hypot(this.x - tx, this.y - ty) < 12) {
+          this.x = tx; this.y = ty;
+          this.state = 'p1'; this.stateT = 0; this.phase = 'p1';
+          this.setupPhase(g);
+        }
+        return;
+      }
+
+      if (this.state === 'trans') {
+        const a = this.anchorFor(this.phase);
+        this.x += (a.x - this.x) * Math.min(1, dt * 2.6);
+        this.y += (a.y - this.y) * Math.min(1, dt * 2.6);
+        if (this.stateT > 1.5) { this.state = this.phase; this.stateT = 0; this.setupPhase(g); }
+        this.updateHazards(dt, g);
+        this.updateDebris(dt);
+        return;
+      }
+
+      // 阶段自然结束（P3 由 finale 自行收尾）
+      if ((this.state === 'p1' && this.stateT > 13.5) ||
+          (this.state === 'p2' && this.stateT > 15.5)) {
+        this.advancePhase(g, false);
+        return;
+      }
+
+      if (this.state === 'p1') this.updateP1(dt, g);
+      else if (this.state === 'p2') this.updateP2(dt, g);
+      else if (this.state === 'p3') this.updateP3(dt, g);
+
+      this.updateHazards(dt, g);
+      this.updateDebris(dt);
+    }
+
+    anchorFor(ph) {
+      if (ph === 'p1') return { x: CFG.W / 2, y: 150 };
+      if (ph === 'p2') return { x: CFG.W / 2, y: 210 };
+      return { x: CFG.W / 2, y: 230 };
+    }
+
+    setupPhase(g) {
+      this.actT = 0;
+      this.hazards.length = 0;
+      this.marks.length = 0;
+      this.pendingSlam = null;
+      this.beamT = 0.9; this.ringT = 1.1; this.ringRot = rand(0, TAU);
+      if (this.phase === 'p1') {
+        this.act = 'slam';
+        this.clawSeq = 0; this.clawTimer = 1.0;
+        this.anchor = this.anchorFor('p1');
+        g.toast('双爪拍击！', 1.6);
+      } else if (this.phase === 'p2') {
+        this.act = 'sweepL';
+        this.anchor = this.anchorFor('p2');
+        g.toast('神眼扫射！', 1.6);
+        SFX.phaseRise();
+      } else {
+        this.act = 'charge'; this.wpIdx = 0;
+        this.contactDmg = 30;
+        this.anchor = this.anchorFor('p3');
+        this.debris = [];
+        for (let i = 0; i < 8; i++) {
+          this.debris.push({ ang: rand(0, TAU), rad: rand(100, 150), spd: rand(0.5, 1.1) * (i % 2 ? 1 : -1), sz: rand(5, 11) });
+        }
+        g.toast(`狮王狂怒！（第 ${this.cycle} 循环）`, 2.2);
+        SFX.phaseRise(); g.shake(10);
+      }
+    }
+
+    takeDamage(dmg, g) {
+      if (this.dead || this.state === 'enter' || this.state === 'trans') return;   // 入场/转场免伤
+      this.hp -= dmg;
+      this.flash = 0.08;
+      if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#fff', '#9fd8ff'], 130, 3, 0.18);
+      if (this.hp <= 0) { this.hp = 0; this.advancePhase(g, true); }
+    }
+
+    /** skipped=true：HP 打空强制跳过，新阶段回满血防连锁瞬跳 */
+    advancePhase(g, skipped) {
+      if (this.dead || this.state === 'trans' || this.state === 'enter') return;
+      this.marks.length = 0;
+      this.pendingSlam = null;
+      if (this.phase === 'p1') {
+        this.phase = 'p2'; this.state = 'trans'; this.stateT = 0;
+        if (skipped) this.hp = this.maxHp;
+        SFX.phaseRise(); g.shake(6);
+      } else if (this.phase === 'p2') {
+        this.phase = 'p3'; this.state = 'trans'; this.stateT = 0;
+        if (skipped) this.hp = this.maxHp;
+        SFX.phaseRise(); g.shake(8);
+      } else {
+        // P3 结束
+        if (this.cycle < 3) {
+          this.cycle++;
+          this.hp = this.maxHp;
+          g.bullets.forEach(b => { if (!b.friendly) b.neutralize(); });
+          this.hazards.length = 0;
+          this.phase = 'p1'; this.state = 'trans'; this.stateT = 0;
+          this.contactDmg = 26;
+          g.toast(`狮身人面像恢复了！（第 ${this.cycle} 循环）`, 2.6);
+          SFX.phaseRise(); g.shake(10);
+          burst(g, this.x, this.y, 30, this.deathCols, 300, 7, 0.8, 130);
+          for (let i = 0; i < 14; i++) {
+            g.particles.push(new Particle(this.x + rand(-70, 70), this.y + rand(-40, 60),
+              rand(-60, 60), rand(-40, 80), rand(0.5, 1.0), rand(4, 9),
+              ['#b98d4e', '#c9a45c', '#8a6a38'][randi(0, 2)]));
+          }
+        } else {
+          this.dead = true;
+          g.onBossDefeated(this);
+        }
+      }
+    }
+
+    /* ---------------- 弹幕助手 ---------------- */
+    eyePos(g) {
+      return { L: { x: this.x - 22, y: this.y + 10 }, R: { x: this.x + 22, y: this.y + 10 }, F: { x: this.x, y: this.y - 12 } };
+    }
+    chestPos() { return { x: this.x, y: this.y + 56 }; }
+
+    fireBeam(g, ox, oy, a, dmg, w) {
+      g.beams.push(new Beam(ox, oy, a, 1500, w || 13, Math.round(dmg * g.atkScale), 0.42, false));
+    }
+
+    /** 扇形弹幕：centerA 中心角，spread 张角，n 发 */
+    fireFan(g, x, y, centerA, spread, n, kind, sp0, sp1, r, dmg) {
+      for (let i = 0; i < n; i++) {
+        const tt = n === 1 ? 0.5 : i / (n - 1);
+        const a = centerA - spread / 2 + spread * tt;
+        const sp = rand(sp0, sp1);
+        g.bullets.push(new Bullet(x, y, Math.cos(a) * sp, Math.sin(a) * sp,
+          { kind, r, dmg: Math.round(dmg * g.atkScale), life: 4.5, spinRate: kind === 'shard' ? rand(2.5, 4.5) : 2 }));
+      }
+      SFX.enemyShoot();
+    }
+
+    /** 环形弹幕：n 发圆周布弹，gapAng 处跳过 gapArc 弧度的缺口 */
+    fireRing(g, x, y, n, gapAng, gapArc, spd, r, dmg) {
+      const base = rand(0, TAU);
+      for (let i = 0; i < n; i++) {
+        const a = base + (i / n) * TAU;
+        let diff = a - gapAng;
+        while (diff > Math.PI) diff -= TAU;
+        while (diff < -Math.PI) diff += TAU;
+        if (Math.abs(diff) < gapArc / 2) continue;
+        g.bullets.push(new Bullet(x, y, Math.cos(a) * spd, Math.sin(a) * spd,
+          { kind: 'eyeGem', r, dmg: Math.round(dmg * g.atkScale), life: 5, spinRate: 2 }));
+      }
+      SFX.enemyShoot();
+    }
+
+    /** 爪拍冲击波环 */
+    shockRing(g, x, y) {
+      this.hazards.push({ x, y, r: 20, vr: 430, band: 30, maxR: 620, life: 1.45, t: 0,
+        dmg: Math.round(14 * g.atkScale), dealt: false, seed: rand(0, TAU) });
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TAU;
+        g.particles.push(new Particle(x, y, Math.cos(a) * rand(60, 140), Math.sin(a) * rand(60, 140),
+          0.4, rand(3, 6), '#7fd4ff'));
+      }
+    }
+
+    updateHazards(dt, g) {
+      const p = g.player;
+      for (const h of this.hazards) {
+        h.t += dt; h.r += h.vr * dt;
+        if (!h.dealt && p) {
+          const d = Math.hypot(p.x - h.x, p.y - h.y);
+          if (Math.abs(d - h.r) < h.band / 2 + p.radius * 0.7) { h.dealt = true; p.hurt(h.dmg, g); }
+        }
+      }
+      this.hazards = this.hazards.filter(h => h.t < h.life && h.r < h.maxR);
+    }
+
+    updateDebris(dt) {
+      const show = this.state === 'p3' || this.cycle >= 3;
+      if (!show) { if (this.debris.length) this.debris.length = 0; return; }
+      if (!this.debris.length) {
+        for (let i = 0; i < 6; i++) {
+          this.debris.push({ ang: rand(0, TAU), rad: rand(105, 160), spd: rand(0.5, 1.0) * (i % 2 ? 1 : -1), sz: rand(5, 10) });
+        }
+      }
+      for (const d of this.debris) d.ang += d.spd * dt;
+    }
+
+    /* ---------------- P1：双爪拍击 ---------------- */
+    updateP1(dt, g) {
+      this.x += (this.anchor.x - this.x) * Math.min(1, dt * 3);
+      this.y = this.anchor.y + Math.sin(this.t * 1.6) * 6;
+
+      // 预警倒计时
+      if (this.pendingSlam) {
+        this.pendingSlam.t -= dt;
+        this.marks.forEach(m => { m.t -= dt; });
+        this.marks = this.marks.filter(m => m.t > 0);
+        if (this.pendingSlam.t <= 0) {
+          const { pts, kind } = this.pendingSlam;
+          this.pendingSlam = null;
+          this.slamFlash = 0.22;
+          g.shake(9); SFX.shock();
+          for (const pt of pts) {
+            if (kind === 0) {        // 右爪：120° 扇形，右→左
+              this.fireFan(g, pt.x, pt.y, Math.PI / 2, 2.1, 8, 'shard', 210, 280, 9, 13);
+            } else if (kind === 1) { // 左爪：120° 扇形，左→右
+              this.fireFan(g, pt.x, pt.y, Math.PI / 2, 2.1, 8, 'shard', 210, 280, 9, 13);
+            } else {                 // 双爪：两道扇形汇聚中央下方
+              this.fireFan(g, pts[0].x, pts[0].y, 0.96, 1.6, 7, 'shard', 220, 290, 9, 13);
+              this.fireFan(g, pts[1].x, pts[1].y, 2.18, 1.6, 7, 'shard', 220, 290, 9, 13);
+            }
+            this.shockRing(g, pt.x, pt.y);
+            burst(g, pt.x, pt.y, 14, ['#c9a45c', '#f0d496', '#7fd4ff'], 200, 5, 0.5);
+          }
+        }
+      }
+      this.clawTimer -= dt;
+      if (this.clawTimer <= 0 && !this.pendingSlam) {
+        const kind = this.clawSeq % 3;   // 0 右爪 / 1 左爪 / 2 双爪
+        this.clawSeq++;
+        const pts = kind === 0
+          ? [{ x: this.x + 140, y: 382 }]
+          : kind === 1
+            ? [{ x: this.x - 140, y: 382 }]
+            : [{ x: this.x - 140, y: 382 }, { x: this.x + 140, y: 382 }];
+        this.pendingSlam = { t: 0.62, pts, kind };
+        pts.forEach(pt => this.marks.push({ x: pt.x, y: pt.y, t: 0.62 }));
+        SFX.bossCharge();
+        this.clawTimer = 2.35;
+      }
+    }
+
+    /* ---------------- P2：神眼扫射 ---------------- */
+    updateP2(dt, g) {
+      this.x += (this.anchor.x - this.x) * Math.min(1, dt * 3);
+      this.y = this.anchor.y + Math.sin(this.t * 1.8) * 5;
+      const T = this.stateT;
+      const e = this.eyePos(g);
+      const dmg = 15;
+
+      // 子动作：sweepL(0-3) sweepR(3-6) triEye(6-11) eyeRing(11-15.5)
+      let act = null;
+      if (T < 3) act = 'sweepL'; else if (T < 6) act = 'sweepR'; else if (T < 11) act = 'triEye'; else act = 'eyeRing';
+      this.act = act;
+
+      if (act === 'sweepL' || act === 'sweepR') {
+        const local = act === 'sweepL' ? T : T - 3;
+        if (local > 0.7) {   // 蓄力后开火
+          const u = clamp((local - 0.7) / 2.3, 0, 1);
+          const a = act === 'sweepL' ? 0.45 + u * 2.2 : 2.65 - u * 2.2;   // 右→左 / 左→右
+          this.beamT -= dt;
+          if (this.beamT <= 0) {
+            this.beamT = 0.32;
+            this.fireBeam(g, e.L.x, e.L.y, a, dmg, 12);
+            this.fireBeam(g, e.R.x, e.R.y, a, dmg, 12);
+          }
+        }
+      } else if (act === 'triEye') {
+        const local = T - 6;
+        if (local > 0.7) {
+          const u = clamp((local - 0.7) / 4.3, 0, 1);
+          const off = 0.42 * Math.cos(u * TAU);   // 左→中→右→中→左
+          this.beamT -= dt;
+          if (this.beamT <= 0) {
+            this.beamT = 0.34;
+            this.fireBeam(g, e.L.x, e.L.y, 2.55 + off, 16, 13);
+            this.fireBeam(g, e.F.x, e.F.y, Math.PI / 2 + off, 16, 13);
+            this.fireBeam(g, e.R.x, e.R.y, 0.58 + off, 16, 13);
+          }
+        }
+      } else {
+        // 神眼环：金菱形环外扩，缺口顺时针旋转
+        const c = this.chestPos();
+        this.ringT -= dt;
+        if (this.ringT <= 0) {
+          this.ringT = 1.05;
+          this.ringRot += 0.6;   // 缺口顺时针（屏幕角增大=视觉顺时针）
+          this.fireRing(g, c.x, c.y, 15, this.ringRot, 0.9, 185, 10, 13);
+        }
+      }
+    }
+
+    /* ---------------- P3：狮王狂怒 ---------------- */
+    updateP3(dt, g) {
+      const T = this.stateT;
+      const e = this.eyePos(g);
+      const c = this.chestPos();
+
+      if (this.act === 'charge') {
+        // 中 → 左 → 右 → 中
+        const wps = [{ x: 480, y: 250 }, { x: 140, y: 280 }, { x: 820, y: 280 }, { x: 480, y: 250 }];
+        if (this.wpIdx < wps.length) {
+          const wp = wps[this.wpIdx];
+          const dx = wp.x - this.x, dy = wp.y - this.y, d = Math.hypot(dx, dy);
+          const sp = 600 * dt;
+          if (d < sp) { this.x = wp.x; this.y = wp.y; this.wpIdx++; if (this.wpIdx === 1 || this.wpIdx === 3) g.shake(6); }
+          else { this.x += dx / d * sp; this.y += dy / d * sp; }
+          // 残影粒子
+          g.particles.push(new Particle(this.x + rand(-30, 30), this.y + rand(-20, 40),
+            rand(-40, 40), rand(-20, 30), 0.35, 5, '#9fd8ff'));
+          // 尾尖月牙刃：中央冲向左侧时刃气左→右（vx>0）；右侧返回中央时刃气右→左（vx<0）
+          this.beamT -= dt;
+          if (this.beamT <= 0 && this.movingDir !== 0) {
+            this.beamT = 0.28;
+            const tipX = this.x - this.movingDir * 78, tipY = this.y - 50;
+            const dirA = (this.movingDir < 0 && this.wpIdx !== 3) ? 0 : Math.PI;
+            this.fireFan(g, tipX, tipY, dirA, 0.75, 3, 'crescent', 280, 330, 12, 15);
+          }
+        }
+        if (T > 5.0) { this.act = 'clap'; this.actT = 0; }
+      } else if (this.act === 'clap') {
+        this.x += (this.anchor.x - this.x) * Math.min(1, dt * 4);
+        this.y += (this.anchor.y - this.y) * Math.min(1, dt * 4);
+        if (this.actT > 0.9 && !this._clapped) {
+          this._clapped = true;
+          g.shake(8); SFX.shock();
+          this.fireFan(g, this.x - 95, this.y + 30, 1.05, 1.4, 9, 'shard', 240, 300, 11, 14);
+          this.fireFan(g, this.x + 95, this.y + 30, 2.10, 1.4, 9, 'shard', 240, 300, 11, 14);
+        }
+        if (T > 7.4) { this.act = 'triBeam'; this.actT = 0; this._clapped = false; }
+      } else if (this.act === 'triBeam') {
+        this.x += (this.anchor.x - this.x) * Math.min(1, dt * 4);
+        this.y += (this.anchor.y - this.y) * Math.min(1, dt * 4);
+        if (this.actT > 0.8) {
+          const u = clamp((this.actT - 0.8) / 4.4, 0, 1);
+          const off = 0.42 * Math.cos(u * TAU);
+          this.beamT -= dt;
+          if (this.beamT <= 0) {
+            this.beamT = 0.34;
+            this.fireBeam(g, e.L.x, e.L.y, 2.55 + off, 16, 14);
+            this.fireBeam(g, e.F.x, e.F.y, Math.PI / 2 + off, 16, 14);
+            this.fireBeam(g, e.R.x, e.R.y, 0.58 + off, 16, 14);
+          }
+        }
+        if (T > 13.0) { this.act = 'spin'; this.actT = 0; }
+      } else if (this.act === 'spin') {
+        this.spinAng += dt * 2.6;
+        this.x = this.anchor.x + Math.cos(this.t * 0.7) * 16;
+        this.y = this.anchor.y + Math.sin(this.t * 1.3) * 8;
+        // 左半身顺时针螺旋 / 右半身逆时针螺旋
+        this.beamT -= dt;
+        if (this.beamT <= 0) {
+          this.beamT = 0.15;
+          this.spirA += 2.9 * dt * 2.2;
+          const a1 = this.spirA, a2 = -this.spirA;
+          const sp = 225;
+          g.bullets.push(new Bullet(this.x - 40, this.y, Math.cos(a1) * sp, Math.sin(a1) * sp,
+            { kind: 'eyeGem', r: 9, dmg: Math.round(12 * g.atkScale), life: 5, spinRate: 2 }));
+          g.bullets.push(new Bullet(this.x + 40, this.y, Math.cos(a2) * sp, Math.sin(a2) * sp,
+            { kind: 'eyeGem', r: 9, dmg: Math.round(12 * g.atkScale), life: 5, spinRate: 2 }));
+        }
+        // 中心环形弹：缺口跟随旋转
+        this.ringT -= dt;
+        if (this.ringT <= 0) {
+          this.ringT = 0.9;
+          this.fireRing(g, c.x, c.y, 14, this.spinAng, 0.95, 200, 10, 13);
+        }
+        if (T > 18.4) { this.act = 'finale'; this.actT = 0; }
+      } else if (this.act === 'finale') {
+        const u = this.actT;
+        // 蓄力：三眼最亮 / 太阳环高速旋转（渲染体现）
+        if (u > 1.1 && !this._f1) {
+          this._f1 = true;
+          g.shake(9); SFX.shock();
+          this.fireFan(g, this.x - 100, this.y + 20, 1.05, 1.3, 11, 'shard', 250, 310, 11, 14);
+          this.fireFan(g, this.x + 100, this.y + 20, 2.10, 1.3, 11, 'shard', 250, 310, 11, 14);
+        }
+        if (u > 1.7 && !this._f2) {
+          this._f2 = true;
+          this.fireBeam(g, e.L.x, e.L.y, 2.7, 18, 15);
+          this.fireBeam(g, e.F.x, e.F.y, Math.PI / 2, 18, 15);
+          this.fireBeam(g, e.R.x, e.R.y, 0.45, 18, 15);
+          g.shake(8);
+        }
+        if (u > 2.3 && !this._f3) {
+          this._f3 = true;
+          g.shake(12); SFX.bossCharge();
+          for (let i = 0; i < 16; i++) {
+            const a = (i / 16) * TAU;
+            g.bullets.push(new Bullet(c.x, c.y, Math.cos(a) * 235, Math.sin(a) * 235,
+              { kind: 'eyeGem', r: 16, dmg: Math.round(16 * g.atkScale), life: 5, spinRate: 2 }));
+          }
+          SFX.enemyShoot();
+        }
+        if (u > 3.6) { this._f1 = this._f2 = this._f3 = false; this.advancePhase(g, false); }
+      }
+    }
+
+    /* ---------------- 程序化渲染 ---------------- */
+    render(ctx) {
+      const cyc = this.cycle;
+      const inP2 = this.state === 'p2' || (this.state === 'trans' && this.phase === 'p2');
+      const inP3 = this.state === 'p3' || (this.state === 'trans' && this.phase === 'p3');
+      const scale = cyc >= 3 ? 1.08 : 1;
+      const col = {
+        stone: '#c9a45c', stoneD: '#a8854a', stoneDD: '#8a6a38', stoneL: '#dbb977',
+        gold: '#e8c165', blue: '#54c8ff', blueL: '#9fe6ff', deep: '#0b3a66'
+      };
+
+      // —— 落点预警（世界坐标） ——
+      for (const m of this.marks) {
+        const pulse = 0.5 + Math.sin(this.t * 18) * 0.3;
+        ctx.strokeStyle = `rgba(255,90,60,${pulse + 0.3})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(m.x, m.y, 34, 12, 0, 0, TAU); ctx.stroke();
+        ctx.fillStyle = `rgba(255,120,80,${0.15 + pulse * 0.2})`;
+        ctx.beginPath(); ctx.ellipse(m.x, m.y, 34, 12, 0, 0, TAU); ctx.fill();
+      }
+
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.scale(scale, scale);
+
+      // 翼展角度：P1 收拢 / P2 45° / P3 全展
+      const wingSpread = inP3 ? 1.45 : inP2 ? 0.8 : 0.25;
+      const wingLen = inP3 ? 150 : inP2 ? 128 : 64;
+
+      // —— 尾巴：P1 盘于身后右侧，P3 伸展甩动 ——
+      ctx.fillStyle = col.stoneD;
+      if (inP3) {
+        const sway = Math.sin(this.t * 9) * 22 * Math.max(0.4, Math.abs(this.movingDir));
+        ctx.strokeStyle = col.stoneD; ctx.lineWidth = 15; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(30, -70);
+        ctx.quadraticCurveTo(96 + sway * 0.4, -100, 128 + sway, -78);
+        ctx.stroke();
+        ctx.strokeStyle = col.blue; ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(30, -70);
+        ctx.quadraticCurveTo(96 + sway * 0.4, -100, 128 + sway, -78);
+        ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(106, -78, 26, 0, TAU * 0.8); ctx.lineWidth = 13; ctx.strokeStyle = col.stoneD; ctx.stroke();
+        ctx.beginPath(); ctx.arc(106, -78, 14, 0, TAU); ctx.lineWidth = 10; ctx.stroke();
+      }
+
+      // —— 双翼（先画，压在身体后） ——
+      this.drawWing(ctx, -1, wingSpread, wingLen, col, cyc);
+      this.drawWing(ctx, 1, wingSpread, wingLen, col, cyc);
+
+      // —— 躯干（趴伏狮身） ——
+      ctx.fillStyle = col.stoneDD;
+      ctx.beginPath(); ctx.ellipse(0, -46, 118, 62, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = col.stoneD;
+      ctx.beginPath(); ctx.ellipse(0, -50, 110, 56, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = col.stone;
+      ctx.beginPath(); ctx.ellipse(0, -54, 100, 48, 0, 0, TAU); ctx.fill();
+      // 石板块纹理
+      ctx.strokeStyle = col.stoneDD; ctx.lineWidth = 2;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath(); ctx.ellipse(0, -54 + i * 22, 96 - Math.abs(i) * 14, 6, 0, 0, Math.PI); ctx.stroke();
+      }
+      // 后腿
+      ctx.fillStyle = col.stoneD;
+      ctx.beginPath(); ctx.ellipse(-92, -20, 34, 26, 0.3, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(92, -20, 34, 26, -0.3, 0, TAU); ctx.fill();
+
+      // —— 双前爪（伸向玩家侧） ——
+      this.drawPaws(ctx, col, inP3);
+
+      // —— 人面（法老面像） ——
+      this.drawFace(ctx, col, inP2, inP3, cyc);
+
+      // —— 胸口太阳圆环（P2 起） ——
+      if (inP2 || inP3) this.drawSunRing(ctx, col, inP3, cyc);
+
+      // —— 循环破损：裂纹 ——
+      if (cyc >= 2) this.drawCracks(ctx, cyc, col);
+
+      // —— 环绕浮石 ——
+      for (const d of this.debris) {
+        const dx = Math.cos(d.ang) * d.rad, dy = Math.sin(d.ang) * d.rad * 0.82;
+        ctx.fillStyle = col.stoneD;
+        ctx.fillRect(dx - d.sz / 2, dy - d.sz / 2, d.sz, d.sz);
+        ctx.fillStyle = col.stoneL;
+        ctx.fillRect(dx - d.sz / 2, dy - d.sz / 2, d.sz, 2);
+      }
+
+      // —— 受击闪红 ——
+      if (this.flash > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = `rgba(255,60,50,${Math.min(0.5, this.flash * 5)})`;
+        ctx.beginPath(); ctx.ellipse(0, 0, 180, 170, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+
+      // —— 冲击波环（世界坐标，蓝能量 + 石裂纹） ——
+      for (const h of this.hazards) {
+        const alpha = clamp(1.2 - h.t / h.life, 0, 1);
+        ctx.strokeStyle = `rgba(64,190,255,${0.25 * alpha})`;
+        ctx.lineWidth = h.band + 10;
+        ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = `rgba(159,230,255,${0.9 * alpha})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.stroke();
+        // 石质裂纹边：环周锯齿
+        ctx.strokeStyle = `rgba(201,164,92,${0.8 * alpha})`;
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 18; i++) {
+          const a = h.seed + (i / 18) * TAU;
+          const j1 = Math.sin(a * 7 + h.seed) * 8, j2 = Math.cos(a * 5) * 6;
+          ctx.beginPath();
+          ctx.moveTo(h.x + Math.cos(a) * (h.r - 8), h.y + Math.sin(a) * (h.r - 8));
+          ctx.lineTo(h.x + Math.cos(a) * (h.r + 10 + j1), h.y + Math.sin(a) * (h.r + 10 + j1));
+          ctx.lineTo(h.x + Math.cos(a + 0.05) * (h.r - 4 + j2), h.y + Math.sin(a + 0.05) * (h.r - 4 + j2));
+          ctx.stroke();
+        }
+      }
+
+      // —— 砸地瞬间冲击星芒 ——
+      if (this.slamFlash > 0 && this.pendingSlam === null && this.marks.length === 0) {
+        // 由 burst 粒子承担，无需额外绘制
+      }
+    }
+
+    drawWing(ctx, side, spread, len, col, cyc) {
+      ctx.save();
+      ctx.translate(side * 66, -58);
+      ctx.rotate(side * (-0.9 - spread * 0.7));
+      // 翅根到翅尖的扇形羽片：P3 全展 5 片，P1/P2 4 片
+      const nFeat = len > 140 ? 5 : 4;
+      ctx.fillStyle = col.stoneDD;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(side * len * 0.5, -len * 0.5, side * len, -len * 0.28);
+      ctx.lineTo(side * len * 0.82, len * 0.1);
+      ctx.quadraticCurveTo(side * len * 0.4, len * 0.2, 0, 8);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = col.stoneD;
+      ctx.beginPath();
+      ctx.moveTo(0, 2);
+      ctx.quadraticCurveTo(side * len * 0.5, -len * 0.42, side * (len - 8), -len * 0.22);
+      ctx.lineTo(side * len * 0.78, len * 0.06);
+      ctx.quadraticCurveTo(side * len * 0.4, len * 0.14, 0, 8);
+      ctx.closePath(); ctx.fill();
+      // 羽片分隔 + 蓝色能量翼缘
+      ctx.strokeStyle = col.stoneDD; ctx.lineWidth = 2;
+      for (let i = 1; i <= nFeat; i++) {
+        const tt = i / nFeat;
+        ctx.beginPath();
+        ctx.moveTo(0, 4);
+        ctx.quadraticCurveTo(side * len * tt * 0.7, -len * 0.3 * tt, side * len * tt * 0.92, -len * 0.2 * tt + 6);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = col.blue; ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, 2);
+      ctx.quadraticCurveTo(side * len * 0.5, -len * 0.42, side * (len - 8), -len * 0.22);
+      ctx.stroke();
+      // 循环2 翼缺口 / 循环3 破损
+      if (cyc >= 2) {
+        ctx.fillStyle = 'rgba(11,58,102,0.9)';
+        ctx.beginPath();
+        ctx.moveTo(side * len * 0.72, -len * 0.2);
+        ctx.lineTo(side * len * 0.88, -len * 0.12);
+        ctx.lineTo(side * len * 0.78, -len * 0.02);
+        ctx.closePath(); ctx.fill();
+      }
+      if (cyc >= 3) {
+        ctx.fillStyle = 'rgba(11,58,102,0.95)';
+        ctx.beginPath();
+        ctx.moveTo(side * len * 0.5, -len * 0.3);
+        ctx.lineTo(side * len * 0.66, -len * 0.22);
+        ctx.lineTo(side * len * 0.56, -len * 0.1);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = col.blueL; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(side * len * 0.5, -len * 0.3); ctx.lineTo(side * len * 0.62, -len * 0.18); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    drawPaws(ctx, col, inP3) {
+      // 拍击动作：windup 抬爪 / slam 伸出
+      let rLift = 0, lLift = 0, rReach = 0, lReach = 0;
+      if (this.pendingSlam) {
+        const p = 1 - this.pendingSlam.t / 0.62;
+        const arc = Math.sin(p * Math.PI);
+        if (this.pendingSlam.kind === 0) { rLift = arc; rReach = p; }
+        else if (this.pendingSlam.kind === 1) { lLift = arc; lReach = p; }
+        else { rLift = arc; lLift = arc; rReach = p; lReach = p; }
+      }
+      const paw = (side, lift, reach) => {
+        const px = side * (62 + reach * 70);
+        const py = 66 + reach * 34 - lift * 26;
+        ctx.fillStyle = col.stoneD;
+        ctx.fillRect(side * 44, 30, side * 26, 44);                 // 前臂
+        ctx.fillStyle = col.stone;
+        ctx.beginPath(); ctx.ellipse(px, py, inP3 ? 30 : 24, inP3 ? 20 : 16, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = col.stoneL;
+        ctx.beginPath(); ctx.ellipse(px - side * 4, py - 5, (inP3 ? 30 : 24) * 0.6, 7, 0, 0, TAU); ctx.fill();
+        // 爪尖：P3 蓝色能量利刃
+        for (let i = -1; i <= 1; i++) {
+          if (inP3) {
+            ctx.fillStyle = col.blue;
+            ctx.beginPath();
+            ctx.moveTo(px + i * 12, py + 8);
+            ctx.lineTo(px + i * 12 + side * 4, py + 24);
+            ctx.lineTo(px + i * 12 + side * 10, py + 10);
+            ctx.closePath(); ctx.fill();
+          } else {
+            ctx.fillStyle = col.stoneDD;
+            ctx.fillRect(px + i * 10 - 2, py + 8, 5, 9);
+          }
+        }
+      };
+      paw(1, rLift, rReach);
+      paw(-1, lLift, lReach);
+    }
+
+    drawFace(ctx, col, inP2, inP3, cyc) {
+      // 尼美斯头巾（金蓝条纹冠）
+      ctx.fillStyle = col.gold;
+      ctx.beginPath();
+      ctx.moveTo(-46, -6); ctx.quadraticCurveTo(-52, -78, 0, -84);
+      ctx.quadraticCurveTo(52, -78, 46, -6);
+      ctx.quadraticCurveTo(30, 10, 0, 12);
+      ctx.quadraticCurveTo(-30, 10, -46, -6);
+      ctx.closePath(); ctx.fill();
+      // 头巾垂肩
+      ctx.fillStyle = col.gold;
+      ctx.beginPath(); ctx.moveTo(-44, -20); ctx.quadraticCurveTo(-56, 30, -40, 62); ctx.lineTo(-26, 58); ctx.quadraticCurveTo(-34, 20, -28, -14); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(44, -20); ctx.quadraticCurveTo(56, 30, 40, 62); ctx.lineTo(26, 58); ctx.quadraticCurveTo(34, 20, 28, -14); ctx.closePath(); ctx.fill();
+      // 蓝色条纹
+      ctx.fillStyle = col.deep;
+      for (let i = -2; i <= 2; i++) {
+        ctx.fillRect(i * 14 - 3, -76, 6, 30);
+      }
+      ctx.fillRect(-40, -10, 6, 52); ctx.fillRect(34, -10, 6, 52);
+      // 人面
+      ctx.fillStyle = cyc >= 3 ? '#c9a06a' : '#e8c89a';
+      ctx.beginPath();
+      ctx.moveTo(-30, -40); ctx.quadraticCurveTo(-34, 8, 0, 30);
+      ctx.quadraticCurveTo(34, 8, 30, -40);
+      ctx.quadraticCurveTo(0, -52, -30, -40);
+      ctx.closePath(); ctx.fill();
+      // 第三只眼（P2 起，额头）
+      if (inP2 || inP3) {
+        const glow = 0.7 + Math.sin(this.t * 6) * 0.3;
+        ctx.fillStyle = `rgba(84,200,255,${0.35 * glow})`;
+        ctx.beginPath(); ctx.arc(0, -34, 13, 0, TAU); ctx.fill();
+        ctx.fillStyle = col.deep;
+        ctx.beginPath(); ctx.ellipse(0, -34, 9, 6, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = inP3 || cyc >= 3 ? col.blueL : col.blue;
+        ctx.beginPath(); ctx.arc(0, -34, 3.6, 0, TAU); ctx.fill();
+      }
+      // 双眼：P2 蓄力时闭合，发射时睁开；P3 永久开启
+      const eyesOpen = inP3 || cyc >= 3 || (inP2 && this.act !== null && (this.actT > 0.7 || this.act === 'eyeRing' || this.act === 'triEye'));
+      for (const side of [-1, 1]) {
+        const ex = side * 17, ey = -14;
+        ctx.fillStyle = col.deep;
+        if (eyesOpen) {
+          ctx.beginPath(); ctx.ellipse(ex, ey, 7.5, 5.5, 0, 0, TAU); ctx.fill();
+          ctx.fillStyle = col.blue;
+          ctx.beginPath(); ctx.arc(ex, ey, 3.4, 0, TAU); ctx.fill();
+          ctx.fillStyle = col.blueL;
+          ctx.beginPath(); ctx.arc(ex - 1, ey - 1, 1.5, 0, TAU); ctx.fill();
+        } else {
+          ctx.fillRect(ex - 7, ey - 1.5, 14, 3);
+        }
+      }
+      // 鼻口
+      ctx.strokeStyle = '#8a6a38'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, 12); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-8, 20); ctx.quadraticCurveTo(0, 25, 8, 20); ctx.stroke();
+      // 循环3：人面破碎缺块
+      if (cyc >= 3) {
+        ctx.fillStyle = 'rgba(11,58,102,0.95)';
+        ctx.beginPath();
+        ctx.moveTo(-30, -2); ctx.lineTo(-14, 6); ctx.lineTo(-22, 22); ctx.lineTo(-30, 16);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = col.blue;
+        ctx.beginPath(); ctx.arc(-22, 12, 3, 0, TAU); ctx.fill();
+      }
+    }
+
+    drawSunRing(ctx, col, inP3, cyc) {
+      const rot = this.t * (inP3 ? 6 : 1.6);
+      ctx.save();
+      ctx.translate(0, 56);
+      // 循环3：胸口破裂，蓝色能量核心暴露
+      if (cyc >= 3) {
+        const pulse = 0.7 + Math.sin(this.t * 8) * 0.3;
+        ctx.fillStyle = `rgba(84,200,255,${0.4 * pulse})`;
+        ctx.beginPath(); ctx.arc(0, 0, 34, 0, TAU); ctx.fill();
+        ctx.fillStyle = col.deep;
+        ctx.beginPath();
+        ctx.moveTo(-20, -14); ctx.lineTo(-6, -4); ctx.lineTo(-14, 12); ctx.lineTo(6, 18);
+        ctx.lineTo(20, 6); ctx.lineTo(10, -12); ctx.lineTo(20, -20);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = col.blueL;
+        ctx.beginPath(); ctx.arc(0, 0, 9 * pulse + 3, 0, TAU); ctx.fill();
+      }
+      // 太阳圆环
+      ctx.rotate(rot);
+      ctx.strokeStyle = col.gold; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(0, 0, 26, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = col.blue; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(0, 0, 19, 0, TAU); ctx.stroke();
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TAU;
+        ctx.fillStyle = i % 2 ? col.gold : col.blue;
+        ctx.fillRect(Math.cos(a) * 30 - 2, Math.sin(a) * 30 - 2, 5, 5);
+      }
+      ctx.restore();
+    }
+
+    drawCracks(ctx, cyc, col) {
+      ctx.strokeStyle = cyc >= 3 ? col.blue : col.stoneDD;
+      ctx.lineWidth = cyc >= 3 ? 2.5 : 2;
+      // 人面裂纹
+      ctx.beginPath();
+      ctx.moveTo(-12, -30); ctx.lineTo(-6, -16); ctx.lineTo(-14, -2); ctx.lineTo(-6, 12);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(14, -24); ctx.lineTo(8, -10); ctx.lineTo(16, 4);
+      ctx.stroke();
+      if (cyc >= 3) {
+        // 躯干裂缝泄蓝光
+        ctx.beginPath();
+        ctx.moveTo(-60, -60); ctx.lineTo(-40, -46); ctx.lineTo(-52, -30); ctx.lineTo(-30, -16);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(58, -56); ctx.lineTo(40, -40); ctx.lineTo(52, -24);
+        ctx.stroke();
+        ctx.strokeStyle = col.blueL; ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(-60, -60); ctx.lineTo(-40, -46); ctx.lineTo(-52, -30);
+        ctx.stroke();
+      }
+    }
+  }
+
+  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage, Sphinx };
   /** minOrd：按 Boss 出场序号解锁（1=首只）；chance：即使解锁也只有该概率进入候选池 */
   window.BOSS_LIST = [
     { cls: PigKing, weight: 3, minOrd: 1, music: 'boss' },
@@ -1876,11 +2655,14 @@
     { cls: SwordEagle, weight: 3, minOrd: 3, music: 'eagle' },        // 咬剑鹰：广州鼓点+鹰叫
     { cls: SkullKing, weight: 3, minOrd: 1, chance: 0.3, music: 'boss' },   // 第 1 轮起 30% 概率出现
     { cls: DogKing, weight: 3, minOrd: 1, chance: 0.3, music: 'boss' },     // 第 1 轮起 30% 概率出现
-    { cls: GiantPheasant, weight: 3, minOrd: 2, music: 'pheasant' },       // 野鸡王：鸡叫融合电音
+    { cls: GiantPheasant, weight: 3, minOrd: 2, ground: true, music: 'pheasant' },       // 野鸡王：地面突击型，鸡叫融合电音
     { cls: Homelander, weight: 3, minOrd: 2, chance: 0.3, music: 'hero' },  // 祖国人：军乐+电磁声
     { cls: BossMan, weight: 3, minOrd: 1, maxOrd: 3, forceChance: { 1: 0.6, 2: 0.4, 3: 0.4 }, music: 'imperial' },  // 大王：首轮 60% 直接出场，帝王军乐
     { cls: Stranger, weight: 3, minOrd: 1, maxOrd: 3, music: 'boss' },      // 怪客：仅 1-3 轮
-    { cls: FrogKing, weight: 3, minOrd: 3, music: 'boss' },                 // 蛙哥：地面巨兽，第 3 轮起
+    { cls: FrogKing, weight: 3, minOrd: 3, ground: true, music: 'boss' },    // 蛙哥：地面巨兽，第 3 轮起
     { cls: CraneSage, weight: 3, minOrd: 4, music: 'crane' }                // 鹤仙：五技特殊型，第 4 轮起；悲壮像素摇滚
+    // 狮身人面像（沙漠专属）开发中：曲目与弹幕渲染尚未完成，暂不进入 Boss 池
+    // { cls: Sphinx, weight: 3, minOrd: 1, maxOrd: 2, map: 'desert',
+    //   forceChance: { 1: 0.5, 2: 0.7 }, music: 'sphinx' }
   ];
 })();

@@ -264,6 +264,21 @@ kbd {
 
 /* 菜单内音乐开关 */
 .menu-audio-row { display: flex; justify-content: center; margin-top: 2px; }
+
+/* 菜单地图选择 */
+.map-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.map-label { font-size: 14px; font-weight: 900; color: #ffd166; letter-spacing: 2px; }
+.map-btn {
+  font-family: inherit; cursor: pointer;
+  font-size: 13px; font-weight: 900; color: #9fd8ff; letter-spacing: 1px;
+  background: rgba(10,14,30,.8);
+  border: 2px solid #33477a; border-radius: 4px;
+  padding: 6px 18px;
+  transition: transform .08s, border-color .12s, color .12s;
+}
+.map-btn:hover { border-color: #6be0ff; color: #fff; }
+.map-btn:active { transform: translateY(2px); }
+
 .audio-btn {
   font-family: inherit; cursor: pointer;
   font-size: 13px; font-weight: 900; color: #9fd8ff;
