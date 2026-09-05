@@ -271,6 +271,14 @@
       if (c) { tone(523, 0.15, 'square', 0.1, null, c.currentTime + 0.5); tone(784, 0.3, 'square', 0.1, null, c.currentTime + 0.65); }
     },
     dash() { tone(180, 0.4, 'sawtooth', 0.1, 600); },
+    /** 蛙哥吐舌：弹性"啵"（正弦快速下滑） */
+    tongueShot() { tone(620, 0.16, 'sine', 0.12, 180); tone(310, 0.12, 'triangle', 0.06, 120); },
+    /** 蛙哥卷住玩家：低频咕噜两声 */
+    grab() { tone(160, 0.14, 'sine', 0.14, 110); tone(130, 0.16, 'sine', 0.14, 90, 0.15); },
+    /** 蛙哥蓄力猛冲：低吼上行 */
+    charge() { tone(90, 0.6, 'sawtooth', 0.12, 240); tone(45, 0.6, 'square', 0.07, 110); },
+    /** 鹤仙鸣叫：高亢下滑长鸣（两段） */
+    sweep() { tone(1650, 0.28, 'triangle', 0.09, 1150); tone(1250, 0.34, 'triangle', 0.08, 780, 0.26); },
     /** 闪电链跳跃：高频噼啪 */
     zap() {
       const now = performance.now();

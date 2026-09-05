@@ -211,6 +211,21 @@
         this.vx *= (1 - dt * 2.2); this.vy *= (1 - dt * 2.2);
         if (this.fade <= 0) { this.dead = true; return; }
       }
+      // 环绕弹（旋羽领域等）：绕枢轴旋转、半径渐增；枢轴失效后沿切线飞出
+      if (this.orbit && !this.neutralized) {
+        const c = this.orbit.pivot();
+        if (c) {
+          this.orbit.ang += this.orbit.angSpd * dt;
+          this.orbit.radius += (this.orbit.grow || 0) * dt;
+          this.x = c.x + Math.cos(this.orbit.ang) * this.orbit.radius;
+          this.y = c.y + Math.sin(this.orbit.ang) * this.orbit.radius;
+          this.vx = -Math.sin(this.orbit.ang) * this.orbit.angSpd * this.orbit.radius;   // 记录切线速度
+          this.vy = Math.cos(this.orbit.ang) * this.orbit.angSpd * this.orbit.radius;
+          if (this.life <= 0) { if (this.onExpire) this.onExpire(g, this); this.dead = true; }
+          return;
+        }
+        this.orbit = null;
+      }
       if (this.grav) { this.vy += this.grav * dt; }
       // 追踪导弹 / 漂浮弹：按转向速率缓慢修正朝向玩家
       if (this.homing && !this.neutralized) {
