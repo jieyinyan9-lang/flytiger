@@ -409,7 +409,7 @@
       this.warnT = CFG.boss.warnTime;
       this.el.warnSub.textContent = '强大的气息逼近了！';
       this.el.warn.classList.remove('hidden');
-      SFX.warn();
+      SFX.bossWarn();   // 三轮递进警笛（紧张感逐级抬升）
     }
     spawnBoss(cls) {
       const b = new cls(this);

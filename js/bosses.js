@@ -899,6 +899,7 @@
         this.hp = Math.ceil(this.maxHp * 0.5);
         this.hands.forEach(h => { h.state = 'idle'; h.t = 0; });
         g.shake(16); g.flashT = 0.4; g.flashColor = '#fff';
+        SFX.phaseRise();   // 阶段转换：电流上行 + 爆点
         g.toast('大王的身体碎裂了！', 2.2);
         burst(g, this.x, this.y, 44, ['#8d96a3', '#2b2f3a', '#fff', '#ffd23b'], 320, 7, 0.9, 150);
       }
