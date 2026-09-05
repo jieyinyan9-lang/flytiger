@@ -2647,20 +2647,26 @@
   }
 
   window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage, Sphinx };
-  /** minOrd：按 Boss 出场序号解锁（1=首只）；chance：即使解锁也只有该概率进入候选池 */
+  /**
+   * Boss 池：除狮身人面像等专属 Boss 外，所有 Boss 等权（weight 相同），每一轮都可能出现。
+   * 本局已出场过的 Boss 后续抽取权重持续减半（game.js bossSeen 加权抽取）；
+   * 当所有非专属 Boss 全部轮过一遍后清空记录，概率恢复正常。
+   * ground：地面移动型（大海地图不出场）；map：地图限定（仅狮身人面像，沙漠专属，不参与轮次循环）。
+   * minOrd/maxOrd/chance/forceChance 仅狮身人面像启用时使用（保留其专属出场规则）。
+   */
   window.BOSS_LIST = [
-    { cls: PigKing, weight: 3, minOrd: 1, music: 'boss' },
-    { cls: ThunderBehemoth, weight: 3, minOrd: 2, music: 'boss' },
-    { cls: Samurai, weight: 3, minOrd: 2, music: 'boss' },
-    { cls: SwordEagle, weight: 3, minOrd: 3, music: 'eagle' },        // 咬剑鹰：广州鼓点+鹰叫
-    { cls: SkullKing, weight: 3, minOrd: 1, chance: 0.3, music: 'boss' },   // 第 1 轮起 30% 概率出现
-    { cls: DogKing, weight: 3, minOrd: 1, chance: 0.3, music: 'boss' },     // 第 1 轮起 30% 概率出现
-    { cls: GiantPheasant, weight: 3, minOrd: 2, ground: true, music: 'pheasant' },       // 野鸡王：地面突击型，鸡叫融合电音
-    { cls: Homelander, weight: 3, minOrd: 2, chance: 0.3, music: 'hero' },  // 祖国人：军乐+电磁声
-    { cls: BossMan, weight: 3, minOrd: 1, maxOrd: 3, forceChance: { 1: 0.6, 2: 0.4, 3: 0.4 }, music: 'imperial' },  // 大王：首轮 60% 直接出场，帝王军乐
-    { cls: Stranger, weight: 3, minOrd: 1, maxOrd: 3, music: 'boss' },      // 怪客：仅 1-3 轮
-    { cls: FrogKing, weight: 3, minOrd: 3, ground: true, music: 'boss' },    // 蛙哥：地面巨兽，第 3 轮起
-    { cls: CraneSage, weight: 3, minOrd: 4, music: 'crane' }                // 鹤仙：五技特殊型，第 4 轮起；悲壮像素摇滚
+    { cls: PigKing, weight: 3, music: 'boss' },
+    { cls: ThunderBehemoth, weight: 3, music: 'boss' },
+    { cls: Samurai, weight: 3, music: 'boss' },
+    { cls: SwordEagle, weight: 3, music: 'eagle' },        // 咬剑鹰：广州鼓点+鹰叫
+    { cls: SkullKing, weight: 3, music: 'boss' },
+    { cls: DogKing, weight: 3, music: 'boss' },
+    { cls: GiantPheasant, weight: 3, ground: true, music: 'pheasant' },       // 野鸡王：地面突击型，鸡叫融合电音
+    { cls: Homelander, weight: 3, music: 'hero' },  // 祖国人：军乐+电磁声
+    { cls: BossMan, weight: 3, music: 'imperial' },  // 大王：帝王军乐
+    { cls: Stranger, weight: 3, music: 'boss' },      // 怪客
+    { cls: FrogKing, weight: 3, ground: true, music: 'boss' },    // 蛙哥：地面巨兽
+    { cls: CraneSage, weight: 3, music: 'crane' }                // 鹤仙：五技特殊型；悲壮像素摇滚
     // 狮身人面像（沙漠专属）开发中：曲目与弹幕渲染尚未完成，暂不进入 Boss 池
     // { cls: Sphinx, weight: 3, minOrd: 1, maxOrd: 2, map: 'desert',
     //   forceChance: { 1: 0.5, 2: 0.7 }, music: 'sphinx' }

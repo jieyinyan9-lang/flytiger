@@ -221,7 +221,7 @@
       this.totalLevels = 0;
       this.xp = 0;
       this.xpNeed = CFG.xpNeed(0);
-      this.lastBossCls = null;  // 上一只 Boss（排斥：下轮不再出现）
+      this.bossSeen = new Set();  // 本局已出场过的 Boss（后续出场权重减半；所有非专属 Boss 轮完一遍后清空恢复）
 
       this.spawnT = 1.2;
       this.rockT = 7;
@@ -549,44 +549,44 @@
       this.bossT = rand(CFG.boss.nextMin, CFG.boss.nextMax);
     }
     triggerBossWarn() {
-      // Boss 按出场序号解锁：第1只飞猪王，第2只起解锁雷公巨兽/武士，第3只起解锁咬剑鹰
-      // 排斥规则：上一只出现的 Boss 本次不再出现
-      // chance：部分 Boss（骷髅王/狗王）即使解锁也只有 30% 概率进入候选池
+      // 除狮身人面像等专属 Boss 外，所有 Boss 等权，每一轮都可能出现；
+      // 本局已出场过的 Boss 后续出场权重持续减半（bossSeen），
+      // 直至所有非专属 Boss 全部轮过一遍后清空记录、概率恢复正常（spawnBoss 中重置）
+      // 狮身人面像保留专属规则：沙漠限定、每局一次、minOrd/maxOrd/forceChance
       const ord = this.bossSpawned + 1;
-      const ordOk = b => b.minOrd <= ord && (b.maxOrd === undefined || ord <= b.maxOrd);
-      // map：地图限定 Boss（如狮身人面像仅沙漠）；大海不出现地面移动型 Boss（蛙哥/野鸡王）
+      // ordOk：仅对显式声明 minOrd/maxOrd 的 Boss（狮身人面像）生效；其余 Boss 每轮均可出场
+      const ordOk = b => (b.minOrd === undefined || b.minOrd <= ord) &&
+                         (b.maxOrd === undefined || ord <= b.maxOrd);
+      // map：地图限定 Boss（狮身人面像仅沙漠）；大海不出现地面移动型 Boss（蛙哥/野鸡王）
       // sphinxSpawned：每局至多一次
       const mapOk = b => (b.map === undefined || b.map === this.mapId) &&
                          !(b.ground && this.mapId === 'ocean') &&
                          (b.cls.name !== 'Sphinx' || !this.sphinxSpawned);
-      let pool = window.BOSS_LIST.filter(b =>
-        ordOk(b) &&
-        mapOk(b) &&
-        b.cls.name !== this.lastBossCls &&
-        (b.chance === undefined || Math.random() < b.chance));
+      let pool = window.BOSS_LIST.filter(b => ordOk(b) && mapOk(b));
       if (!pool.length) {
-        // 兜底1：忽略概率权重（防止空池）
-        pool = window.BOSS_LIST.filter(b => ordOk(b) && mapOk(b) && b.cls.name !== this.lastBossCls);
-      }
-      if (!pool.length) {
-        // 兜底2：当前序号无其他可选 Boss 时，允许重复出现（防止空池卡死；仍受地图/单次限制）
-        pool = window.BOSS_LIST.filter(b => ordOk(b) && mapOk(b));
+        // 兜底1：放宽地图限制（防止空池卡死；仍受序号/单次限制）
+        pool = window.BOSS_LIST.filter(b => ordOk(b));
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
-      // forceChance：部分 Boss 在指定出场序号有独立的直接出场概率（如大王首轮 60%）；
-      // 未命中强制概率的该类 Boss 不再参与本轮随机池
+      // forceChance：狮身人面像在指定出场序号有独立的直接出场概率；未命中则不参与本轮随机池
       let pick = null;
-      // 地图限定 Boss（如狮身人面像仅沙漠）优先掷强制骰，避免被通用强制 Boss（大王）抢场而压低其出场率
       const forceList = pool.filter(b => b.forceChance && b.forceChance[ord] !== undefined);
-      forceList.sort((a, b) => (a.map ? 0 : 1) - (b.map ? 0 : 1));
       for (const b of forceList) {
         if (Math.random() < b.forceChance[ord]) { pick = b; break; }
       }
-      // 未命中强制概率的 Boss 不进随机池
+      // 加权随机：基础权重一致（等权），本局已出场过的 Boss 权重 ×0.5
       const randomPool = pool.filter(b => !(b.forceChance && b.forceChance[ord] !== undefined));
       if (!pick) {
         const p2 = randomPool.length ? randomPool : pool;
-        pick = p2[Math.floor(Math.random() * p2.length)];
+        const weights = p2.map(b => (b.weight || 1) * (this.bossSeen.has(b.cls.name) ? 0.5 : 1));
+        let total = 0;
+        for (const w of weights) total += w;
+        let r = Math.random() * total;
+        for (let i = 0; i < p2.length; i++) {
+          r -= weights[i];
+          if (r <= 0) { pick = p2[i]; break; }
+        }
+        if (!pick) pick = p2[p2.length - 1];   // 浮点兜底
       }
       this.pendingBoss = pick.cls;
       this.pendingBossMusic = pick.music || 'boss';   // 预警期即切到该 Boss 专属曲目
@@ -601,7 +601,12 @@
       b.musicTheme = (entry && entry.music) || 'boss';   // 专属 BGM（boss/eagle/pheasant/hero）
       this.bosses.push(b);
       this.bossSpawned++;
-      this.lastBossCls = cls.name;
+      this.bossSeen.add(cls.name);   // 登记出场：后续抽取权重减半
+      // 所有非专属 Boss（狮身人面像等地图专属除外）均已轮过一遍 → 清空记录，概率恢复正常
+      const cyclable = (window.BOSS_LIST || []).filter(e => !e.map);
+      if (cyclable.length && cyclable.every(e => this.bossSeen.has(e.cls.name))) {
+        this.bossSeen.clear();
+      }
       if (cls.name === 'Sphinx') this.sphinxSpawned = true;   // 狮身人面像每局至多一次
       this.el.bossName.textContent = `${b.bossName}（${b.title}）`;
       this.el.bossHud.classList.remove('hidden');
