@@ -780,7 +780,7 @@
         const a = Math.atan2(p.y - this.y, p.x - this.x);
         g.bullets.push(new Bullet(this.x - 80, this.y - 16,
           Math.cos(a) * 500, Math.sin(a) * 500,
-          { kind: 'orb', r: 9, dmg: 15 * g.atkScale, dmgScale: g.atkScale, life: 4, color: '#ffd23b', rockBreak: true }));
+          { kind: 'orb', r: 27, dmg: 15 * g.atkScale, dmgScale: g.atkScale, life: 4, color: '#ffd23b', rockBreak: true, fireTrail: true }));
         SFX.enemyShoot();
         g.shake(3);
       }
