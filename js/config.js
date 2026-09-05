@@ -368,6 +368,33 @@
         if (ord <= 4) return 10 + ord * 10;
         return 60 + Math.random() * 20;
       }
+    },
+
+    /** 地图表：每次进入游戏随机刷新一张；阻碍特性与草地相同（触碰暴毙 / 地面单位免疫 / 可被炮弹炸毁） */
+    maps: [
+      { id: 'grassland', name: '飞虎草原', icon: '🌿' },
+      { id: 'desert',    name: '沙漠',       icon: '🏜️', obs: ['cactusT', 'cactusM', 'cactusL'] },
+      { id: 'snow',      name: '雪地',       icon: '❄️', obs: ['iceT', 'iceM', 'iceL'] },
+      { id: 'volcano',   name: '火焰山',     icon: '🌋', obs: ['vrockT', 'vrockM', 'vrockL'], crater: true },
+      { id: 'wasteland', name: '紫色荒地',   icon: '🌆', obs: ['treeT', 'treeM', 'treeL'] },
+      { id: 'cyber',     name: '赛博朋克都市', icon: '🏙️', obs: ['poleT', 'boothL', 'buildM'] },
+      { id: 'ocean',     name: '大海',       icon: '🌊', obs: ['reefT', 'reefM', 'coralL'], sea: true }
+    ],
+
+    /** 地图特殊机制参数 */
+    map: {
+      craterInterval: 5.0,    // 火山口喷发间隔（秒）
+      craterRumble: 0.9,      // 喷发前蓄力预警时长
+      lavaR: 20,              // 巨大火焰子弹半径
+      lavaDmg: 20,            // 火焰子弹基础伤害（随 atkScale 成长）
+      lavaBlastR: 108,        // 落地爆炸半径
+      seaSurgeInterval: 10.0, // 大海波动触发间隔（秒）
+      seaSurgeDur: 4.0,       // 波动持续时长
+      seaRise: 56,            // 波动期间海平面上升高度
+      seaAmp: 6,              // 平时波浪幅度
+      seaSurgeAmp: 22,        // 波动期间波浪幅度
+      seaDmg: 5,              // 接触海水掉血量（很少）
+      seaTick: 0.5            // 海水掉血间隔（秒）
     }
   };
 

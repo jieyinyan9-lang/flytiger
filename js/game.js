@@ -220,11 +220,51 @@
       this.wayPicksThisRound = 0;   // 每轮弹道类成长选择次数（上限 3）
       this.elemPicksThisRound = 0;  // 每轮元素弹道成长选择次数（上限 2）
       this.grassDragonThisRound = false;   // 草龙每轮至多出现一次
+      this.sphinxSpawned = false;         // 狮身人面像每局至多出现一次（沙漠专属）
       this.diffMul = 1;
       this.clouds = [];
       for (let i = 0; i < 7; i++) {
         this.clouds.push({ x: rand(0, CFG.W), y: rand(50, 300), s: rand(1.5, 3), sp: rand(14, 40) });
       }
+
+      // 地图：每次进入游戏随机刷新一张（阻碍特性与草地一致）
+      this.rollMap();
+    }
+
+    /** 地图 → 龙系主题（草龙仅草原；沙虫/黑龙/红龙/骨蛇/机器蜈蚣/深海蓝龙各属其图） */
+    static get MAP_THEME() {
+      return { grassland: 'grass', desert: 'sand', snow: 'black', volcano: 'red', wasteland: 'bone', cyber: 'mech', ocean: 'sea' };
+    }
+
+    /** 随机抽取一张地图；forceDiff=true 时保证与当前地图不同（复活换图） */
+    rollMap(forceDiff) {
+      let map;
+      do {
+        map = CFG.maps[Math.floor(Math.random() * CFG.maps.length)];
+      } while (forceDiff && map.id === this.mapId);
+      this.map = map;
+      this.mapId = map.id;
+      // 火焰山火山口：固定在地面，每 5s 抛射巨大火焰弹（接触不死亡不掉血）
+      this.crater = map.crater
+        ? { x: rand(200, CFG.W - 200), t: CFG.map.craterInterval, rumble: 0 }
+        : null;
+      // 大海：波浪海平面，每 10s 一次波动（幅度变大 + 海平面上升），接触微量掉血
+      this.sea = map.sea
+        ? { t: 0, surgeT: CFG.map.seaSurgeInterval, surging: false, surgeT2: 0, rise: 0, amp: CFG.map.seaAmp }
+        : null;
+    }
+
+    /** 死亡复活后刷新至另一张地图：清空旧地图障碍与残留龙系，保留轮次/成长/生命 */
+    rerollMap() {
+      this.rollMap(true);
+      this.rocks.length = 0;
+      this.rockT = 1.2;
+      // 旧地图的龙系怪物随之消失，新地图的龙当轮可再次出场
+      for (const e of this.enemies) {
+        if (e.type === 'grassdragon') e.dead = true;
+      }
+      this.grassDragonThisRound = false;
+      this.toast(`${this.map.icon} 转移至：${this.map.name}！`, 2.6);
     }
 
     start() {
@@ -243,7 +283,7 @@
       this.el.hud.classList.remove('hidden');
       this.el.bossHud.classList.add('hidden');
       this.syncBgmBtn();     // HUD 首次显示：音乐按钮文案与实际开关状态对齐
-      this.toast('第 1 轮 · 战斗开始！', 2.2);
+      this.toast(`${this.map.icon} ${this.map.name} · 第 1 轮战斗开始！`, 2.8);
     }
 
     gameOver() {
@@ -447,17 +487,21 @@
       // chance：部分 Boss（骷髅王/狗王）即使解锁也只有 30% 概率进入候选池
       const ord = this.bossSpawned + 1;
       const ordOk = b => b.minOrd <= ord && (b.maxOrd === undefined || ord <= b.maxOrd);
+      // map：地图限定 Boss（如狮身人面像仅沙漠）；sphinxSpawned：每局至多一次
+      const mapOk = b => (b.map === undefined || b.map === this.mapId) &&
+                         (b.cls.name !== 'Sphinx' || !this.sphinxSpawned);
       let pool = window.BOSS_LIST.filter(b =>
         ordOk(b) &&
+        mapOk(b) &&
         b.cls.name !== this.lastBossCls &&
         (b.chance === undefined || Math.random() < b.chance));
       if (!pool.length) {
         // 兜底1：忽略概率权重（防止空池）
-        pool = window.BOSS_LIST.filter(b => ordOk(b) && b.cls.name !== this.lastBossCls);
+        pool = window.BOSS_LIST.filter(b => ordOk(b) && mapOk(b) && b.cls.name !== this.lastBossCls);
       }
       if (!pool.length) {
-        // 兜底2：当前序号无其他可选 Boss 时，允许重复出现（防止空池卡死）
-        pool = window.BOSS_LIST.filter(b => ordOk(b));
+        // 兜底2：当前序号无其他可选 Boss 时，允许重复出现（防止空池卡死；仍受地图/单次限制）
+        pool = window.BOSS_LIST.filter(b => ordOk(b) && mapOk(b));
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
       // forceChance：部分 Boss 在指定出场序号有独立的直接出场概率（如大王首轮 60%）；
@@ -490,6 +534,7 @@
       this.bosses.push(b);
       this.bossSpawned++;
       this.lastBossCls = cls.name;
+      if (cls.name === 'Sphinx') this.sphinxSpawned = true;   // 狮身人面像每局至多一次
       this.el.bossName.textContent = `${b.bossName}（${b.title}）`;
       this.el.bossHud.classList.remove('hidden');
       this.toast(`${b.bossName} 出现！`, 2);
@@ -607,10 +652,12 @@
     spawnEnemy(type) {
       if (this.enemies.length >= this.enemyCap()) return;   // 上限保护（含延迟生成的蝙蝠群）
       if (type === 'grassdragon') {
-        // 草龙：20 节长身的特殊小怪，每轮至多一只
+        // 龙系特殊小怪：机制/节数/出场轮数与草龙完全相同，外形按当前地图主题区分
+        const thId = Game.MAP_THEME[this.mapId] || 'grass';
         this.grassDragonThisRound = true;
-        this.enemies.push(new GrassDragon(this, false));
-        this.toast('草龙 钻出地面了！', 2.2);
+        const dragon = new GrassDragon(this, false, null, thId);
+        this.enemies.push(dragon);
+        this.toast(dragon.th.warn, 2.2);
         return;
       }
       this.enemies.push(new Enemy(type, this));
@@ -665,15 +712,111 @@
       this.rockT -= dt;
       if (this.rockT > 0) return;
       if (this.rocks.length >= this.rockMaxCount()) { this.rockT = 1.5; return; }
-      // 尺寸：小石 / 梯形石更常见
-      const roll = Math.random();
-      const kind = roll < 0.26 ? 2 : roll < 0.44 ? 4 : roll < 0.60 ? 1 : roll < 0.78 ? 3 : 0;
-      const halfW = [240, 120, 96, 210, 125][kind];
-      // 与上一块岩石保持安全间隔
+      // 造型：草原沿用原 5 种山石权重；其余地图从本地图障碍表（高/中/低）随机
+      let rock;
+      if (this.map && this.map.obs) {
+        const shapeId = this.map.obs[Math.floor(Math.random() * this.map.obs.length)];
+        rock = new Rock(0, shapeId);
+      } else {
+        const roll = Math.random();
+        const kind = roll < 0.26 ? 2 : roll < 0.44 ? 4 : roll < 0.60 ? 1 : roll < 0.78 ? 3 : 0;
+        rock = new Rock(0, 'grass' + kind);
+      }
+      const halfW = rock.w / 2;
+      // 与上一块障碍保持安全间隔
       const rightmost = this.rocks.reduce((m, r) => Math.max(m, r.x), -9999);
-      const x = Math.max(CFG.W + halfW + 260, rightmost + halfW + rand(480, 820));
-      this.rocks.push(new Rock(x, kind));
+      rock.x = Math.max(CFG.W + halfW + 260, rightmost + halfW + rand(480, 820));
+      this.rocks.push(rock);
       this.rockT = rand(2.0, 3.5);
+    }
+
+    /* ---------------- 地图机制（火山口 / 大海） ---------------- */
+    /** 危险地面高度：大海为波动海平面，其余地图为固定地面 */
+    groundYAt(x) {
+      if (this.sea) return this.seaSurfaceY(x);
+      return CFG.GROUND_Y;
+    }
+    /** 海平面 y（含波浪起伏 / 波动上升） */
+    seaSurfaceY(x, tOverride) {
+      const s = this.sea;
+      const t = tOverride !== undefined ? tOverride : s.t;
+      const w1 = Math.sin(x * 0.018 + t * 1.7) * s.amp;
+      const w2 = Math.sin(x * 0.041 - t * 2.9) * s.amp * 0.45;
+      return CFG.GROUND_Y - s.rise + w1 + w2;
+    }
+    mapTick(dt) {
+      // 大海：每 10s 一次波动 —— 波浪幅度变大、海平面上升一段距离
+      if (this.sea) {
+        const s = this.sea;
+        s.t += dt;
+        s.surgeT -= dt;
+        if (s.surgeT <= 0 && !s.surging) {
+          s.surging = true;
+          s.surgeT2 = CFG.map.seaSurgeDur;
+          this.toast('🌊 大海波动！海平面上升！', 2.2);
+          this.shake(5);
+        }
+        if (s.surging) {
+          s.surgeT2 -= dt;
+          if (s.surgeT2 <= 0) { s.surging = false; s.surgeT = CFG.map.seaSurgeInterval; }
+        }
+        const riseTarget = s.surging ? CFG.map.seaRise : 0;
+        const ampTarget = s.surging ? CFG.map.seaSurgeAmp : CFG.map.seaAmp;
+        s.rise += (riseTarget - s.rise) * Math.min(1, dt * (s.surging ? 2.6 : 1.6));
+        s.amp += (ampTarget - s.amp) * Math.min(1, dt * 2.2);
+        // 浪尖飞沫
+        if (Math.random() < dt * (s.surging ? 12 : 3)) {
+          const fx = rand(0, CFG.W);
+          this.particles.push(new Particle(fx, this.seaSurfaceY(fx) - 4,
+            rand(-30, 30), rand(-90, -30), rand(0.3, 0.6), rand(3, 5), '#d8f2ff'));
+        }
+      }
+      // 火焰山火山口：喷发前 0.9s 蓄力（震动 + 火星），随后抛射巨大火焰弹
+      if (this.crater) {
+        const c = this.crater;
+        c.t -= dt;
+        if (c.t < CFG.map.craterRumble) {
+          c.rumble = 1 - c.t / CFG.map.craterRumble;
+          this.shake(3 * c.rumble);
+          if (Math.random() < dt * 20) {
+            this.particles.push(new Particle(c.x + rand(-26, 26), CFG.GROUND_Y - 34,
+              rand(-40, 40), rand(-230, -120), rand(0.3, 0.7), rand(3, 6),
+              Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
+          }
+        } else c.rumble = 0;
+        if (c.t <= 0) { this.eruptCrater(); c.t = CFG.map.craterInterval; }
+      }
+    }
+    /** 火山口喷发：巨大火焰弹抛物线抛射至左右任意位置 */
+    eruptCrater() {
+      const c = this.crater, M = CFG.map;
+      const x0 = c.x, y0 = CFG.GROUND_Y - 44;
+      const tx = rand(70, CFG.W - 70);           // 落点：左右任意位置
+      const T = rand(1.2, 1.6);
+      const g = 620;
+      const vx = (tx - x0) / T;
+      const vy = (34 - 0.5 * g * T * T) / T;     // y(T) 落到 GROUND_Y-10
+      const dmg = Math.max(M.lavaDmg, Math.round(M.lavaDmg * this.atkScale));
+      this.bullets.push(new Bullet(x0, y0, vx, vy, {
+        kind: 'lava', r: M.lavaR, dmg, life: 6, grav: g, fireTrail: true,
+        onExpire: (gg, b) => gg.lavaBlast(b.x, b.y, b.dmg)
+      }));
+      burst(this, x0, y0, 26, ['#ff7b2e', '#ffd23b', '#c94a1e', '#fff'], 320, 7, 0.6, 180);
+      SFX.explode(true);
+      this.shake(9);
+    }
+    /** 火山弹落地爆炸：大范围火焰伤害 + 波及障碍炸毁 */
+    lavaBlast(x, y, dmg) {
+      const R = CFG.map.lavaBlastR;
+      burst(this, x, y, 44, ['#ff7b2e', '#ffd23b', '#c94a1e', '#fff5d0', '#fff'], 360, 8, 0.8, 150);
+      SFX.explode(true);
+      this.shake(11);
+      const p = this.player;
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < R + p.radius) p.hurt(Math.round(dmg * (d < R * 0.55 ? 1 : 0.6)), this);
+      for (const r of this.rocks) {
+        if (!r.dead && r.contains(x, y, R * 0.6)) r.destroy(this);
+      }
     }
 
     /* ---------------- 主循环 ---------------- */
@@ -741,6 +884,7 @@
 
       this.spawnTick(dt);
       this.rockTick(dt);
+      this.mapTick(dt);
 
       // 实体更新
       this.player.update(dt, this);
@@ -873,6 +1017,10 @@
           } else if (b.kind === 'shell') {
             b.dead = true;
             this.shellBlast(b.x, b.y, b.dmg);
+          } else if (b.kind === 'lava') {
+            // 火山口巨大火焰弹：命中玩家即引爆
+            b.dead = true;
+            this.lavaBlast(b.x, b.y, b.dmg);
           } else if (b.kind === 'missile' || b.hp > 0) {
             // 可击爆弹（导弹/漂浮战斧等 hp>0）撞到玩家：直接引爆
             b.dead = true;
@@ -974,86 +1122,414 @@
       }
     }
 
-    /* ---------------- 背景（像素草原天空） ---------------- */
+    /* ---------------- 背景（七张地图主题：草原 / 沙漠 / 雪地 / 火焰山 / 紫荒地 / 赛博都市 / 大海） ---------------- */
     buildBackground() {
-      // 天空渐变
-      this.sky = document.createElement('canvas');
-      this.sky.width = CFG.W; this.sky.height = CFG.H;
-      const sctx = this.sky.getContext('2d');
-      const g = sctx.createLinearGradient(0, 0, 0, CFG.H);
-      g.addColorStop(0, '#5fb4e8');
-      g.addColorStop(0.55, '#a8ddf5');
-      g.addColorStop(1, '#e6f6ff');
-      sctx.fillStyle = g;
-      sctx.fillRect(0, 0, CFG.W, CFG.H);
-      // 像素太阳
-      sctx.fillStyle = '#ffe08a';
-      for (let r = 0; r < 5; r++) {
-        const w = 70 - r * 10, y = 66 + r * 12;
-        sctx.fillRect(830 - w / 2, y, w, 10);
-      }
-      sctx.fillStyle = '#fff3c4';
-      sctx.fillRect(806, 90, 48, 26);
-
       const strip = (w, h, fn) => {
         const c = document.createElement('canvas');
         c.width = w; c.height = h;
         fn(c.getContext('2d'), w, h);
         return c;
       };
-      // 远山
-      this.mountains = strip(480, 200, (c, w, h) => {
-        c.fillStyle = '#8ba6c4';
-        const peaks = [[0, 150], [70, 70], [150, 130], [230, 50], [320, 120], [400, 80], [480, 140]];
-        c.beginPath();
-        c.moveTo(0, h);
-        peaks.forEach(p => c.lineTo(p[0], p[1]));
-        c.lineTo(w, h);
-        c.closePath(); c.fill();
-        c.fillStyle = '#a9c0da';
-        peaks.forEach(p => { if (p[1] < 100) c.fillRect(p[0] - 10, p[1] + 8, 20, 8); });
-      });
-      // 近丘
-      this.hills = strip(480, 120, (c, w, h) => {
-        c.fillStyle = '#6ab85c';
-        c.beginPath();
-        c.moveTo(0, h);
-        const bumps = [[0, 80], [90, 40], [200, 75], [310, 35], [420, 70], [480, 55]];
-        c.moveTo(0, h);
-        bumps.forEach(p => c.lineTo(p[0], p[1]));
-        c.lineTo(w, h);
-        c.closePath(); c.fill();
-        c.fillStyle = '#86d078';
-        for (let i = 0; i < 60; i++) c.fillRect(rand(0, w), rand(45, 100), 4, 4);
-      });
-      // 草原地面
-      this.ground = strip(480, 100, (c, w, h) => {
-        c.fillStyle = '#4f9e44';
-        c.fillRect(0, 0, w, h);
-        c.fillStyle = '#67bd57';
-        c.fillRect(0, 0, w, 14);
-        c.fillStyle = '#7ed46d';
-        for (let i = 0; i < 90; i++) c.fillRect(rand(0, w), rand(0, 12), 6, 3);
-        c.fillStyle = '#3c7d34';
-        for (let i = 0; i < 70; i++) c.fillRect(rand(0, w), rand(20, h - 6), 4, 6);
-        c.fillStyle = '#2f6629';
-        for (let i = 0; i < 40; i++) c.fillRect(rand(0, w), rand(30, h - 10), 8, 4);
-        // 小花
-        for (let i = 0; i < 8; i++) {
-          const x = rand(0, w);
-          c.fillStyle = '#ffd93b'; c.fillRect(x, rand(6, 14), 4, 4);
+      /** 整屏天空：渐变 + 天体绘制 */
+      const sky = (stops, celest) => {
+        const c = document.createElement('canvas');
+        c.width = CFG.W; c.height = CFG.H;
+        const x = c.getContext('2d');
+        const gr = x.createLinearGradient(0, 0, 0, CFG.H);
+        stops.forEach(s => gr.addColorStop(s[0], s[1]));
+        x.fillStyle = gr;
+        x.fillRect(0, 0, CFG.W, CFG.H);
+        if (celest) celest(x);
+        return c;
+      };
+      /** 像素太阳/月亮：逐层加宽圆盘 */
+      const disk = (x, cx, cy, r, col, coreCol) => {
+        x.fillStyle = col;
+        for (let i = 0; i < r; i++) {
+          const ww = r * 7 - i * 11, yy = cy - r * 7 + i * 13;
+          if (ww > 0) x.fillRect(cx - ww / 2, yy, ww, 11);
         }
+        if (coreCol) { x.fillStyle = coreCol; x.fillRect(cx - r * 3, cy - r * 2, r * 6, r * 4); }
+      };
+      /** 云（可着色：火山灰云 / 夜空云） */
+      const cloud = (col, shade) => strip(64, 28, (c) => {
+        c.fillStyle = col;
+        c.fillRect(12, 8, 40, 12);
+        c.fillRect(4, 14, 56, 8);
+        c.fillRect(20, 4, 24, 8);
+        c.fillStyle = shade;
+        c.fillRect(4, 18, 56, 4);
       });
-      // 云
-      this.cloud = document.createElement('canvas');
-      this.cloud.width = 64; this.cloud.height = 28;
-      const cc = this.cloud.getContext('2d');
-      cc.fillStyle = '#ffffff';
-      cc.fillRect(12, 8, 40, 12);
-      cc.fillRect(4, 14, 56, 8);
-      cc.fillRect(20, 4, 24, 8);
-      cc.fillStyle = '#dceeff';
-      cc.fillRect(4, 18, 56, 4);
+      /** 底部起伏剪影（远山/沙丘/雪丘通用） */
+      const bumps = (c, w, h, pts, col) => {
+        c.fillStyle = col;
+        c.beginPath();
+        c.moveTo(0, h);
+        pts.forEach(p => c.lineTo(p[0], p[1]));
+        c.lineTo(w, h);
+        c.closePath(); c.fill();
+      };
+
+      this.bg = {};
+
+      /* —— 草原（原版） —— */
+      this.bg.grassland = {
+        sky: sky([[0, '#5fb4e8'], [0.55, '#a8ddf5'], [1, '#e6f6ff']], x => {
+          x.fillStyle = '#ffe08a';
+          for (let r = 0; r < 5; r++) {
+            const w = 70 - r * 10, y = 66 + r * 12;
+            x.fillRect(830 - w / 2, y, w, 10);
+          }
+          x.fillStyle = '#fff3c4';
+          x.fillRect(806, 90, 48, 26);
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          bumps(c, w, h, [[0, 150], [70, 70], [150, 130], [230, 50], [320, 120], [400, 80], [480, 140]], '#8ba6c4');
+          c.fillStyle = '#a9c0da';
+          [[70, 70], [230, 50], [400, 80]].forEach(p => c.fillRect(p[0] - 10, p[1] + 8, 20, 8));
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          bumps(c, w, h, [[0, 80], [90, 40], [200, 75], [310, 35], [420, 70], [480, 55]], '#6ab85c');
+          c.fillStyle = '#86d078';
+          for (let i = 0; i < 60; i++) c.fillRect(rand(0, w), rand(45, 100), 4, 4);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#4f9e44'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#67bd57'; c.fillRect(0, 0, w, 14);
+          c.fillStyle = '#7ed46d';
+          for (let i = 0; i < 90; i++) c.fillRect(rand(0, w), rand(0, 12), 6, 3);
+          c.fillStyle = '#3c7d34';
+          for (let i = 0; i < 70; i++) c.fillRect(rand(0, w), rand(20, h - 6), 4, 6);
+          c.fillStyle = '#2f6629';
+          for (let i = 0; i < 40; i++) c.fillRect(rand(0, w), rand(30, h - 10), 8, 4);
+          for (let i = 0; i < 8; i++) { c.fillStyle = '#ffd93b'; c.fillRect(rand(0, w), rand(6, 14), 4, 4); }
+        }),
+        cloud: cloud('#ffffff', '#dceeff')
+      };
+
+      /* —— 沙漠：仙人掌地图，黄沙烈日 —— */
+      this.bg.desert = {
+        sky: sky([[0, '#8fd0ef'], [0.6, '#f3e3b3'], [1, '#f7d98c']], x => {
+          disk(x, 820, 86, 5, '#fff0b8', '#fff9e0');
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          bumps(c, w, h, [[0, 160], [120, 130], [260, 150], [380, 120], [480, 145]], '#e0bd7c');
+          // 远处金字塔
+          c.fillStyle = '#c9a45c';
+          [[110, 170, 120], [330, 175, 90]].forEach(([px, py, pw]) => {
+            c.beginPath(); c.moveTo(px - pw / 2, py); c.lineTo(px, py - 78); c.lineTo(px + pw / 2, py); c.closePath(); c.fill();
+            c.fillStyle = '#d9b46e';
+            c.beginPath(); c.moveTo(px, py - 78); c.lineTo(px + pw / 2, py); c.lineTo(px + pw * 0.18, py); c.closePath(); c.fill();
+            c.fillStyle = '#c9a45c';
+          });
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          bumps(c, w, h, [[0, 85], [100, 45], [220, 80], [340, 40], [480, 70]], '#e6c37f');
+          c.fillStyle = '#d4af6f';
+          for (let i = 0; i < 40; i++) c.fillRect(rand(0, w), rand(50, 100), 8, 2);
+          c.fillStyle = '#c9a45c';
+          for (let i = 0; i < 20; i++) c.fillRect(rand(0, w), rand(60, 105), 4, 4);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#e0b874'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#f0d496'; c.fillRect(0, 0, w, 14);
+          c.fillStyle = '#d4af6f';
+          for (let i = 0; i < 60; i++) c.fillRect(rand(0, w), rand(14, 40), 10, 2);
+          c.fillStyle = '#b98d4e';
+          for (let i = 0; i < 50; i++) c.fillRect(rand(0, w), rand(30, h - 8), 5, 4);
+          c.fillStyle = '#c9a45c';
+          for (let i = 0; i < 30; i++) c.fillRect(rand(0, w), rand(40, h - 10), 8, 3);
+        }),
+        cloud: cloud('#ffffff', '#f0e2c0')
+      };
+
+      /* —— 雪地：冰山地图，灰白阴天 —— */
+      this.bg.snow = {
+        sky: sky([[0, '#b8cfe0'], [0.6, '#dfeaf3'], [1, '#f6fafc']], x => {
+          disk(x, 800, 80, 4, '#fdfdfd', '#ffffff');
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          c.fillStyle = '#cfe2ef';
+          const peaks = [[0, 180], [60, 60], [130, 140], [200, 40], [280, 120], [360, 70], [430, 130], [480, 100]];
+          c.beginPath(); c.moveTo(0, h);
+          peaks.forEach(p => c.lineTo(p[0], p[1]));
+          c.lineTo(w, h); c.closePath(); c.fill();
+          c.fillStyle = '#ffffff';
+          peaks.filter(p => p[1] < 100).forEach(p => {
+            c.beginPath(); c.moveTo(p[0] - 26, p[1] + 30); c.lineTo(p[0], p[1]); c.lineTo(p[0] + 26, p[1] + 30); c.closePath(); c.fill();
+          });
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          bumps(c, w, h, [[0, 85], [110, 50], [240, 85], [360, 45], [480, 75]], '#f2f8fc');
+          c.fillStyle = '#d2e4f0';
+          for (let i = 0; i < 50; i++) c.fillRect(rand(0, w), rand(50, 105), 6, 3);
+          c.fillStyle = '#bfe0f5';
+          for (let i = 0; i < 12; i++) c.fillRect(rand(0, w), rand(60, 100), 22, 5);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#eef6fd'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#ffffff'; c.fillRect(0, 0, w, 14);
+          c.fillStyle = '#d2e4f0';
+          for (let i = 0; i < 70; i++) c.fillRect(rand(0, w), rand(16, h - 8), 7, 3);
+          c.fillStyle = '#bfe0f5';
+          for (let i = 0; i < 16; i++) c.fillRect(rand(0, w), rand(30, h - 12), 26, 6);
+          c.fillStyle = '#ffffff';
+          for (let i = 0; i < 60; i++) c.fillRect(rand(0, w), rand(0, 12), 5, 4);
+        }),
+        cloud: cloud('#f4f8ff', '#dce8f5')
+      };
+
+      /* —— 火焰山：尖石地图，暗红火山天空 —— */
+      this.bg.volcano = {
+        sky: sky([[0, '#2e1a22'], [0.55, '#6b2f2c'], [1, '#c2602e']], x => {
+          disk(x, 760, 96, 5, '#e8804a', '#ffb066');
+          x.fillStyle = 'rgba(255,140,60,0.18)';
+          x.fillRect(0, 380, CFG.W, 160);
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          c.fillStyle = '#2e1a1a';
+          const cones = [[0, 180, 110], [120, 170, 150], [300, 175, 120], [420, 165, 130]];
+          cones.forEach(([px, py, pw]) => {
+            c.beginPath(); c.moveTo(px - pw / 2, py); c.lineTo(px, py - 90); c.lineTo(px + pw / 2, py); c.closePath(); c.fill();
+          });
+          // 火山口红光
+          c.fillStyle = '#ff7b2e';
+          c.fillRect(118, 76, 10, 8);
+          c.fillStyle = '#ffd23b';
+          c.fillRect(120, 78, 6, 4);
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          bumps(c, w, h, [[0, 90], [80, 40], [180, 80], [280, 30], [380, 75], [480, 50]], '#5a3730');
+          c.fillStyle = '#ff7b2e';
+          for (let i = 0; i < 10; i++) c.fillRect(rand(0, w), rand(60, 105), 4, 4);
+          c.fillStyle = '#ffd23b';
+          for (let i = 0; i < 6; i++) c.fillRect(rand(0, w), rand(70, 105), 3, 3);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#3a2b27'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#4a362f'; c.fillRect(0, 0, w, 14);
+          c.fillStyle = '#2b1d1f';
+          for (let i = 0; i < 50; i++) c.fillRect(rand(0, w), rand(20, h - 8), 8, 6);
+          // 熔岩裂纹
+          for (let i = 0; i < 7; i++) {
+            let lx = rand(0, w), ly = rand(20, h - 20), ll = randi(3, 7);
+            c.fillStyle = '#ff7b2e';
+            for (let j = 0; j < ll; j++) { c.fillRect(lx, ly, 10, 4); lx += 8; ly += rand(-8, 8); }
+            c.fillStyle = '#ffd23b';
+            c.fillRect(lx - 8 * ll + 2, 0, 0, 0);
+          }
+          c.fillStyle = '#ffd23b';
+          for (let i = 0; i < 14; i++) c.fillRect(rand(0, w), rand(20, h - 10), 3, 3);
+        }),
+        cloud: cloud('#5a504c', '#453d3a')
+      };
+
+      /* —— 紫色荒地：枯木地图，黄昏紫天 —— */
+      this.bg.wasteland = {
+        sky: sky([[0, '#241b3a'], [0.55, '#4a2f5c'], [1, '#8e4a78']], x => {
+          disk(x, 780, 84, 4, '#e8dff5', '#f5efff');
+          x.fillStyle = '#cdbfe0';
+          x.fillRect(770, 78, 6, 4); x.fillRect(792, 92, 5, 4);
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          // 平顶山（mesa）
+          c.fillStyle = '#3d2b4d';
+          [[40, 90, 120], [230, 70, 150], [400, 100, 110]].forEach(([px, top, pw]) => {
+            c.fillRect(px - pw / 2, top, pw, h - top);
+            c.fillStyle = '#4e3762'; c.fillRect(px - pw / 2, top, pw, 10); c.fillStyle = '#3d2b4d';
+          });
+          // 枯树剪影
+          c.fillStyle = '#2a1d38';
+          for (let i = 0; i < 5; i++) {
+            const tx = rand(20, w - 20), ty = rand(120, 180);
+            c.fillRect(tx - 2, ty, 5, h - ty);
+            c.fillRect(tx - 14, ty - 10, 12, 4);
+            c.fillRect(tx + 4, ty - 18, 12, 4);
+          }
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          bumps(c, w, h, [[0, 85], [110, 50], [240, 80], [360, 45], [480, 70]], '#5a3f63');
+          c.fillStyle = '#33243b';
+          for (let i = 0; i < 40; i++) c.fillRect(rand(0, w), rand(50, 105), 4, 7);
+          c.fillStyle = '#6e4f7a';
+          for (let i = 0; i < 30; i++) c.fillRect(rand(0, w), rand(55, 100), 6, 3);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#46324e'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#573f5f'; c.fillRect(0, 0, w, 14);
+          c.fillStyle = '#2c1f36';
+          for (let i = 0; i < 60; i++) c.fillRect(rand(0, w), rand(18, 40), 3, 8);
+          c.fillStyle = '#33243b';
+          for (let i = 0; i < 40; i++) c.fillRect(rand(0, w), rand(30, h - 10), 9, 3);
+          c.fillStyle = '#6e4f7a';
+          for (let i = 0; i < 25; i++) c.fillRect(rand(0, w), rand(36, h - 8), 6, 4);
+        }),
+        cloud: cloud('#4a3d5e', '#372c48')
+      };
+
+      /* —— 赛博朋克都市：电线杆/电话亭/破楼地图，霓虹夜空 —— */
+      this.bg.cyber = {
+        sky: sky([[0, '#0b0e26'], [0.55, '#1c1440'], [1, '#43205f']], x => {
+          for (let i = 0; i < 50; i++) {
+            x.fillStyle = ['#ffffff', '#35e0ff', '#ff4fd8'][i % 3];
+            x.fillRect(rand(0, CFG.W), rand(10, 300), 2, 2);
+          }
+          disk(x, 800, 80, 4, '#b8c0ff', '#e8e0ff');
+          x.fillStyle = 'rgba(255,79,216,0.12)';
+          x.fillRect(0, 360, CFG.W, 110);
+          x.fillStyle = 'rgba(53,224,255,0.10)';
+          x.fillRect(0, 420, CFG.W, 50);
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          c.fillStyle = '#141830';
+          let bx = 0;
+          while (bx < w) {
+            const bw = randi(30, 60), bh = randi(60, 150);
+            c.fillRect(bx, h - bh, bw, bh);
+            for (let wy = h - bh + 8; wy < h - 10; wy += 14) {
+              for (let wx = bx + 5; wx < bx + bw - 6; wx += 10) {
+                if (Math.random() < 0.35) {
+                  c.fillStyle = ['#ffd93b', '#35e0ff', '#ff4fd8'][randi(0, 2)];
+                  c.fillRect(wx, wy, 4, 6);
+                  c.fillStyle = '#141830';
+                }
+              }
+            }
+            bx += bw + randi(2, 8);
+          }
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          c.fillStyle = '#232a44';
+          let bx = 0;
+          while (bx < w) {
+            const bw = randi(50, 90), bh = randi(50, 105);
+            c.fillRect(bx, h - bh, bw, bh);
+            for (let wy = h - bh + 8; wy < h - 8; wy += 16) {
+              for (let wx = bx + 6; wx < bx + bw - 8; wx += 14) {
+                if (Math.random() < 0.5) {
+                  c.fillStyle = ['#ffd93b', '#35e0ff', '#ff4fd8', '#ffffff'][randi(0, 3)];
+                  c.fillRect(wx, wy, 6, 8);
+                }
+              }
+            }
+            // 霓虹竖招牌
+            if (Math.random() < 0.5) {
+              c.fillStyle = Math.random() < 0.5 ? '#ff4fd8' : '#35e0ff';
+              c.fillRect(bx + 2, h - bh + 10, 3, bh - 24);
+            }
+            bx += bw + 4;
+          }
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#23262e'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#2d313b'; c.fillRect(0, 0, w, 14);
+          // 车道虚线
+          c.fillStyle = '#f5d742';
+          for (let x = 0; x < w; x += 48) c.fillRect(x, 52, 26, 5);
+          // 霓虹路边灯
+          c.fillStyle = '#35e0ff';
+          for (let i = 0; i < 20; i++) c.fillRect(rand(0, w), 16, 3, 3);
+          c.fillStyle = '#ff4fd8';
+          for (let i = 0; i < 20; i++) c.fillRect(rand(0, w), 24, 3, 3);
+          c.fillStyle = '#191c24';
+          for (let i = 0; i < 25; i++) c.fillRect(rand(0, w), rand(30, h - 8), 10, 4);
+        }),
+        cloud: cloud('#2a2f4a', '#1d2138')
+      };
+
+      /* —— 大海：礁石/珊瑚地图，海水动态绘制（无地面条带） —— */
+      this.bg.ocean = {
+        sky: sky([[0, '#7cc8ee'], [0.6, '#b7e6fb'], [1, '#eaf9ff']], x => {
+          disk(x, 820, 86, 5, '#fff0b8', '#fff9e0');
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          // 远海波浪条带
+          c.fillStyle = '#7fbfe6';
+          for (let y = 90; y < h; y += 22) c.fillRect(0, y, w, 8);
+          c.fillStyle = '#a8d8f0';
+          for (let y = 100; y < h; y += 22) c.fillRect(0, y, w, 5);
+          c.fillStyle = '#d8f2ff';
+          for (let i = 0; i < 30; i++) c.fillRect(rand(0, w), rand(90, 180), 14, 3);
+          // 远处小岛
+          c.fillStyle = '#d9c18a';
+          c.beginPath(); c.ellipse(360, 168, 46, 14, 0, 0, TAU); c.fill();
+          c.fillStyle = '#5fae6a';
+          c.fillRect(356, 150, 10, 18);
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          c.fillStyle = '#9fd0ec';
+          for (let y = 40; y < h; y += 26) {
+            for (let x = 0; x < w; x += 64) c.fillRect(x + (y % 52 ? 0 : 20), y, 34, 7);
+          }
+          c.fillStyle = '#ffffff';
+          for (let i = 0; i < 40; i++) c.fillRect(rand(0, w), rand(30, 110), 16, 3);
+        }),
+        ground: null,
+        cloud: cloud('#ffffff', '#dceeff')
+      };
+
+      // 兼容旧引用
+      this.sky = this.bg.grassland.sky;
+      this.mountains = this.bg.grassland.far;
+      this.hills = this.bg.grassland.mid;
+      this.ground = this.bg.grassland.ground;
+      this.cloud = this.bg.grassland.cloud;
+    }
+
+    /** 大海：波浪海平面（逐帧绘制；波动期间幅度变大 + 海面上升） */
+    renderSea(ctx) {
+      const s = this.sea;
+      const t = this.state === 'menu' ? performance.now() / 1000 : s.t;
+      const base = CFG.GROUND_Y - s.rise;
+      // 深水 / 中水色带
+      ctx.fillStyle = '#1b5a96';
+      ctx.fillRect(0, base + 26, CFG.W, CFG.H - (base + 26));
+      ctx.fillStyle = '#2b7fc8';
+      ctx.fillRect(0, base + 10, CFG.W, 24);
+      // 波浪表面：逐列亮带 + 波峰白浪
+      for (let x = 0; x <= CFG.W; x += 8) {
+        const w1 = Math.sin(x * 0.018 + t * 1.7) * s.amp;
+        const w2 = Math.sin(x * 0.041 - t * 2.9) * s.amp * 0.45;
+        const sy = base + w1 + w2;
+        ctx.fillStyle = '#4aa3e0';
+        ctx.fillRect(x, sy, 8, 12);
+        ctx.fillStyle = '#7fc6ef';
+        ctx.fillRect(x, sy, 8, 5);
+        const crest = Math.sin(x * 0.018 + t * 1.7);
+        if (crest > 0.55) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x, sy - 2, 8, 3); }
+        else if (crest > 0.15) { ctx.fillStyle = '#d8f2ff'; ctx.fillRect(x, sy - 1, 8, 2); }
+      }
+    }
+
+    /** 火焰山火山口：地面熔岩丘装饰（无碰撞，接触不死亡不掉血） */
+    renderCrater(ctx) {
+      const c = this.crater;
+      const cx = c.x, base = CFG.GROUND_Y;
+      const rumble = c.rumble || 0;
+      const jx = rumble > 0 ? rand(-2, 2) : 0;
+      // 玄武岩矮丘（梯形分层）
+      const w = 200;
+      for (let r = 0; r < 5; r++) {
+        const yy = base - 10 - r * 8;
+        const inset = r * 15;
+        ctx.fillStyle = r < 2 ? '#1d1416' : (r % 2 ? '#3a2626' : '#2b1d20');
+        ctx.fillRect(cx - w / 2 + inset + jx, yy, w - inset * 2, 8);
+      }
+      // 中央喷火口：脉动熔岩
+      const pulse = 0.85 + Math.sin(performance.now() / 130) * 0.15 + rumble * 0.6;
+      const gw = 68 * pulse, gh = 14 + rumble * 8;
+      ctx.fillStyle = '#c94a1e';
+      ctx.fillRect(cx - gw / 2 - 6, base - 50, gw + 12, gh + 10);
+      ctx.fillStyle = '#ff7b2e';
+      ctx.fillRect(cx - gw / 2, base - 48, gw, gh);
+      ctx.fillStyle = '#ffd23b';
+      ctx.fillRect(cx - gw * 0.35, base - 46, gw * 0.7, gh * 0.55);
+      ctx.fillStyle = '#fff5d0';
+      ctx.fillRect(cx - gw * 0.16, base - 44, gw * 0.32, gh * 0.3);
+      // 喷口黑岩沿
+      ctx.fillStyle = '#1d1416';
+      ctx.fillRect(cx - gw / 2 - 12, base - 52, 12, 22);
+      ctx.fillRect(cx + gw / 2, base - 52, 12, 22);
     }
 
     drawTiled(img, y, par, totalH) {
@@ -1072,17 +1548,22 @@
         ctx.translate(rand(-this.shakeMag, this.shakeMag) * 0.5, rand(-this.shakeMag, this.shakeMag) * 0.5);
       }
 
-      // 背景
-      ctx.drawImage(this.sky, 0, 0);
+      // 背景（按当前地图主题）
+      const bg = this.bg[this.mapId] || this.bg.grassland;
+      ctx.drawImage(bg.sky, 0, 0);
       this.clouds.forEach(c => {
         ctx.imageSmoothingEnabled = false;
         ctx.globalAlpha = 0.9;
-        ctx.drawImage(this.cloud, c.x, c.y, this.cloud.width * c.s, this.cloud.height * c.s);
+        ctx.drawImage(bg.cloud, c.x, c.y, bg.cloud.width * c.s, bg.cloud.height * c.s);
       });
       ctx.globalAlpha = 1;
-      this.drawTiled(this.mountains, 300, 0.12, 200);
-      this.drawTiled(this.hills, 400, 0.28, 120);
-      this.drawTiled(this.ground, CFG.GROUND_Y, 0.55, CFG.H - CFG.GROUND_Y);
+      this.drawTiled(bg.far, 300, 0.12, 200);
+      this.drawTiled(bg.mid, 400, 0.28, 120);
+      if (bg.ground) this.drawTiled(bg.ground, CFG.GROUND_Y, 0.55, CFG.H - CFG.GROUND_Y);
+      // 大海：动态波浪海平面（画在实体层前，礁石/珊瑚立在海中）
+      if (this.sea) this.renderSea(ctx);
+      // 火焰山：火山口场景装饰（无碰撞）
+      if (this.crater) this.renderCrater(ctx);
 
       if (this.state !== 'menu') {
         // 山石障碍（地面层）
