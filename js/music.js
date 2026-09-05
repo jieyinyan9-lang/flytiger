@@ -16,7 +16,10 @@
   let ctx = null, bus = null, master = null, timer = null, noiseBuf = null;
   let current = null;
   let runners = [];          // 并存调度的播放实例（新曲淡入期间旧曲继续演奏）
-  let muted = false;
+  // 背景音乐开关：localStorage 持久化（'0' = 关，其余/缺省 = 开）
+  let muted = (function () {
+    try { return localStorage.getItem('flytiger_bgm') === '0'; } catch (e) { return false; }
+  })();
 
   const FADE_IN = 1.7;       // 新曲淡入时长（秒）
   const FADE_OUT = 1.6;      // 旧曲淡出时长（秒）
@@ -857,14 +860,18 @@
       bus.gain.exponentialRampToValueAtTime(Math.max(0.0001, v), ctx.currentTime + 0.4);
     },
 
+    /** 背景音乐开关：0.35s 平滑淡出/淡入，并持久化到 localStorage */
     setMuted(m) {
       muted = m;
+      try { localStorage.setItem('flytiger_bgm', m ? '0' : '1'); } catch (e) {}
       if (master && ctx) {
         master.gain.cancelScheduledValues(ctx.currentTime);
         master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), ctx.currentTime);
         master.gain.exponentialRampToValueAtTime(m ? 0.0001 : 0.85, ctx.currentTime + 0.35);
       }
     },
+
+    isMuted() { return muted; },
 
     current() { return current ? current.defKey : null; },
     /** 调试：当前并存的播放实例数（交叉淡化期间为 2） */

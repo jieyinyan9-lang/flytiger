@@ -40,7 +40,10 @@
         <div id="melee-icon">爪</div>
         <div id="melee-cd"></div>
       </div>
-      <button id="mute-btn" type="button">音效 开</button>
+      <div class="hud-btns">
+        <button id="bgm-btn" type="button">音乐 开</button>
+        <button id="mute-btn" type="button">音效 开</button>
+      </div>
     </div>
   </div>
 
@@ -77,13 +80,16 @@
       <button id="mode-keyboard" class="mode-btn active" type="button">⌨ 键盘模式<small>方向键 / WASD</small></button>
       <button id="mode-mouse" class="mode-btn" type="button">🖱 鼠标模式<small>移动鼠标引导飞行</small></button>
     </div>
+    <div class="menu-audio-row">
+      <button id="menu-bgm-btn" class="audio-btn" type="button">🎵 背景音乐：开</button>
+    </div>
     <div class="menu-ctrl">
       <div><b>移动</b>　键盘模式：方向键 / WASD　｜　鼠标模式：鼠标位置引导（均自动射击）</div>
       <div><b>近战</b>　接触敌人自动爪击（3 秒冷却）</div>
       <div><b>大招</b>　击杀积满怒气，按 <kbd>空格</kbd>/<kbd>J</kbd> 释放强光波，肃清全屏小怪</div>
       <div><b>强化</b>　能量满后三选一　<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>（可解锁闪电子弹/防护刀刃等）</div>
       <div><b>轮次</b>　每击败 1 个 Boss 通过 1 轮，怪物潮与新敌人随轮次降临</div>
-      <div><b>其他</b>　<kbd>P</kbd> 暂停　<kbd>M</kbd> 音效</div>
+      <div><b>其他</b>　<kbd>P</kbd> 暂停　<kbd>M</kbd> 音效　<kbd>N</kbd> 音乐</div>
     </div>
     <button id="start-btn" class="big-btn" type="button">▶ 开始战斗</button>
   </div>
@@ -104,9 +110,9 @@
 <script src="js/sprites.js?v=20260906r30"></script>
 <script src="js/config.js?v=20260906r30"></script>
 <script src="js/audio.js?v=20260906r30"></script>
-<script src="js/music.js?v=20260906r30"></script>
+<script src="js/music.js?v=20260906r34"></script>
 <script src="js/entities.js?v=20260906r30"></script>
 <script src="js/bosses.js?v=20260906r30"></script>
-<script src="js/game.js?v=20260906r30"></script>
+<script src="js/game.js?v=20260906r34"></script>
 </body>
 </html>

@@ -92,14 +92,15 @@ kbd {
   position: absolute; left: 0; top: 0; right: 0; height: 0%;
   background: rgba(0,0,0,.65);
 }
-#mute-btn {
+.hud-btns { display: flex; gap: 8px; pointer-events: auto; }
+#mute-btn, #bgm-btn {
   pointer-events: auto;
   background: rgba(10,14,30,.8); color: #9fd8ff;
   border: 2px solid #000; box-shadow: 0 0 0 2px rgba(255,255,255,.25);
   font-family: inherit; font-size: 12px; font-weight: bold;
   padding: 4px 8px; cursor: pointer;
 }
-#mute-btn:hover { color: #fff; }
+#mute-btn:hover, #bgm-btn:hover { color: #fff; }
 
 /* ---------- Boss 血条 ---------- */
 #boss-hud {
@@ -261,6 +262,20 @@ kbd {
 }
 .mode-btn.active small { color: #0e4a5e; font-weight: 700; }
 .mode-btn:active { transform: translateY(2px); }
+
+/* 菜单内音乐开关 */
+.menu-audio-row { display: flex; justify-content: center; margin-top: 12px; }
+.audio-btn {
+  font-family: inherit; cursor: pointer;
+  font-size: 14px; font-weight: 900; color: #9fd8ff;
+  background: rgba(10,14,30,.8);
+  border: 2px solid #33477a; border-radius: 4px;
+  padding: 8px 22px; letter-spacing: 1px;
+  transition: transform .08s, border-color .12s, color .12s;
+}
+.audio-btn:hover { border-color: #6be0ff; color: #fff; }
+.audio-btn:active { transform: translateY(2px); }
+.audio-btn.off { color: #7e93c0; }
 .big-btn {
   margin-top: 10px;
   font-family: inherit; font-size: 22px; font-weight: 900; letter-spacing: 6px;

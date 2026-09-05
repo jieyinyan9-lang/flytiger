@@ -48,12 +48,17 @@
         gameover: document.getElementById('gameover'),
         goStats: document.getElementById('go-stats'),
         muteBtn: document.getElementById('mute-btn'),
+        bgmBtn: document.getElementById('bgm-btn'),
+        menuBgmBtn: document.getElementById('menu-bgm-btn'),
         modeKeyboard: document.getElementById('mode-keyboard'),
         modeMouse: document.getElementById('mode-mouse')
       };
       document.getElementById('start-btn').addEventListener('click', () => this.start());
       document.getElementById('restart-btn').addEventListener('click', () => this.start());
       this.el.muteBtn.addEventListener('click', () => this.toggleMute());
+      this.el.bgmBtn.addEventListener('click', () => this.toggleBgm());
+      this.el.menuBgmBtn.addEventListener('click', () => this.toggleBgm());
+      this.syncBgmBtn();
       // 操作模式选择（菜单）
       this.ctrlMode = 'keyboard';
       this.el.modeKeyboard.addEventListener('click', () => this.setCtrlMode('keyboard'));
@@ -89,6 +94,7 @@
         if (e.code === 'KeyJ' && this.state === 'playing') this.player.tryUltimate(this);
         if (e.code === 'KeyP' && (this.state === 'playing' || this.state === 'paused')) this.togglePause();
         if (e.code === 'KeyM') this.toggleMute();
+        if (e.code === 'KeyN') this.toggleBgm();
         if (this.state === 'levelup' && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3')) {
           const idx = e.code === 'Digit1' ? 0 : e.code === 'Digit2' ? 1 : 2;
           if (this.pendingOptions[idx]) this.pickUpgrade(idx);
@@ -119,6 +125,21 @@
       const m = !SFX.isMuted();
       SFX.setMuted(m);
       this.el.muteBtn.textContent = m ? '音效 关' : '音效 开';
+    }
+
+    /** 切换背景音乐开/关（HUD 按钮、菜单按钮、N 键共用） */
+    toggleBgm() {
+      if (!window.Music) return;
+      Music.setMuted(!Music.isMuted());
+      this.syncBgmBtn();
+    }
+
+    /** 按当前静音状态同步两处按钮文案 */
+    syncBgmBtn() {
+      const m = window.Music ? Music.isMuted() : false;
+      this.el.bgmBtn.textContent = m ? '音乐 关' : '音乐 开';
+      this.el.menuBgmBtn.textContent = m ? '🎵 背景音乐：关' : '🎵 背景音乐：开';
+      this.el.menuBgmBtn.classList.toggle('off', m);
     }
 
     /** 切换操作模式（菜单选择，战斗中不可改） */
@@ -220,6 +241,7 @@
       this.el.warn.classList.add('hidden');
       this.el.hud.classList.remove('hidden');
       this.el.bossHud.classList.add('hidden');
+      this.syncBgmBtn();     // HUD 首次显示：音乐按钮文案与实际开关状态对齐
       this.toast('第 1 轮 · 战斗开始！', 2.2);
     }
 
