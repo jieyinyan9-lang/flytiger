@@ -899,6 +899,8 @@
       this.spinUsed = 0;      // 旋转激光使用次数（上限 3）
       this.rotA = 0;
       this.spinFire = 0;
+      this.spinOff = 0;       // 旋转扫射自转相位（必须初始化，否则 undefined-dt=NaN 导致光束方向 NaN 无法绘制/命中）
+      this.teleX = 0; this.teleY = 0;   // 瞬移激光落点
       this.deathCols = ['#e8c34a', '#2f6fd0', '#e0453a', '#fff'];
     }
     update(dt, g) {
@@ -922,15 +924,21 @@
         this.atkT -= dt;
         if (this.atkT <= 0) {
           const roll = Math.random();
-          if (this.spinUsed < 3 && roll < 0.26) {
+          if (this.spinUsed < 3 && roll < 0.22) {
             // 慢速旋转激光（最多 3 次）
             this.state = 'spin'; this.stateT = 0;
             this.spinUsed++;
+            this.spinOff = 0;   // 每次进入旋转扫射重置自转相位（防 NaN 累积）
             this.rotA = Math.atan2(p.y - this.y, p.x - this.x);
             this.spinFire = 0.25;
             SFX.phaseRise();   // 危险招式提示：旋转扫射蓄力
             g.toast(`祖国人开始旋转扫射！（${this.spinUsed}/3）`, 1.8);
-          } else if (roll < 0.60) {
+          } else if (roll < 0.42) {
+            // 瞬移激光：原地闪烁后瞬移至玩家下方，朝上释放垂直激光
+            this.state = 'teleOut'; this.stateT = 0;
+            SFX.bossCharge();
+            g.toast('祖国人瞬移了！', 1.4);
+          } else if (roll < 0.66) {
             // 落地冲刺
             this.state = 'land'; this.stateT = 0;
           } else {
@@ -987,6 +995,43 @@
         }
         if (this.stateT > 5.5) { this.state = 'fight'; this.stateT = 0; this.atkT = rand(1.8, 2.6); }
       }
+      else if (this.state === 'teleOut') {
+        // 瞬移前 0.35s：原地高频闪烁（走位提示）
+        this.x = this.hoverX + Math.sin(this.t * 0.9) * 36;
+        this.y = this.baseY + Math.sin(this.t * 2.2) * 22;
+        if (this.stateT > 0.35) {
+          // 锁定玩家当前位置，瞬移到其正下方贴地处
+          this.teleX = clamp(p.x, 110, CFG.W - 110);
+          this.teleY = CFG.GROUND_Y - 92;
+          burst(g, this.x, this.y, 18, ['#ffd23b', '#2f6fd0', '#fff'], 240, 5, 0.5, 120);
+          this.x = this.teleX; this.y = this.teleY; this.baseY = this.teleY;
+          this.state = 'teleAim'; this.stateT = 0;
+          burst(g, this.x, this.y, 18, ['#ff3b3b', '#ffd23b', '#fff'], 260, 5, 0.5, 120);
+          g.shake(6);
+          SFX.phaseRise();
+          g.toast('小心头顶！', 1.2);
+        }
+      }
+      else if (this.state === 'teleAim') {
+        // 落点蓄力 0.55s：垂直红色预警线（render 绘制），玩家可走位躲避
+        this.x = this.teleX; this.y = this.teleY;
+        if (this.stateT > 0.55) {
+          // 朝上三束紧密垂直激光（中间竖直、两侧微偏）
+          for (let k = -1; k <= 1; k++) {
+            g.beams.push(new Beam(this.x, this.y - 24, -Math.PI / 2 + k * 0.13, 1500, 15,
+              Math.round(18 * g.atkScale), 0.08, false));
+          }
+          SFX.warn(); g.shake(8);
+          this.state = 'teleBack'; this.stateT = 0;
+        }
+      }
+      else if (this.state === 'teleBack') {
+        // 发射后归位
+        this.x += (this.hoverX - this.x) * dt * 2.6;
+        this.baseY += (clamp(p.y - 50, 120, CFG.GROUND_Y - 170) - this.baseY) * dt * 2.6;
+        this.y += (this.baseY - this.y) * dt * 2.6;
+        if (this.stateT > 0.9) { this.state = 'fight'; this.stateT = 0; this.atkT = rand(1.4, 2.2); }
+      }
     }
     fireBeamSweep(g, p) {
       const base = Math.atan2(p.y - this.y, p.x - this.x);
@@ -996,13 +1041,34 @@
       SFX.warn(); g.shake(4);
     }
     render(ctx) {
+      // 瞬移前：高频闪烁（隔帧只画金色残影光圈）
+      if (this.state === 'teleOut' && Math.floor(this.t * 30) % 2 === 0) {
+        ctx.fillStyle = 'rgba(255,210,59,0.25)';
+        ctx.beginPath(); ctx.arc(this.x, this.y, 60 + Math.sin(this.t * 20) * 8, 0, TAU); ctx.fill();
+        return;
+      }
       const ang = this.state === 'spin' ? this.spinOff : Math.sin(this.t * 2) * 0.06;
       drawSprite(ctx, Sprites.homelanderL, this.x, this.y, 6.2, 6.2, ang, this.flash);
-      // 旋转激光蓄力：双眼红光
-      if (this.state === 'spin') {
+      // 旋转激光 / 瞬移激光蓄力：双眼红光
+      if (this.state === 'spin' || this.state === 'teleAim') {
         ctx.fillStyle = Math.floor(this.t * 10) % 2 ? '#ff3b3b' : '#ffd23b';
         ctx.fillRect(this.x - 30, this.y - 14, 8, 5);
         ctx.fillRect(this.x - 30, this.y + 9, 8, 5);
+      }
+      // 瞬移落点：三条垂直红色预警虚线（与实际激光同轨迹）
+      if (this.state === 'teleAim') {
+        const on = Math.floor(this.t * 14) % 2 === 0;
+        if (on) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,70,70,0.85)'; ctx.lineWidth = 4; ctx.setLineDash([14, 10]);
+          for (let k = -1; k <= 1; k++) {
+            const a = -Math.PI / 2 + k * 0.13;
+            ctx.beginPath(); ctx.moveTo(this.x, this.y - 24);
+            ctx.lineTo(this.x + Math.cos(a) * 1500, this.y - 24 + Math.sin(a) * 1500);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
       }
     }
   }
@@ -1466,9 +1532,12 @@
           this.skillT -= dt;
           if (this.skillT <= 0) {
             this.skillT = 0.25;
-            if (dist < 175 && this.clawCd <= 0) { this.state = 'clawWind'; this.stateT = 0; }
-            else if (this.tongueCd <= 0 && dist > 140) { this.state = 'tongueWind'; this.stateT = 0; }
+            // 蛙哥落地常贴玩家脸：爪击仅贴脸(<150)优先，舌头从中近距(>60)即可吐（舌头贯穿全屏），
+            // 避免贴身时舌头永远达不到旧的 dist>140 触发线而"打不出来"
+            if (dist < 150 && this.clawCd <= 0) { this.state = 'clawWind'; this.stateT = 0; }
+            else if (this.tongueCd <= 0 && dist > 60) { this.state = 'tongueWind'; this.stateT = 0; }
             else if (this.chargeCd <= 0 && dist > 160) { this.state = 'chargeWind'; this.stateT = 0; }
+            else if (dist < 200 && this.clawCd <= 0) { this.state = 'clawWind'; this.stateT = 0; }
           }
         } else {
           // 空中：重力弧线
