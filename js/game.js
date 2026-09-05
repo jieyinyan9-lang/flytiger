@@ -879,8 +879,8 @@
             this.shellBlast(b.x, b.y, b.dmg);
           } else {
             b.dead = true;
-            p.hurt(b.dmg, this);
-            if (b.onPlayerHit) b.onPlayerHit(this, b);   // 命中玩家回调（怪客十字弹吸血等）
+            // 命中玩家回调（怪客十字弹吸血、大王斧击无敌等）：玩家无敌帧未实际命中则不触发
+            if (p.hurt(b.dmg, this) !== false && b.onPlayerHit) b.onPlayerHit(this, b);
             burst(this, b.x, b.y, 6, ['#ff5252', '#fff'], 160, 4, 0.3);
           }
         }

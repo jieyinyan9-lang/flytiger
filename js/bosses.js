@@ -1026,12 +1026,14 @@
       ];
       this.ringT = 2.0;
       this.eyeT = 3.0;
+      this.invulnT = 0;        // 斧头命中玩家获得的无敌时间（可叠加）
       this.deathCols = ['#2b2f3a', '#e8eef7', '#ffd23b', '#e0453a'];
     }
     update(dt, g) {
       this.t += dt; this.stateT += dt;
       this.flash = Math.max(0, this.flash - dt);
       this.commonMove(dt);
+      this.invulnT = Math.max(0, this.invulnT - dt);
       const p = g.player;
 
       if (this.state === 'enter') {
@@ -1111,7 +1113,7 @@
         }
         else if (this.state === 'handsOut') {
           this.stepHands(dt, g);
-          if (this.stateT > 2.6) { this.state = 'handsBack'; this.stateT = 0; this.hands.forEach(h => h.t = 0); }
+          if (this.stateT > 5.0) { this.state = 'handsBack'; this.stateT = 0; this.hands.forEach(h => h.t = 0); }
         }
         else if (this.state === 'handsBack') {
           this.stepHands(dt, g);
@@ -1147,14 +1149,14 @@
         if (this.eyeT <= 0) {
           this.eyeT = rand(3.2, 4.0);
           // 双眼位置：bossHeadL 为 24×22 精灵缩放 13 倍居中绘制，翻转后两个黑色瞳孔
-          // 在精灵坐标 (9,12)/(14,12)，换算为相对中心的局部偏移并随头部微旋
+          // 中心在精灵坐标 (14,12)/(9,12)，换算为相对中心的局部偏移 (±32.5,+19.5) 并随头部微旋
           const th = Math.sin(this.t * 1.4) * 0.05;
           const co = Math.cos(th), si = Math.sin(th);
           const eyeAt = (lx, ly) => ({
             x: this.x + lx * co - ly * si,
             y: this.y + lx * si + ly * co
           });
-          const eyes = [eyeAt(-39, 13), eyeAt(26, 13)];
+          const eyes = [eyeAt(-33, 20), eyeAt(33, 20)];
           // 屏幕最左竖轴上的两个随机落点，彼此保持一定距离
           const lo = 80, hi = CFG.GROUND_Y - 60;
           let y1 = rand(lo, hi), y2 = rand(lo, hi);
@@ -1172,8 +1174,9 @@
         }
       }
     }
-    /** 双手飞出/收回：就位后向左右连射弹幕 */
+    /** 双手飞出/收回：就位后朝玩家快速连射斧头弹幕（持续 5s；斧头命中玩家则大王获得无敌） */
     stepHands(dt, g) {
+      const p = g.player;
       this.hands.forEach((h, i) => {
         if (h.state === 'idle') return;
         h.t += dt;
@@ -1185,17 +1188,40 @@
         if (out && k >= 1) {
           h.fireT -= dt;
           if (h.fireT <= 0) {
-            h.fireT = 0.45;
-            const dir = i === 0 ? Math.PI : 0;   // 左手向左、右手向右
+            h.fireT = 0.22;   // 快速连射
+            const base = Math.atan2(p.y - h.py, p.x - h.px);   // 朝向玩家
             for (let s = -1; s <= 1; s++) {
+              const a = base + s * 0.13;
               g.bullets.push(new Bullet(h.px, h.py,
-                Math.cos(dir + s * 0.18) * 300, Math.sin(dir + s * 0.18) * 300,
-                { kind: 'axe', r: 8, dmg: 14 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ffd23b', spinRate: 12 }));
+                Math.cos(a) * 380, Math.sin(a) * 380,
+                { kind: 'axe', r: 8, dmg: 14 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ffd23b', spinRate: 12,
+                  onPlayerHit: () => this.grantAxeInvuln(g) }));
             }
             SFX.enemyShoot();
           }
         }
       });
+    }
+    /** 斧头命中玩家：大王获得 1s 无敌，效果可叠加 */
+    grantAxeInvuln(g) {
+      if (this.dead) return;
+      const wasZero = this.invulnT <= 0;
+      this.invulnT = Math.min(this.invulnT + 1, 8);
+      if (wasZero) {
+        g.toast('大王吸收了斧击，进入无敌状态！', 1.2);
+        SFX.phaseRise();
+        burst(g, this.x, this.y, 20, ['#9fe8ff', '#fff', '#7fd0ff'], 260, 6, 0.55, -60);
+      }
+    }
+    takeDamage(dmg, g, kb) {
+      if (this.invulnT > 0) {
+        // 无敌中：格挡火花，不掉血
+        if (Math.random() < 0.35) {
+          burst(g, this.x + rand(-70, 30), this.y + rand(-100, 100), 2, ['#9fe8ff', '#fff'], 150, 3, 0.2);
+        }
+        return;
+      }
+      super.takeDamage(dmg, g, kb);
     }
     /** 五颗巨大漂浮弹：缓慢追踪玩家，被击中 6 次爆炸 */
     launchFloaters(g) {
@@ -1212,6 +1238,20 @@
       SFX.warn();
     }
     render(ctx) {
+      // 无敌护盾光环（斧头命中玩家获得，可叠加）
+      if (this.invulnT > 0) {
+        const a = 0.5 + Math.sin(this.t * 16) * 0.22;
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.strokeStyle = '#9fe8ff';
+        ctx.lineWidth = 5;
+        ctx.shadowColor = '#7fd0ff';
+        ctx.shadowBlur = 24;
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, this.phase === 2 ? 178 : 150, this.phase === 2 ? 155 : 178, 0, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+      }
       if (this.phase === 2) {
         // 变身后巨头（占据近半屏）
         const pulse = 1 + Math.sin(this.t * 4) * 0.02;

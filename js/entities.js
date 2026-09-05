@@ -1275,9 +1275,9 @@
       });
     }
 
-    /** 受伤：防护罩概率减免，伤害取整；死亡时消耗生命条数 */
+    /** 受伤：防护罩概率减免，伤害取整；死亡时消耗生命条数。返回 false=无敌帧未命中 */
     hurt(amount, g) {
-      if (this.invT > 0) return;
+      if (this.invT > 0) return false;
       let amt = Math.max(1, Math.round(amount));
       // 防护罩：概率触发减伤
       if (this.shieldLv > 0 && Math.random() < this.shieldChance) {
@@ -1293,6 +1293,7 @@
       g.shake(8);
       burst(g, this.x, this.y, 10, ['#ff5252', '#fff'], 180, 4, 0.4);
       if (this.hp <= 0) { this.hp = 0; this.die(g); }
+      return true;
     }
 
     /** 阵亡：消耗一条生命原地重生，否则游戏结束 */
