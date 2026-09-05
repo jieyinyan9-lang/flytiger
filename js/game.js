@@ -401,6 +401,12 @@
       }
       // 首次获得新能力时弹出提示
       if (isNew) this.toast(u.id === 'chain' ? '⚡ 闪电子弹解锁！' : '† 防护刀刃解锁！');
+      // 元素弹道选择提示
+      if (['flame', 'poison', 'ice'].includes(u.id)) {
+        const names = { flame: '🔥火焰', poison: '☠毒液', ice: '❄寒冰' };
+        const cnt = this.player.elementWay.filter(x => x === u.id).length;
+        this.toast(`${names[u.id]}弹道 ${cnt}/3`, 1.5);
+      }
       this.state = 'playing';
       // 无冷却锁：若剩余能量仍满足门槛，下一帧会连续弹出下一次成长选择
     }

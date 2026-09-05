@@ -675,6 +675,8 @@
       this.shotT = 1.3;
       this.scatterT = 5.6;
       this.missileT = 3.6;
+      this.flameBreathT = 8.0;   // 喷火攻击计时器
+      this.flameDur = 0;          // 喷火持续时间（>0 时正在喷火）
       this.deathCols = ['#c0562e', '#8f3a1c', '#ffd23b', '#fff'];
     }
     update(dt, g) {
@@ -739,6 +741,56 @@
         g.bullets.push(m);
         SFX.dash();
       }
+      // 持续喷火攻击：弧线大块面，两端细中间粗，红黄白粒子
+      if (this.flameDur > 0) {
+        // 正在喷火
+        this.flameDur -= dt;
+        const p = g.player;
+        const baseA = Math.atan2(p.y - this.y, p.x - this.x);
+        const mouthX = this.x - 70;
+        const mouthY = this.y - 10;
+        // 每帧喷射粒子：弧线分布，中间粗两端细
+        const N = 6;
+        for (let i = 0; i < N; i++) {
+          const t = (i / (N - 1)) - 0.5;   // -0.5 ~ 0.5
+          const a = baseA + t * 1.1;        // 扇形张角约 63°
+          const weight = 1 - Math.abs(t) * 1.4;  // 中间粗（1.0）两端细（0.3）
+          const sp = rand(260, 420) * (0.6 + weight * 0.5);
+          const px = mouthX + Math.cos(a) * rand(0, 20);
+          const py = mouthY + Math.sin(a) * rand(0, 20);
+          const colors = ['#ff2a0a', '#ff5a1a', '#ff9d2e', '#ffd23b', '#fff5d0'];
+          const col = colors[Math.floor(Math.random() * colors.length)];
+          const pr = rand(5, 12) * (0.5 + weight * 0.6);
+          g.particles.push(new Particle(px, py,
+            Math.cos(a) * sp, Math.sin(a) * sp,
+            rand(0.3, 0.6), pr, col));
+        }
+        // 喷火伤害判定：弧形区域内对玩家造成伤害
+        const dx = p.x - mouthX, dy = p.y - mouthY;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 320) {
+          const ang = Math.atan2(dy, dx);
+          let da = ang - baseA;
+          while (da > Math.PI) da -= TAU;
+          while (da < -Math.PI) da += TAU;
+          if (Math.abs(da) < 0.55 && dist > 30) {
+            p.hurt(Math.round(8 * g.atkScale), g);
+          }
+        }
+        // 喷火结束时恢复
+        if (this.flameDur <= 0) {
+          this.flameDur = 0;
+          this.flameBreathT = rand(7.0, 9.5);
+        }
+      } else {
+        // 喷火充能计时
+        this.flameBreathT -= dt;
+        if (this.flameBreathT <= 0) {
+          this.flameDur = 2.8;   // 持续喷火 2.8 秒
+          g.toast('🔥 野鸡王喷火！', 1.5);
+          g.shake(5);
+        }
+      }
     }
     render(ctx) {
       const bob = Math.abs(Math.sin(this.t * 7)) * -6;
@@ -748,6 +800,16 @@
       if (Math.floor(this.t * 9) % 3 === 0) {
         ctx.fillStyle = 'rgba(140,110,70,0.5)';
         ctx.fillRect(this.x - this.radius + rand(-6, 6), CFG.GROUND_Y - 6, 10, 8);
+      }
+      // 喷火时嘴部光晕
+      if (this.flameDur > 0) {
+        const mx = this.x - 70, my = this.y - 10;
+        const glow = ctx.createRadialGradient(mx, my, 0, mx, my, 40);
+        glow.addColorStop(0, 'rgba(255,220,100,0.8)');
+        glow.addColorStop(0.5, 'rgba(255,90,30,0.4)');
+        glow.addColorStop(1, 'rgba(255,40,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(mx, my, 40, 0, TAU); ctx.fill();
       }
     }
   }
@@ -835,8 +897,8 @@
         if (this.stateT > 1.1) { this.state = 'fight'; this.stateT = 0; this.atkT = rand(1.6, 2.4); }
       }
       else if (this.state === 'spin') {
-        // 空中缓慢自转，周期发射激光
-        this.rotA += dt * 1.25;
+        // 空中缓慢逆时针自转，周期发射激光
+        this.rotA -= dt * 1.25;
         this.x = this.hoverX + Math.sin(this.t * 0.7) * 30;
         this.y += Math.sin(this.t * 1.8) * 16 * dt;
         this.y = clamp(this.y, 140, CFG.GROUND_Y - 190);

@@ -293,7 +293,7 @@
           const cnt = p.elementWay.filter(x => x === 'flame').length;
           if (cnt >= 3) return false;       // 队列全是火焰，不再出现
           if (cnt === 0) return true;
-          return Math.random() < 0.08;      // 中低概率
+          return Math.random() < 0.20;      // 中低概率
         },
         apply(p) {
           if (p.elementWay.length >= 3) p.elementWay.shift();  // 满三条时销毁最早获得的一条
@@ -309,7 +309,7 @@
           const cnt = p.elementWay.filter(x => x === 'poison').length;
           if (cnt >= 3) return false;
           if (cnt === 0) return true;
-          return Math.random() < 0.08;
+          return Math.random() < 0.20;
         },
         apply(p) {
           if (p.elementWay.length >= 3) p.elementWay.shift();
@@ -325,7 +325,7 @@
           const cnt = p.elementWay.filter(x => x === 'ice').length;
           if (cnt >= 3) return false;
           if (cnt === 0) return true;
-          return Math.random() < 0.08;
+          return Math.random() < 0.20;
         },
         apply(p) {
           if (p.elementWay.length >= 3) p.elementWay.shift();

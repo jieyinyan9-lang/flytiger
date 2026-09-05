@@ -1049,14 +1049,15 @@
       // 元素弹道：遍历 elementWay 队列，按获得顺序发射（总最多 3 条）
       const elemCount = this.elementWay.length;
       for (let w = 0; w < elemCount; w++) {
-        const off = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 0.28);
+        const off = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 0.42);
         const el = this.elementWay[w];
+        const eOffY = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 14);
         let vy = 0, vx = Math.cos(off) * speed * 0.88;
         if (el === 'flame') vy = Math.sin(off) * speed * 0.85 - 60;
         else if (el === 'poison') vy = Math.sin(off) * speed * 0.85 + 60;
         else vy = Math.sin(off) * speed * 0.88;
         g.bullets.push(new Bullet(
-          muzzleX, muzzleY, vx, vy,
+          muzzleX, muzzleY + eOffY, vx, vy,
           { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
             pierce: 0, element: el, life: 4 }));
       }
