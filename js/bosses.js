@@ -1419,7 +1419,9 @@
         // 张嘴蓄力 0.3s，锁定发射角度
         if (this.stateT > 0.3) {
           this.state = 'tongueOut'; this.stateT = 0;
-          this.tongueAng = Math.atan2(p.y - this.y, p.x - this.x);
+          // 初射点为嘴部（模型靠左的红色口腔）：精灵 frogL 中红口腔位于 (5,23)，6.5x 居中锚点换算
+          const mx = this.x - 150, my = this.y + 6;
+          this.tongueAng = Math.atan2(p.y - my, p.x - mx);
           // 舌头跨越整个屏幕
           this.tongue = { t: 0, len: 0, max: Math.hypot(CFG.W, CFG.H) * 1.1, phase: 'out', grabbed: false };
           SFX.tongueShot();
@@ -1428,13 +1430,13 @@
       else if (this.state === 'tongueOut' && this.tongue) {
         const tg = this.tongue;
         tg.t += dt;
-        const mouthX = this.x, mouthY = this.y + 8;
+        const mouthX = this.x - 150, mouthY = this.y + 6;   // 初射点：嘴部红色口腔
         if (tg.phase === 'out') {
           tg.len = Math.min(tg.max, tg.len + 1500 * dt);
-          // 舌尖 + 整条舌身判定：玩家被舌线扫到即被卷住
+          // 舌尖 + 整条舌身判定：玩家被舌线扫到即被卷住（舌头加宽4倍，判定同步加宽）
           const tipX = mouthX + Math.cos(this.tongueAng) * tg.len;
           const tipY = mouthY + Math.sin(this.tongueAng) * tg.len;
-          if (!tg.grabbed && Lightning.distSeg(p.x, p.y, mouthX, mouthY, tipX, tipY) < 34) {
+          if (!tg.grabbed && Lightning.distSeg(p.x, p.y, mouthX, mouthY, tipX, tipY) < 72) {
             tg.grabbed = true; tg.phase = 'back'; tg.t = 0;
             p.hurt(Math.round(8 * g.atkScale), g);
             g.toast('被蛙哥卷住了！', 1.2);
@@ -1507,15 +1509,16 @@
       else if (!this.onGround) sy = 1.08;
       const w = 6.5, h = 6.5 * sy;
       drawSprite(ctx, Sprites.frogL, this.x, this.y + (6.5 * 40 - h * 40) / 2, w, h, 0, this.flash);
-      // 舌头
+      // 舌头（加宽4倍：线宽12→48、舌尖13→52；初射点为模型靠左的红色口腔）
       if (this.tongue) {
         const tg = this.tongue;
-        const tipX = this.x + Math.cos(this.tongueAng) * tg.len;
-        const tipY = this.y + Math.sin(this.tongueAng) * tg.len;
-        ctx.strokeStyle = '#ff7ba0'; ctx.lineWidth = 12; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(this.x, this.y + 8); ctx.lineTo(tipX, tipY); ctx.stroke();
+        const mouthX = this.x - 150, mouthY = this.y + 6;
+        const tipX = mouthX + Math.cos(this.tongueAng) * tg.len;
+        const tipY = mouthY + Math.sin(this.tongueAng) * tg.len;
+        ctx.strokeStyle = '#ff7ba0'; ctx.lineWidth = 48; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(mouthX, mouthY); ctx.lineTo(tipX, tipY); ctx.stroke();
         ctx.fillStyle = '#ff5d8f';
-        ctx.beginPath(); ctx.arc(tipX, tipY, 13, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(tipX, tipY, 52, 0, TAU); ctx.fill();
       }
       // 爪击挥影
       if (this.state === 'clawHit') {
