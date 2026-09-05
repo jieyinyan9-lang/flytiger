@@ -503,26 +503,39 @@
         ctx.restore();
         return;
       }
-      // 元素弹道（火焰/毒液/寒冰）：友方元素弹专用渲染
+      // 元素弹道：火焰=红色圆形，毒液=绿色菱形，寒冰=蓝色锥型
       if (this.element === 'flame') {
         const r = this.r;
-        ctx.fillStyle = '#ff6b1a'; ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#ffd23b'; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#cc1a00'; ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ff3b1a'; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ffdd55'; ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.45, 0, TAU); ctx.fill();
         return;
       }
       if (this.element === 'poison') {
         const r = this.r;
-        ctx.fillStyle = '#1a4a1a'; ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#3dd84a'; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#a6ffa6'; ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
+        ctx.save(); ctx.translate(this.x, this.y);
+        // 菱形
+        ctx.fillStyle = '#0a3a0a';
+        ctx.beginPath(); ctx.moveTo(0, -r - 2); ctx.lineTo(r + 2, 0); ctx.lineTo(0, r + 2); ctx.lineTo(-r - 2, 0); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#2dd44a';
+        ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#a6ffa6';
+        ctx.beginPath(); ctx.moveTo(0, -r * 0.4); ctx.lineTo(r * 0.4, 0); ctx.lineTo(0, r * 0.4); ctx.lineTo(-r * 0.4, 0); ctx.closePath(); ctx.fill();
+        ctx.restore();
         return;
       }
       if (this.element === 'ice') {
         const r = this.r;
-        ctx.fillStyle = '#2a7aC0'; ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#7fd4ff'; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#e0f7ff'; ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
+        const a = Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        // 锥型（三角形，尖端朝飞行方向）
+        ctx.fillStyle = '#1a5a8a';
+        ctx.beginPath(); ctx.moveTo(r + 3, 0); ctx.lineTo(-r - 1, -r - 1); ctx.lineTo(-r - 1, r + 1); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#4ab8ff';
+        ctx.beginPath(); ctx.moveTo(r, 0); ctx.lineTo(-r, -r * 0.8); ctx.lineTo(-r, r * 0.8); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#e0f7ff';
+        ctx.beginPath(); ctx.moveTo(r * 0.5, 0); ctx.lineTo(-r * 0.5, -r * 0.35); ctx.lineTo(-r * 0.5, r * 0.35); ctx.closePath(); ctx.fill();
+        ctx.restore();
         return;
       }
     }
