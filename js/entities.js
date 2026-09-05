@@ -530,15 +530,19 @@
         return;
       }
       if (k === 'wave') {
-        // 鹤鸣声波：淡青脉动光球，黑边在亮天空下醒目
-        const f = 1 + Math.sin(this.t * 12) * 0.18;
+        // 鹤鸣声波：高饱和青蓝脉动光球，外光晕+粗黑边+亮青内环+白芯，亮天空下清晰
+        const f = 1 + Math.sin(this.t * 12) * 0.16;
         const r = this.r * f;
-        ctx.fillStyle = '#101820';
-        ctx.beginPath(); ctx.arc(this.x, this.y, r + 1.6, 0, TAU); ctx.fill();
-        ctx.fillStyle = this.color || '#bfe9ff';
+        ctx.fillStyle = 'rgba(56,189,248,0.30)';                 // 外光晕
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 1.7, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#0b1622';                                // 粗黑描边底
+        ctx.beginPath(); ctx.arc(this.x, this.y, r + 2.4, 0, TAU); ctx.fill();
+        ctx.fillStyle = this.color || '#38bdf8';                  // 饱和青蓝主体
         ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.beginPath(); ctx.arc(this.x - r * 0.28, this.y - r * 0.28, r * 0.32, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(200,242,255,0.95)';                 // 亮青内环
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.6, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ffffff';                                // 白芯高光
+        ctx.beginPath(); ctx.arc(this.x - r * 0.24, this.y - r * 0.26, r * 0.3, 0, TAU); ctx.fill();
         return;
       }
       if (k === 'blackKnife') {
@@ -1249,6 +1253,10 @@
       const round = g.round;
       const hpMul = (1 + (round - 1) * 0.16 + g.time * 0.0025) * g.diffMul;
       this.maxHp = Math.round(def.hp * hpMul);
+      // 动态血量精英（如大型蝙蝠）：按玩家当前 DPS 反推血量，保证 5-8 秒交战时长
+      if (def.dynamicHp && def.fightTime && g.playerDps) {
+        this.maxHp = Math.max(this.maxHp, Math.round(g.playerDps() * rand(def.fightTime[0], def.fightTime[1])));
+      }
       this.hp = this.maxHp;
       this.speedMul = 1 + (round - 1) * 0.03 + Math.min(0.25, g.time * 0.001);
 
@@ -1575,22 +1583,30 @@
         this.x -= 210 * this.speedMul * dt;
       }
     }
-    /* 自爆骷髅：高速冲入屏幕中部 → 降速持续追击玩家 → 接触自爆 */
+    /* 自爆骷髅：高速冲入屏幕中部 → 降速追击 → 接近后停步颤抖预警（0.9s）→ 大范围爆炸 */
     aiSkeleton(dt, g, p) {
       const S = CFG.skeleton;
       if (this.state === 'rush') {
         this.x -= S.rushSpeed * this.speedMul * dt;
         this.y += Math.sin(this.t * 6) * 60 * dt;
         this.y = clamp(this.y, CFG.TOP_Y + 20, CFG.GROUND_Y - 40);
-        if (this.x < CFG.W * 0.52) this.state = 'chase';
-      } else {
+        if (this.x < CFG.W * 0.52) { this.state = 'chase'; this.stateT = 0; }
+      } else if (this.state === 'chase') {
         const dx = p.x - this.x, dy = p.y - this.y;
         const d = Math.hypot(dx, dy) || 1;
         const sp = S.chaseSpeed * this.speedMul;
-        this.x += (dx / d) * sp * dt;
-        this.y += (dy / d) * sp * dt + Math.sin(this.t * 8) * 26 * dt;
-        this.y = clamp(this.y, CFG.TOP_Y, CFG.GROUND_Y - 20);
-        if (d < S.triggerD + p.radius * 0.3) this.detonate(g);
+        // 进入触发距离即停步预警
+        if (d < S.triggerD + p.radius) {
+          this.state = 'windup'; this.stateT = 0;
+          SFX.warn();
+        } else {
+          this.x += (dx / d) * sp * dt;
+          this.y += (dy / d) * sp * dt + Math.sin(this.t * 8) * 26 * dt;
+          this.y = clamp(this.y, CFG.TOP_Y, CFG.GROUND_Y - 20);
+        }
+      } else if (this.state === 'windup') {
+        // 原地颤抖预警，预警结束后引爆
+        if (this.stateT >= S.windup) this.detonate(g);
       }
     }
 
@@ -1817,6 +1833,23 @@
           drawSprite(ctx, spr, this.x, this.y + Math.sin(t * 3) * 4, 3.4, 3.4, Math.sin(t * 1.8) * 0.06, this.flash);
           break;
         }
+      }
+      // 小黑骷髅自爆预警：扩张虚线圈 + 脉动爆点
+      if (this.type === 'skeleton' && this.state === 'windup') {
+        const S = CFG.skeleton;
+        const k = clamp(this.stateT / S.windup, 0, 1);
+        const r = S.blastR * k;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,70,30,${0.4 + k * 0.5})`;
+        ctx.lineWidth = 3 + k * 4;
+        ctx.setLineDash([12, 8]);
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = `rgba(255,90,30,${0.08 + k * 0.18})`;
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = Math.floor(t * 16) % 2 ? '#ff3b1a' : '#ffd23b';
+        ctx.beginPath(); ctx.arc(this.x, this.y, 8 + k * 12, 0, TAU); ctx.fill();
+        ctx.restore();
       }
       // 持续受伤红染：叠加半透明红色（连续命中时 hurtT 不会归零，呈持续红光而非闪烁）
       if (hurtRed) {

@@ -36,7 +36,7 @@
       if (this.dead || this.state === 'enter') return;   // 入场免伤
       this.hp -= dmg;
       this.flash = 0.08;
-      if (kb) { this.kbX += kb.x * 0.25; this.kbY += kb.y * 0.25; }
+      // Boss 免疫击退：忽略 kb 参数，防止被持续攻击推出屏幕外
       if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#fff', '#ffe08a'], 130, 3, 0.18);
       // 低血量狂暴（每只 Boss 仅一次）：三连警报 + 怒吼 + 震屏 + 红色爆发
       if (!this.enraged && this.hp > 0 && this.hp <= this.maxHp * 0.3) {
@@ -92,6 +92,41 @@
         const base = Math.atan2(p.y - this.y, p.x - this.x);
         for (let i = -1; i <= 1; i++) this.fireball(g, base + i * 0.22, 185);
       }
+
+      // 弧形火焰喷射：扇形火舌，中间粗两端细，弧形覆盖
+      if (this.flameDur > 0) {
+        this.flameDur -= dt;
+        const baseA = Math.atan2(p.y - this.y, p.x - this.x);
+        const mouthX = this.x - 44, mouthY = this.y + 4;
+        for (let i = 0; i < 6; i++) {
+          const t0 = i / 5 - 0.5;                    // -0.5 ~ 0.5
+          const a = baseA + t0 * 1.15;
+          const wgt = 1 - Math.abs(t0) * 1.4;        // 中间粗、两端细
+          const sp = rand(280, 440) * (0.6 + wgt * 0.5);
+          const colors = ['#ff2a0a', '#ff5a1a', '#ff9d2e', '#ffd23b', '#fff5d0'];
+          g.particles.push(new Particle(
+            mouthX + Math.cos(a) * rand(0, 16), mouthY + Math.sin(a) * rand(0, 16),
+            Math.cos(a) * sp, Math.sin(a) * sp,
+            rand(0.3, 0.6), rand(5, 12) * (0.5 + wgt * 0.6),
+            colors[Math.floor(Math.random() * colors.length)]));
+        }
+        // 喷火伤害：弧形区域判定
+        const dx = p.x - mouthX, dy = p.y - mouthY;
+        const d = Math.hypot(dx, dy);
+        if (d < 360 && d > 30) {
+          let da = Math.atan2(dy, dx) - baseA;
+          while (da > Math.PI) da -= TAU;
+          while (da < -Math.PI) da += TAU;
+          if (Math.abs(da) < 0.55) p.hurt(Math.round(7 * g.atkScale), g);
+        }
+        if (this.flameDur <= 0) { this.flameDur = 0; this.flameBreathT = rand(5.5, 7.5); }
+      } else {
+        this.flameBreathT -= dt;
+        if (this.flameBreathT <= 0) {
+          this.flameDur = 2.4;
+          g.toast('🔥 火猪王喷火！', 1.5); g.shake(5);
+        }
+      }
     }
     fireball(g, angle, speed) {
       const dmg = 18 * g.atkScale;
@@ -112,6 +147,16 @@
         ctx.fillStyle = '#ffd23b';
         ctx.fillRect(this.x - 26, this.y - 58, 6, 8);
       }
+      // 喷火时嘴部光晕
+      if (this.flameDur > 0) {
+        const mx = this.x - 44, my = this.y + 4;
+        const glow = ctx.createRadialGradient(mx, my, 0, mx, my, 42);
+        glow.addColorStop(0, 'rgba(255,220,100,0.85)');
+        glow.addColorStop(0.5, 'rgba(255,90,30,0.4)');
+        glow.addColorStop(1, 'rgba(255,40,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(mx, my, 42, 0, TAU); ctx.fill();
+      }
     }
   }
 
@@ -124,6 +169,7 @@
       this.title = '精英强化型';
       this.atkT = 2.2;
       this.atkMode = 0;
+      this.rageT = 0.6;      // 狂暴后持续竖雷计时
       this.deathCols = ['#2f6fd0', '#ffe066', '#7fe7ff', '#fff'];
     }
     update(dt, g) {
@@ -166,9 +212,32 @@
         }
         SFX.warn();
       }
+
+      // 狂暴（血量 ≤30%）后：持续竖雷打击 —— 玩家头顶 1 道（更粗）+ 左右随机 2 道夹击
+      if (this.enraged) {
+        this.rageT -= dt;
+        if (this.rageT <= 0) {
+          this.rageT = rand(0.42, 0.65);
+          const dmgR = Math.round(16 * g.atkScale);
+          const side = () => clamp(p.x + rand(130, 280) * (Math.random() < 0.5 ? -1 : 1), 60, CFG.W - 60);
+          g.lightnings.push(Lightning.vertical(clamp(p.x, 60, CFG.W - 60), 84, dmgR));
+          g.lightnings.push(Lightning.vertical(side(), 60, dmgR));
+          g.lightnings.push(Lightning.vertical(side(), 60, dmgR));
+          SFX.zap();
+          g.shake(2);
+        }
+      }
     }
     render(ctx) {
       drawSprite(ctx, Sprites.leigongL, this.x, this.y + Math.sin(this.t * 2) * 4, 8.0, 8.0, 0, this.flash);
+      // 狂暴时周身电弧
+      if (this.enraged && Math.floor(this.t * 8) % 2 === 0) {
+        ctx.strokeStyle = 'rgba(140,210,255,0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 62 + Math.sin(this.t * 20) * 6, 0, TAU);
+        ctx.stroke();
+      }
     }
   }
 
@@ -897,15 +966,19 @@
         if (this.stateT > 1.1) { this.state = 'fight'; this.stateT = 0; this.atkT = rand(1.6, 2.4); }
       }
       else if (this.state === 'spin') {
-        // 空中缓慢逆时针自转，周期发射激光
-        this.rotA -= dt * 1.25;
+        // 整组激光锁定玩家方向 + 图案自身旋转，双束对射形成旋转十字
+        this.spinOff -= dt * 2.0;
+        const aimA = Math.atan2(p.y - this.y, p.x - this.x);
         this.x = this.hoverX + Math.sin(this.t * 0.7) * 30;
         this.y += Math.sin(this.t * 1.8) * 16 * dt;
         this.y = clamp(this.y, 140, CFG.GROUND_Y - 190);
         this.spinFire -= dt;
         if (this.spinFire <= 0) {
-          this.spinFire = 0.5;
-          g.beams.push(new Beam(this.x, this.y, this.rotA, 1400, 13, Math.round(15 * g.atkScale), 0.65, true));
+          this.spinFire = 0.42;
+          for (let k = 0; k < 2; k++) {
+            const a = aimA + this.spinOff + k * Math.PI;
+            g.beams.push(new Beam(this.x, this.y, a, 1400, 13, Math.round(15 * g.atkScale), 0.72, true));
+          }
           SFX.zap();
         }
         if (this.stateT > 5.5) { this.state = 'fight'; this.stateT = 0; this.atkT = rand(1.8, 2.6); }
@@ -919,7 +992,7 @@
       SFX.warn(); g.shake(4);
     }
     render(ctx) {
-      const ang = this.state === 'spin' ? this.rotA : Math.sin(this.t * 2) * 0.06;
+      const ang = this.state === 'spin' ? this.spinOff : Math.sin(this.t * 2) * 0.06;
       drawSprite(ctx, Sprites.homelanderL, this.x, this.y, 6.2, 6.2, ang, this.flash);
       // 旋转激光蓄力：双眼红光
       if (this.state === 'spin') {
@@ -1301,10 +1374,10 @@
           this.vx *= 0.86;
           this.hopT -= dt;
           if (this.hopT <= 0) {
-            // 弧形跳向玩家
+            // 弧形跳向玩家（大跳远距离）
             this.hopT = rand(1.05, 1.5);
-            this.vy = -rand(430, 520);
-            this.vx = clamp((p.x - this.x) * 0.9, -240, 240);
+            this.vy = -rand(470, 560);
+            this.vx = clamp((p.x - this.x) * 1.25, -440, 440);
             this.onGround = false;
             SFX.dash();
           }
@@ -1313,7 +1386,7 @@
           if (this.skillT <= 0) {
             this.skillT = 0.25;
             if (dist < 175 && this.clawCd <= 0) { this.state = 'clawWind'; this.stateT = 0; }
-            else if (this.tongueCd <= 0 && dist > 210) { this.state = 'tongueWind'; this.stateT = 0; }
+            else if (this.tongueCd <= 0 && dist > 140) { this.state = 'tongueWind'; this.stateT = 0; }
             else if (this.chargeCd <= 0 && dist > 160) { this.state = 'chargeWind'; this.stateT = 0; }
           }
         } else {
@@ -1347,19 +1420,21 @@
         if (this.stateT > 0.3) {
           this.state = 'tongueOut'; this.stateT = 0;
           this.tongueAng = Math.atan2(p.y - this.y, p.x - this.x);
-          this.tongue = { t: 0, len: 0, max: Math.min(340, dist + 40), phase: 'out', grabbed: false };
+          // 舌头跨越整个屏幕
+          this.tongue = { t: 0, len: 0, max: Math.hypot(CFG.W, CFG.H) * 1.1, phase: 'out', grabbed: false };
           SFX.tongueShot();
         }
       }
       else if (this.state === 'tongueOut' && this.tongue) {
         const tg = this.tongue;
         tg.t += dt;
+        const mouthX = this.x, mouthY = this.y + 8;
         if (tg.phase === 'out') {
-          tg.len = Math.min(tg.max, tg.len + 950 * dt);
-          // 舌尖判定：碰到玩家 → 拉拽
-          const tipX = this.x + Math.cos(this.tongueAng) * tg.len;
-          const tipY = this.y + Math.sin(this.tongueAng) * tg.len;
-          if (!tg.grabbed && Math.hypot(p.x - tipX, p.y - tipY) < 34) {
+          tg.len = Math.min(tg.max, tg.len + 1500 * dt);
+          // 舌尖 + 整条舌身判定：玩家被舌线扫到即被卷住
+          const tipX = mouthX + Math.cos(this.tongueAng) * tg.len;
+          const tipY = mouthY + Math.sin(this.tongueAng) * tg.len;
+          if (!tg.grabbed && Lightning.distSeg(p.x, p.y, mouthX, mouthY, tipX, tipY) < 34) {
             tg.grabbed = true; tg.phase = 'back'; tg.t = 0;
             p.hurt(Math.round(8 * g.atkScale), g);
             g.toast('被蛙哥卷住了！', 1.2);
@@ -1369,13 +1444,13 @@
         } else if (tg.phase === 'hold') {
           if (tg.t > 0.18) { tg.phase = 'back'; tg.t = 0; }
         } else {
-          tg.len = Math.max(0, tg.len - 800 * dt);
+          tg.len = Math.max(0, tg.len - 1300 * dt);
           // 收舌时若已卷住，把玩家拉到面前
           if (tg.grabbed) {
-            const mouthX = this.x + Math.cos(this.tongueAng) * 40;
-            const mouthY = this.y + Math.sin(this.tongueAng) * 40;
-            p.x += (mouthX - p.x) * Math.min(1, dt * 7);
-            p.y += (mouthY - p.y) * Math.min(1, dt * 7);
+            const tipX = mouthX + Math.cos(this.tongueAng) * 40;
+            const tipY = mouthY + Math.sin(this.tongueAng) * 40;
+            p.x += (tipX - p.x) * Math.min(1, dt * 7);
+            p.y += (tipY - p.y) * Math.min(1, dt * 7);
           }
           if (tg.len <= 0) {
             this.tongue = null;
@@ -1534,34 +1609,37 @@
       else if (this.state === 'needles') {
         this.hoverDrift(dt, p);
         this.needleT -= dt;
-        if (this.needleT <= 0 && this.needleN < 3) {
-          this.needleN++; this.needleT = 0.42;
-          const a = Math.atan2(p.y - this.y, p.x - this.x);
+        if (this.needleT <= 0 && this.needleN < 5) {
+          this.needleN++; this.needleT = 0.36;
+          const a = Math.atan2(p.y - this.y, p.x - this.x) + rand(-0.3, 0.3);
           const b = new Bullet(this.x - 20, this.y - 10,
-            Math.cos(a) * 330, Math.sin(a) * 330,
+            Math.cos(a) * 350, Math.sin(a) * 350,
             { kind: 'feather', r: 7, dmg: 13 * g.atkScale, life: 7, color: '#fff',
               homing: true, turnRate: 1.0, hp: 1, invuln: 3 });
           this.needles.push({ b, t: 3.2, boosted: false });
           g.bullets.push(b);
           SFX.enemyShoot();
         }
-        if (this.needleN >= 3 && this.stateT > 1.6) { this.state = 'fight'; this.stateT = 0; }
+        if (this.needleN >= 5 && this.stateT > 2.0) { this.state = 'fight'; this.stateT = 0; }
       }
       else if (this.state === 'cry') {
         this.hoverDrift(dt, p, 0.4);
         this.waveT -= dt;
         if (this.waveT <= 0 && this.waveIdx < 3) {
-          const speeds = [135, 195, 260];
+          // 三层声波圈：速度不同均可扩散至全屏；密度疏密交替（密圈 24 发 / 疏圈 14 发）
+          const speeds = [150, 210, 280];
+          const counts = [24, 14, 24];
           const sp = speeds[this.waveIdx];
-          for (let i = 0; i < 16; i++) {
-            const a = i * TAU / 16 + this.waveIdx * 0.19;
+          const n = counts[this.waveIdx];
+          for (let i = 0; i < n; i++) {
+            const a = i * TAU / n + this.waveIdx * 0.21;
             g.bullets.push(new Bullet(this.x, this.y, Math.cos(a) * sp, Math.sin(a) * sp,
-              { kind: 'wave', r: 9, dmg: 11 * g.atkScale, life: 6, color: '#dff2ff' }));
+              { kind: 'wave', r: this.waveIdx === 1 ? 11 : 9, dmg: 11 * g.atkScale, life: 7, color: this.waveIdx === 1 ? '#9fd8ff' : '#dff2ff' }));
           }
-          this.waveIdx++; this.waveT = 0.42;
+          this.waveIdx++; this.waveT = 0.55;
           g.shake(3); SFX.enemyShoot();
         }
-        if (this.waveIdx >= 3 && this.stateT > 2.6) { this.state = 'fight'; this.stateT = 0; }
+        if (this.waveIdx >= 3 && this.stateT > 3.2) { this.state = 'fight'; this.stateT = 0; }
       }
       else if (this.state === 'dive') {
         // dive 阶段内部再分：up → aim → fall → blast
@@ -1620,11 +1698,11 @@
       else if (this.state === 'burial') {
         this.fallT -= dt;
         if (this.fallT <= 0 && this.fallRound < 4) {
-          // 新一轮落羽：后期密度增大、预警更短
+          // 新一轮落羽：全屏宽度投放，后期密度增大、预警更短（落点疏密随机）
           this.fallRound++;
-          const n = this.fallRound >= 3 ? 10 : 8;
-          const warn = this.fallRound >= 3 ? 0.6 : 0.8;
-          for (let i = 0; i < n; i++) this.fallMarks.push({ x: rand(240, 840), t: warn + i * 0.05 });
+          const n = this.fallRound >= 3 ? 16 : 12;
+          const warn = this.fallRound >= 3 ? 0.55 : 0.75;
+          for (let i = 0; i < n; i++) this.fallMarks.push({ x: rand(40, CFG.W - 40), t: warn + i * 0.04 });
           this.fallT = 0.95;
         }
         if (this.fallRound >= 4 && this.fallMarks.length === 0 && this.stateT > 1.5) {
@@ -1638,11 +1716,12 @@
       this.x = this.hoverX + Math.sin(this.t * 0.9) * 66;
     }
     spawnWhirl(g) {
-      for (let i = 0; i < 10; i++) {
-        const ang = i * TAU / 10;
+      // 14 根羽毛环绕，半径渐扩至全屏（70 → ~450），寿命覆盖整个领域
+      for (let i = 0; i < 14; i++) {
+        const ang = i * TAU / 14;
         const b = new Bullet(this.x, this.y, 0, 0,
-          { kind: 'feather', r: 8, dmg: 11 * g.atkScale, life: 3.6, color: '#fff' });
-        b.orbit = { ang, angSpd: 2.4, radius: 100, grow: 34, pivot: () => this.dead ? null : { x: this.x, y: this.y } };
+          { kind: 'feather', r: 8, dmg: 11 * g.atkScale, life: 5.0, color: '#fff' });
+        b.orbit = { ang, angSpd: 2.2, radius: 70, grow: 90, pivot: () => this.dead ? null : { x: this.x, y: this.y } };
         this.whirlOrbs.push(b);
         g.bullets.push(b);
       }
@@ -1673,12 +1752,25 @@
       // 俯冲时身体垂直
       const dive = this.state === 'dive' && (this.phase === 'fall');
       drawSprite(ctx, Sprites.craneL, this.x, this.y, 6.5, 6.5, dive ? Math.PI * 0.5 : Math.sin(this.t * 2) * 0.07, this.flash);
-      // 鹤鸣时颈部声波纹
+      // 鹤鸣时颈部声波纹：三层扩散环，深色底描边+饱和亮青主环，粗大清晰、范围更大
       if (this.state === 'cry') {
-        ctx.strokeStyle = `rgba(190,230,255,${0.6 - this.stateT * 0.2})`;
-        ctx.lineWidth = 3;
-        const r = 30 + this.stateT * 90;
-        ctx.beginPath(); ctx.arc(this.x - 10, this.y - 8, r, 0, TAU); ctx.stroke();
+        const cx = this.x - 10, cy = this.y - 8;
+        const prog = (this.stateT % 0.85) / 0.85;
+        for (let i = 0; i < 3; i++) {
+          const p = prog - i * 0.33;
+          if (p <= 0) continue;
+          const rr = 40 + p * 170;
+          const al = 0.95 - p * 0.75;
+          ctx.strokeStyle = `rgba(8,22,44,${al * 0.6})`;
+          ctx.lineWidth = 8;
+          ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+          ctx.strokeStyle = `rgba(56,189,248,${al})`;
+          ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(235,250,255,0.9)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(cx, cy, 34 + prog * 46, 0, TAU); ctx.stroke();
       }
       // 旋羽领域旋转气旋
       if (this.state === 'whirl') {

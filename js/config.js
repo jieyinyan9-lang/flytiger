@@ -116,8 +116,13 @@
         bulletDmg: 20, xp: 18, score: 40, radius: 26, weight: 4, minBossKills: 3, elite: true
       },
       pig: {
-        name: '火焰飞猪', hp: 110, speed: 80, contact: 16,
-        bulletDmg: 16, xp: 16, score: 36, radius: 26, weight: 4, minBossKills: 4, elite: true
+        name: '火焰飞猪', hp: 330, speed: 80, contact: 16,
+        bulletDmg: 16, xp: 16, score: 36, radius: 36, weight: 4, minBossKills: 4, elite: true
+      },
+      bigbat: {
+        name: '大型蝙蝠', hp: 90, speed: 100, contact: 18,
+        bulletDmg: 12, xp: 18, score: 42, radius: 30, weight: 4, minBossKills: 3, elite: true,
+        dynamicHp: true, fightTime: [5, 8]   // 动态血量：保证玩家交战 5-8 秒
       }
     },
 

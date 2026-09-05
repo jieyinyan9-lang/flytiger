@@ -733,97 +733,141 @@
     return cv;
   }
 
-  /** 程序化绘制蛙哥（巨大金绿肥硕青蛙，朝右蹲姿），返回 56×40 canvas */
+  /** 程序化绘制蛙哥（巨大肥硕金绿青蛙，朝右蹲姿），返回 56×44 canvas
+   * 概括造型：整体由正圆构成，统一黑边描线 */
   function buildFrog() {
-    const W = 56, H = 40;
+    const W = 56, H = 44;
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const c = cv.getContext('2d');
-    const F = '#8fbf3f', f = '#6b9428', L = '#c8d96a', B = '#f2edbc', K = '#1c2410', D = '#4a6618', R = '#a8402f';
-    const ell = (x, y, rx, ry, col) => { c.fillStyle = col; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); c.fill(); };
-    // 后腿（左侧粗壮折叠大腿）
-    ell(12, 27, 11, 9, f);
-    ell(8, 33, 8, 5, f);
-    // 脚蹼
-    c.fillStyle = f; c.fillRect(2, 35, 12, 4);
-    for (let i = 0; i < 3; i++) c.fillRect(2 + i * 4, 38, 3, 2);
-    // 主身体（肥硕大椭圆）
-    ell(28, 21, 24, 15, F);
-    // 背部高光
-    ell(22, 12, 14, 5, L);
-    // 肚皮（米黄大肚）
-    ell(26, 29, 17, 8, B);
-    // 背部深绿斑点
-    ell(14, 13, 3, 2, D); ell(22, 9, 2, 2, D); ell(32, 12, 3, 2, D); ell(10, 20, 2, 2, D);
-    // 大嘴线（右侧横向咧嘴，嘴角上扬）
-    c.strokeStyle = K; c.lineWidth = 2;
-    c.beginPath(); c.moveTo(30, 17); c.quadraticCurveTo(44, 20, 53, 15); c.stroke();
-    // 嘴腔
-    ell(46, 19, 6, 2, R);
-    // 眼睛鼓包（右前方双眼）
-    ell(44, 7, 6, 6, F); ell(52, 9, 5, 5, F);
-    ell(44, 7, 4.5, 4.5, '#ffffff'); ell(52, 9, 3.5, 3.5, '#ffffff');
-    c.fillStyle = K; c.fillRect(45, 5, 3, 4); c.fillRect(53, 7, 2, 3);
+    const F = '#8fbf3f', f = '#6b9428', L = '#c8d96a', B = '#f2edbc', K = '#16200a', D = '#4a6618', R = '#a8402f';
+    const TAUf = Math.PI * 2;
+    /** 正圆：填充 + 统一黑边 */
+    const disc = (x, y, r, fill, edge = true) => {
+      c.fillStyle = fill; c.beginPath(); c.arc(x, y, r, 0, TAUf); c.fill();
+      if (edge) { c.strokeStyle = K; c.lineWidth = 2.5; c.lineJoin = 'round'; c.stroke(); }
+    };
+    // 后腿（左下大圆）+ 脚掌
+    disc(13, 30, 10, f);
+    disc(9, 37, 6, f);
+    // 主体（肥大正圆）
+    disc(30, 24, 18, F);
+    // 米白肚皮（大圆）
+    disc(30, 31, 12, B, false);
+    // 背部深绿斑点（小圆）
+    disc(17, 15, 2.6, D, false); disc(27, 11, 2.2, D, false);
+    disc(39, 13, 2.8, D, false); disc(15, 25, 2.2, D, false);
+    // 前肢（右下小圆撑地）
+    disc(42, 34, 5.5, f);
+    // 双眼鼓包（右上方两颗大圆，黑边白眼黑瞳）
+    disc(40, 8, 7.5, F);
+    disc(49, 9.5, 6.5, F);
+    disc(40, 8, 4.6, '#ffffff', false);
+    disc(49, 9.5, 3.8, '#ffffff', false);
+    disc(41.5, 7, 2.2, K, false);
+    disc(50.5, 8.5, 1.8, K, false);
     // 眼上高光
-    c.fillStyle = L; c.fillRect(42, 3, 3, 2); c.fillRect(50, 5, 2, 2);
-    // 前肢（右下撑地爪）
-    c.fillStyle = f; c.fillRect(36, 30, 5, 7); c.fillRect(40, 32, 5, 5);
-    c.fillStyle = K; c.fillRect(40, 36, 8, 3); c.fillRect(46, 33, 2, 3);
-    // 喉部呼吸起伏纹
-    c.strokeStyle = f; c.lineWidth = 1;
-    c.beginPath(); c.moveTo(34, 25); c.quadraticCurveTo(42, 26, 48, 23); c.stroke();
+    c.fillStyle = L; c.beginPath(); c.arc(38.5, 5.5, 1.4, 0, TAUf); c.fill();
+    // 大嘴（黑弧线 + 红口腔）
+    c.strokeStyle = K; c.lineWidth = 2.5; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(34, 23); c.quadraticCurveTo(46, 27, 54, 21); c.stroke();
+    c.fillStyle = R; c.beginPath(); c.ellipse(51, 23, 4, 2.2, 0, 0, TAUf); c.fill();
+    c.strokeStyle = K; c.lineWidth = 1.8; c.stroke();
     return cv;
   }
 
-  /** 程序化绘制鹤仙（巨大高瘦丹顶鹤，朝右飞行），返回 30×50 canvas（Boss 6.5x ≈ 高 325px 占屏 60%）
-   * 白身黑翎：黑翼尖/黑尾/黑腿是"鹤"形识别关键，红顶+深金喙点睛 */
+  /** 程序化绘制鹤仙（巨大高瘦丹顶鹤，朝右飞行），返回 34×52 canvas（Boss 6.5x ≈ 高 338px 占屏 63%）
+   * 概括造型：流线椭圆 + 统一黑边，白身黑翎（翅尖/尾/腿），红顶金喙 */
   function buildCrane() {
-    const W = 30, H = 50;
+    const W = 34, H = 52;
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const c = cv.getContext('2d');
-    const C = '#f4f6f2', c2 = '#c9d2cc', K = '#20241f', R = '#d43f2f', Y = '#b9862e', G = '#aab7bd';
-    const ell = (x, y, rx, ry, col, rot = 0) => { c.fillStyle = col; c.beginPath(); c.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); c.fill(); };
-    /* ---- 远侧翅（体后，灰白斜下） ---- */
-    ell(8, 29, 9, 2, c2, 0.45);
-    /* ---- 近侧大翅（细长斜上，双段） ---- */
-    ell(8, 13, 12, 2.6, C, -0.95);
-    ell(10, 17, 10, 2.2, C, -0.8);
-    // 翅上羽纹
-    c.strokeStyle = G; c.lineWidth = 0.8;
-    for (let i = 0; i < 3; i++) {
-      c.beginPath(); c.moveTo(4 + i * 3, 15 - i * 3); c.lineTo(13 + i * 2, 20 - i * 2); c.stroke();
-    }
+    const C = '#f4f6f2', c2 = '#c9d2cc', K = '#1d2330', R = '#d43f2f', Y = '#b9862e';
+    const TAUf = Math.PI * 2;
+    /** 流线椭圆：填充 + 黑边 */
+    const ellO = (x, y, rx, ry, rot, fill) => {
+      c.beginPath(); c.ellipse(x, y, rx, ry, rot, 0, TAUf);
+      c.fillStyle = fill; c.fill(); c.strokeStyle = K; c.lineWidth = 2; c.lineJoin = 'round'; c.stroke();
+    };
+    /** 黑边多边形 */
+    const poly = (pts, fill) => {
+      c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
+      c.closePath(); c.fillStyle = fill; c.fill(); c.strokeStyle = K; c.lineWidth = 2; c.lineJoin = 'round'; c.stroke();
+    };
+    // 远翅（体后灰白流线椭圆）
+    ellO(9, 31, 10, 2.2, 0.5, c2);
+    // 近翅（两条流线椭圆斜上）
+    ellO(9, 13, 13, 2.6, -0.95, C);
+    ellO(11, 17.5, 10.5, 2.2, -0.8, C);
     // 翅尖黑翎（丹顶鹤标志）
-    ell(0.8, 5.2, 3.2, 1.8, K, -0.95);
-    ell(2.6, 9.8, 2.6, 1.6, K, -0.8);
-    /* ---- 躯干（瘦长竖椭圆：上胸+下腹） ---- */
-    ell(14, 23, 5, 6, C);
-    ell(13, 32, 4.5, 7, C);
-    // 胸腹阴影线
-    c.strokeStyle = c2; c.lineWidth = 1;
-    c.beginPath(); c.moveTo(16, 20); c.quadraticCurveTo(18, 28, 15, 37); c.stroke();
-    /* ---- 长颈（S 形细颈：躯干上方向右上到头） ---- */
-    c.strokeStyle = C; c.lineWidth = 2.6; c.lineCap = 'round';
-    c.beginPath(); c.moveTo(15, 19); c.quadraticCurveTo(21, 14, 22, 7); c.stroke();
-    // 颈侧阴影
-    c.strokeStyle = c2; c.lineWidth = 0.8;
-    c.beginPath(); c.moveTo(16.5, 19); c.quadraticCurveTo(22, 14.5, 23, 8); c.stroke();
-    /* ---- 头（小巧）+ 红顶 + 眼 + 长喙 ---- */
-    ell(22.5, 5, 3.2, 2.8, C);
-    c.fillStyle = R; c.fillRect(21, 1, 3, 3);          // 丹顶
-    c.fillStyle = K; c.fillRect(23, 4, 1.5, 1.5);      // 眼
-    c.fillStyle = Y;                                    // 长喙（深金）
-    c.beginPath(); c.moveTo(25, 4); c.lineTo(30, 6); c.lineTo(25, 7.2); c.fill();
-    /* ---- 尾羽（左下黑色初级飞羽束） ---- */
+    ellO(0.6, 5.4, 3.4, 1.9, -0.95, K);
+    ellO(2.6, 10.4, 2.8, 1.7, -0.8, K);
+    // 尾羽（黑色流线楔）
+    poly([[11, 35], [3, 45], [12, 41]], K);
+    poly([[13, 37], [6, 48], [14, 42]], K);
+    // 躯干（瘦长椭圆）
+    ellO(15, 28, 5.5, 9, 0.08, C);
+    // 双腿（飞行姿态向后伸直）+ 爪
+    c.strokeStyle = K; c.lineWidth = 2; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(13, 37); c.lineTo(5, 45); c.stroke();
+    c.beginPath(); c.moveTo(15, 38); c.lineTo(7, 47); c.stroke();
+    c.fillStyle = K; c.fillRect(2.5, 44.5, 4, 1.8); c.fillRect(4.5, 46.5, 4, 1.8);
+    // 长颈（黑粗线打底 + 白线内描，S 形流线）
+    c.strokeStyle = K; c.lineWidth = 4.2; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(16, 21); c.quadraticCurveTo(23, 15, 24, 7); c.stroke();
+    c.strokeStyle = C; c.lineWidth = 2.4;
+    c.beginPath(); c.moveTo(16, 21); c.quadraticCurveTo(23, 15, 24, 7); c.stroke();
+    // 头（小椭圆黑边）+ 红顶
+    ellO(24.5, 5.5, 3.4, 3, 0, C);
+    c.fillStyle = R; c.beginPath(); c.ellipse(24, 2.8, 2.1, 1.5, 0, 0, TAUf); c.fill();
+    // 长喙（深金三角黑边）
+    poly([[27, 4.4], [33.5, 6.2], [27, 7.8]], Y);
+    // 眼
+    c.fillStyle = K; c.fillRect(24.4, 4.4, 1.7, 1.7);
+    return cv;
+  }
+
+  /** 程序化绘制大型蝙蝠（暗黑紫翼展怪，对称双翅），返回 44×30 canvas
+   * frame 0：双翼上扬 / frame 1：双翼下压 */
+  function buildBigBat(frame) {
+    const W = 44, H = 30;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const K = '#120d1c', BD = '#2b1f3d', BG = '#3a2852', R = '#ff5d73', W1 = '#f4e8ff';
+    const TAUf = Math.PI * 2;
+    const ell = (x, y, rx, ry, col) => { c.fillStyle = col; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, TAUf); c.fill(); };
+    const up = frame === 0;
+    // 双翼（对称展开，下缘三瓣锯齿，黑边）
+    for (const sgn of [-1, 1]) {
+      c.fillStyle = BD; c.strokeStyle = K; c.lineWidth = 2; c.lineJoin = 'round';
+      c.beginPath();
+      c.moveTo(22 + sgn * 8, 13);
+      c.quadraticCurveTo(22 + sgn * 20, up ? 2 : 12, 22 + sgn * 21, up ? 4 : 22);
+      c.quadraticCurveTo(22 + sgn * 17, up ? 10 : 20, 22 + sgn * 13, 15);
+      c.quadraticCurveTo(22 + sgn * 15, up ? 15 : 24, 22 + sgn * 9, 18);
+      c.quadraticCurveTo(22 + sgn * 11, up ? 18 : 27, 22 + sgn * 5, 20);
+      c.closePath(); c.fill(); c.stroke();
+      // 翼膜脉纹
+      c.strokeStyle = BG; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(22 + sgn * 9, 14);
+      c.quadraticCurveTo(22 + sgn * 16, up ? 8 : 16, 22 + sgn * 20, up ? 5 : 21); c.stroke();
+    }
+    // 身体（黑边紫体）
+    ell(22, 17, 7.2, 9, K);
+    ell(22, 17, 6, 8, BG);
+    // 耳尖
     c.fillStyle = K;
-    c.beginPath(); c.moveTo(10, 36); c.lineTo(3, 45); c.lineTo(11, 42); c.fill();
-    c.beginPath(); c.moveTo(12, 38); c.lineTo(6, 48); c.lineTo(14, 43); c.fill();
-    /* ---- 双腿（飞行姿态向后伸直）+ 爪 ---- */
-    c.strokeStyle = K; c.lineWidth = 1.6;
-    c.beginPath(); c.moveTo(12, 39); c.lineTo(4, 46); c.stroke();
-    c.beginPath(); c.moveTo(14, 40); c.lineTo(6, 48); c.stroke();
-    c.fillStyle = K; c.fillRect(2.5, 45.5, 3, 1.6); c.fillRect(4.5, 47.5, 3, 1.6);
+    c.beginPath(); c.moveTo(17, 10); c.lineTo(16, 3.5); c.lineTo(20, 9); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(27, 10); c.lineTo(28, 3.5); c.lineTo(24, 9); c.closePath(); c.fill();
+    // 红眼
+    ell(19.5, 15, 1.8, 1.5, R);
+    ell(25.5, 15, 1.8, 1.5, R);
+    // 獠牙
+    c.fillStyle = W1;
+    c.fillRect(19, 21, 2, 3.5); c.fillRect(23, 21, 2, 3.5);
     return cv;
   }
 
@@ -854,6 +898,8 @@
     stranger: buildStranger(),
     frog: buildFrog(),
     crane: buildCrane(),
+    bigbatA: buildBigBat(0),
+    bigbatB: buildBigBat(1),
   };
 
   // 敌人统一朝向：翻转成朝左
