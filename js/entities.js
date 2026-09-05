@@ -182,6 +182,7 @@
       this.spin = rand(0, TAU);
       this.spinRate = opts.spinRate || 9;   // 自转角速度（斧头弹等持续旋转）
       this.onExpire = opts.onExpire || null;
+      this.onPlayerHit = opts.onPlayerHit || null;   // 命中玩家时回调（怪客十字弹吸血等）
       this.trail = 0;
       this.neutralized = false;   // Boss 死亡后弹幕失效
       this.fade = 1;             // 失效后逐渐淡出
@@ -197,6 +198,7 @@
       this.element = opts.element || '';       // 元素属性：'flame'/'poison'/'ice'（友方弹专用）
       this.sineWave = opts.sine || null;       // S 形弹道：{ amp, freq, phase }（飞刀线性 S 走向）
       this.fireTrail = !!opts.fireTrail;       // 火焰弹：飞行时喷射火焰粒子拖尾 + 火焰分层渲染
+      this.trailCols = opts.trailCols || null; // 自定义拖尾粒子配色（紫焰苹果等），设置后即启用拖尾
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -310,14 +312,14 @@
             Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
         }
       }
-      // 火焰弹拖尾：沿飞行反方向持续喷射红黄白火焰粒子（弹体越大粒子越粗）
-      if (this.fireTrail && !this.neutralized) {
+      // 火焰弹拖尾：沿飞行反方向持续喷射火焰粒子（弹体越大粒子越粗）；trailCols 可自定义配色（紫焰苹果）
+      if ((this.fireTrail || this.trailCols) && !this.neutralized) {
         this.trail += dt;
         if (this.trail > 0.03) {
           this.trail = 0;
           const spd = Math.hypot(this.vx, this.vy);
           const bx = spd > 1 ? this.vx / spd : -1, by = spd > 1 ? this.vy / spd : 0;
-          const fireCols = ['#ff2a0a', '#ff5a1a', '#ff9d2e', '#ffd23b', '#fff5d0'];
+          const fireCols = this.trailCols || ['#ff2a0a', '#ff5a1a', '#ff9d2e', '#ffd23b', '#fff5d0'];
           for (let i = 0; i < 3; i++) {
             const ja = rand(0, TAU), jr = rand(10, 60);
             g.particles.push(new Particle(
@@ -327,6 +329,74 @@
               -by * rand(50, 140) + Math.sin(ja) * jr - 30,
               rand(0.35, 0.7), rand(this.r * 0.35, this.r * 0.8),
               fireCols[randi(0, fireCols.length - 1)]));
+          }
+        }
+      }
+      // 怪客巨型十字弹：快速自转；先高速追踪玩家，逼近后绕天空区域边缘转一圈再碎裂
+      if (this.kind === 'cross' && !this.neutralized && !this.dead) {
+        const xL = 60, xR = CFG.W - 60, yTop = 70, yBot = CFG.GROUND_Y - 40, rc = 40;  // 绕场路径：贴天空边缘，底边沿地面上方
+        const Ltop = xR - xL - 2 * rc;             // 顶/底直边长度
+        const Lside = yBot - yTop - 2 * rc;        // 左/右直边长度
+        const arc = Math.PI / 2 * rc;              // 单个圆角弧长
+        const P = 2 * Ltop + 2 * Lside + 4 * arc;  // 圆角矩形总周长
+        // 周长参数 s → 边缘路径坐标（顺时针，s=0 在顶边左段起点）
+        const edgePt = (s) => {
+          s = ((s % P) + P) % P;
+          if (s < Ltop) return { x: xL + rc + s, y: yTop };
+          s -= Ltop;
+          if (s < arc) { const a = -Math.PI / 2 + s / rc; return { x: xR - rc + Math.cos(a) * rc, y: yTop + rc + Math.sin(a) * rc }; }
+          s -= arc;
+          if (s < Lside) return { x: xR, y: yTop + rc + s };
+          s -= Lside;
+          if (s < arc) { const a = s / rc; return { x: xR - rc + Math.cos(a) * rc, y: yBot - rc + Math.sin(a) * rc }; }
+          s -= arc;
+          if (s < Ltop) return { x: xR - rc - s, y: yBot };
+          s -= Ltop;
+          if (s < arc) { const a = Math.PI / 2 + s / rc; return { x: xL + rc + Math.cos(a) * rc, y: yBot - rc + Math.sin(a) * rc }; }
+          s -= arc;
+          if (s < Lside) return { x: xL, y: yBot - rc - s };
+          s -= Lside;
+          const a = Math.PI + s / rc; return { x: xL + rc + Math.cos(a) * rc, y: yTop + rc + Math.sin(a) * rc };
+        };
+        if (!this.crossMode) { this.crossMode = 'chase'; this.crossSpd = Math.max(260, Math.hypot(this.vx, this.vy)); }
+        if (this.crossMode === 'chase') {
+          const pl = g.player;
+          const ta = Math.atan2(pl.y - this.y, pl.x - this.x);
+          let cur = Math.atan2(this.vy, this.vx);
+          let d = ta - cur;
+          while (d > Math.PI) d -= TAU;
+          while (d < -Math.PI) d += TAU;
+          cur += clamp(d, -3.8 * dt, 3.8 * dt);       // 快速转向，高速逼近
+          this.vx = Math.cos(cur) * this.crossSpd; this.vy = Math.sin(cur) * this.crossSpd;
+          this.angle = cur;
+          if (Math.hypot(pl.x - this.x, pl.y - this.y) < 150 || this.t > 2.6) {
+            // 取离当前位置最近的边缘路径点作为绕圈起点
+            let bestS = 0, bestD = Infinity;
+            for (let i = 0; i < 180; i++) {
+              const pt = edgePt(P * i / 180);
+              const dd = (pt.x - this.x) ** 2 + (pt.y - this.y) ** 2;
+              if (dd < bestD) { bestD = dd; bestS = P * i / 180; }
+            }
+            this.crossMode = 'toEdge';
+            this.edgeS0 = bestS; this.edgeTravel = 0;
+          }
+        } else if (this.crossMode === 'toEdge') {
+          const tgt = edgePt(this.edgeS0);
+          const dx = tgt.x - this.x, dy = tgt.y - this.y, dd = Math.hypot(dx, dy) || 1;
+          const sp = 360;
+          this.vx = dx / dd * sp; this.vy = dy / dd * sp;
+          this.angle = Math.atan2(dy, dx);
+          if (dd < 28) { this.crossMode = 'edge'; this.x = tgt.x; this.y = tgt.y; }
+        } else {
+          // 沿屏幕边缘顺时针绕行一整圈，完成后碎裂
+          const sp = 380;
+          this.edgeTravel += sp * dt;
+          const pt = edgePt(this.edgeS0 + this.edgeTravel);
+          this.x = pt.x; this.y = pt.y;
+          this.vx = 0; this.vy = 0;
+          if (this.edgeTravel >= P) {
+            this.dead = true;
+            burst(g, this.x, this.y, 14, ['#e0453a', '#ffd23b', '#101018'], 200, 5, 0.5);
           }
         }
       }
@@ -606,19 +676,19 @@
         return;
       }
       if (k === 'apple') {
-        // 怪客红苹果：深红描边 → 红果身 → 肩部暗红 → 亮高光，棕柄绿叶轻摆
+        // 怪客玫红苹果：深酒红描边 → 深玫红果身 → 肩部暗玫 → 粉亮高光，棕柄绿叶轻摆
         const r = this.r;
         const f = 1 + Math.sin(this.t * 6) * 0.05;
         const rr = r * f;
-        ctx.fillStyle = '#6e1208';
+        ctx.fillStyle = '#570a2c';
         ctx.beginPath(); ctx.arc(this.x, this.y + rr * 0.05, rr * 1.08, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#e02b1e';
+        ctx.fillStyle = '#bf145c';
         ctx.beginPath(); ctx.arc(this.x, this.y, rr, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#b81d14';
+        ctx.fillStyle = '#930f48';
         ctx.beginPath(); ctx.arc(this.x, this.y - rr * 0.28, rr * 0.8, Math.PI * 1.05, Math.PI * 1.95); ctx.fill();
-        ctx.fillStyle = 'rgba(255,178,160,0.95)';
+        ctx.fillStyle = 'rgba(255,150,200,0.95)';
         ctx.beginPath(); ctx.arc(this.x - rr * 0.34, this.y - rr * 0.3, rr * 0.24, 0, TAU); ctx.fill();
-        ctx.fillStyle = 'rgba(255,240,232,0.95)';
+        ctx.fillStyle = 'rgba(255,232,244,0.95)';
         ctx.beginPath(); ctx.arc(this.x - rr * 0.4, this.y - rr * 0.4, rr * 0.1, 0, TAU); ctx.fill();
         // 果柄 + 绿叶（随帧轻摆）
         ctx.save();
@@ -634,10 +704,10 @@
         return;
       }
       if (k === 'cross') {
-        // 怪客巨型十字弹：黑边红十字黄芯
+        // 怪客巨型十字弹：黑边红十字黄芯，快速自转
         const s = this.r;
         const arm = s * 1.5, th = s * 0.62;
-        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(Math.sin(this.t * 2) * 0.12);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.spin);
         ctx.fillStyle = '#101018';
         ctx.fillRect(-arm - 2, -th / 2 - 2, arm * 2 + 4, th + 4);
         ctx.fillRect(-th / 2 - 2, -arm - 2, th + 4, arm * 2 + 4);

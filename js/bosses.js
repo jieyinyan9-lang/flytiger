@@ -1321,7 +1321,8 @@
             const a = Math.PI / 2 + i * 0.16;
             g.bullets.push(new Bullet(this.x, this.y + 50,
               Math.cos(a) * 360, Math.sin(a) * 360,
-              { kind: 'apple', r: 9, grav: 950, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5.5 }));
+              { kind: 'apple', r: 9, grav: 950, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5.5,
+                trailCols: ['#7b1fa2', '#a020d8', '#c85cf0', '#e3a4ff', '#f6e4ff'] }));
           }
           SFX.enemyShoot();
         }
@@ -1334,11 +1335,22 @@
         this.y += (this.baseY - this.y) * dt * 2.6;
         if (this.stateT > 0.7) {
           this.state = 'back'; this.stateT = 0;
-          // 向玩家抛出巨型红苹果（抛物线飞行，触地向上弹起）
+          // 巨型十字弹：快速自转 → 高速追击玩家 → 逼近后绕屏幕边缘转一圈再碎裂
+          // 命中玩家则怪客回复 20% 生命，每次十字弹招式仅可回复 1 次
+          this.crossHealed = false;
           const a = Math.atan2(p.y - this.y, p.x - this.x);
           g.bullets.push(new Bullet(this.x - 60, this.y,
-            Math.cos(a) * 230, Math.sin(a) * 230,
-            { kind: 'apple', r: 40, grav: 820, dmg: 22 * g.atkScale, dmgScale: g.atkScale, life: 7 }));
+            Math.cos(a) * 260, Math.sin(a) * 260,
+            { kind: 'cross', r: 52, spinRate: 14, dmg: 22 * g.atkScale, dmgScale: g.atkScale, life: 12,
+              onPlayerHit: (gg) => {
+                if (this.crossHealed || this.dead) return;
+                this.crossHealed = true;
+                const heal = Math.round(this.maxHp * 0.2);
+                this.hp = Math.min(this.maxHp, this.hp + heal);
+                gg.toast(`十字弹命中！怪客回复 ${heal} 点生命（20%）！`, 2);
+                burst(gg, this.x, this.y, 18, ['#7CFC00', '#c8f98a', '#ffffff'], 220, 5, 0.6);
+                SFX.levelup();
+              } }));
           SFX.dash(); g.shake(6);
         }
       }

@@ -880,6 +880,7 @@
           } else {
             b.dead = true;
             p.hurt(b.dmg, this);
+            if (b.onPlayerHit) b.onPlayerHit(this, b);   // 命中玩家回调（怪客十字弹吸血等）
             burst(this, b.x, b.y, 6, ['#ff5252', '#fff'], 160, 4, 0.3);
           }
         }
