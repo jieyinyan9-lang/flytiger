@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const { Player, Enemy, Gem, Bullet, Particle, Rock, burst, rand, randi, clamp } = window.FT;
+  const { Player, Enemy, Gem, Bullet, Particle, Rock, GrassDragon, burst, rand, randi, clamp } = window.FT;
   const TAU = Math.PI * 2;
 
   class Game {
@@ -219,6 +219,7 @@
       this.round = 1;
       this.wayPicksThisRound = 0;   // 每轮弹道类成长选择次数（上限 3）
       this.elemPicksThisRound = 0;  // 每轮元素弹道成长选择次数（上限 2）
+      this.grassDragonThisRound = false;   // 草龙每轮至多出现一次
       this.diffMul = 1;
       this.clouds = [];
       for (let i = 0; i < 7; i++) {
@@ -499,6 +500,7 @@
       this.round = this.bossCount + 1;
       this.wayPicksThisRound = 0;   // 新一轮重置弹道成长计数
       this.elemPicksThisRound = 0;  // 新一轮重置元素弹道成长计数
+      this.grassDragonThisRound = false;   // 新一轮重置草龙出场标记
       this.score += 500;
       this.kills++;
       this.addRage(CFG.ultimate.rageBoss);
@@ -578,6 +580,11 @@
       SFX.explode(false);
       this.shake(5);
       this.targets().forEach(e => {
+        if (e.segments) {
+          // 草龙：爆炸范围内的露出节全部受伤
+          e.aoeDamage(x, y, radius, dmg, this);
+          return;
+        }
         const d = Math.hypot(e.x - x, e.y - y);
         if (d < radius + e.radius) {
           e.takeDamage(dmg, this, {
@@ -596,16 +603,24 @@
 
     spawnEnemy(type) {
       if (this.enemies.length >= this.enemyCap()) return;   // 上限保护（含延迟生成的蝙蝠群）
+      if (type === 'grassdragon') {
+        // 草龙：20 节长身的特殊小怪，每轮至多一只
+        this.grassDragonThisRound = true;
+        this.enemies.push(new GrassDragon(this, false));
+        this.toast('草龙 钻出地面了！', 2.2);
+        return;
+      }
       this.enemies.push(new Enemy(type, this));
     }
 
-    /** 按权重随机抽取一种当前可出场的敌人（精英/地面单位场上限 1） */
+    /** 按权重随机抽取一种当前可出场的敌人（精英/地面单位场上限 1；草龙每轮限 1 只） */
     pickEnemyType() {
       const table = [];
       Object.keys(CFG.enemies).forEach(type => {
         const def = CFG.enemies[type];
         if ((def.minBossKills || 0) > this.bossCount) return;        // 未达成 Boss 击败数：每击败1只Boss解锁1种
-        if ((def.elite || def.ground) && this.enemies.some(e => e.type === type)) return;  // 精英/地面单位场上限 1
+        if (def.oncePerRound && this.grassDragonThisRound) return;   // 草龙：每轮至多一次
+        if ((def.elite || def.ground) && this.enemies.some(e => e.type === type && !e.isMini)) return;  // 精英/地面单位场上限 1（分裂小段不计）
         for (let i = 0; i < def.weight; i++) table.push(type);
       });
       return table.length ? table[Math.floor(Math.random() * table.length)] : null;
@@ -770,25 +785,34 @@
           if (e.dead) continue;
           if (e.isBoss && e.state === 'enter') continue;   // Boss 入场免伤
           if (b.hitSet && b.hitSet.has(e)) continue;
+          // 草龙：子弹逐节命中（仅露出地面的节）
+          let hitSeg = -1;
+          if (e.segments) hitSeg = e.hitTest(b.x, b.y, b.r);
           const rr = b.r + e.radius;
-          if ((b.x - e.x) ** 2 + (b.y - e.y) ** 2 < rr * rr) {
+          const circleHit = !e.segments && (b.x - e.x) ** 2 + (b.y - e.y) ** 2 < rr * rr;
+          if (hitSeg >= 0 || circleHit) {
             if (!b.hitSet) b.hitSet = new Set();
             b.hitSet.add(e);
-            e.takeDamage(b.dmg, this, { x: 220, y: rand(-60, 60) });
-            // 元素弹道命中：施加 DoT / 破无敌 / 冻结
-            if (b.element === 'flame') {
-              e.dotT = 3; e.dotDps = b.dmg * 0.4; e.dotType = 'flame';
-              if (e.spawnInvuln > 0) e.invulnBreakT = 1;   // 火焰：1s 后破无敌
-            } else if (b.element === 'poison') {
-              e.dotT = 6; e.dotDps = b.dmg * 0.25; e.dotType = 'poison';
-              if (e.spawnInvuln > 0) e.invulnBreakT = 3;   // 毒液：3s 后破无敌
-            } else if (b.element === 'ice') {
-              e.dotT = 2; e.dotDps = b.dmg * 0.3; e.dotType = 'ice';
-              e.freezeT = 4;                                // 寒冰：冻结 4s
-              if (e.spawnInvuln > 0) e.invulnBreakT = 0.5; // 寒冰也破无敌
+            if (e.segments) {
+              // 节命中：DoT / 冻结由 damageSegment 内部处理
+              e.damageSegment(hitSeg, b.dmg, this, { x: 220, y: rand(-60, 60) }, b.element || '');
+            } else {
+              e.takeDamage(b.dmg, this, { x: 220, y: rand(-60, 60) });
+              // 元素弹道命中：施加 DoT / 破无敌 / 冻结
+              if (b.element === 'flame') {
+                e.dotT = 3; e.dotDps = b.dmg * 0.4; e.dotType = 'flame';
+                if (e.spawnInvuln > 0) e.invulnBreakT = 1;   // 火焰：1s 后破无敌
+              } else if (b.element === 'poison') {
+                e.dotT = 6; e.dotDps = b.dmg * 0.25; e.dotType = 'poison';
+                if (e.spawnInvuln > 0) e.invulnBreakT = 3;   // 毒液：3s 后破无敌
+              } else if (b.element === 'ice') {
+                e.dotT = 2; e.dotDps = b.dmg * 0.3; e.dotType = 'ice';
+                e.freezeT = 4;                                // 寒冰：冻结 4s
+                if (e.spawnInvuln > 0) e.invulnBreakT = 0.5; // 寒冰也破无敌
+              }
             }
             // 闪电子弹：命中后闪电链跳跃链接附近敌人
-            if (p.chainJumps >= 1) this.chainLightning(e, b.dmg);
+            if (p.chainJumps >= 1 && !e.dead) this.chainLightning(e, b.dmg);
             // 爆炸弹
             if (b.bombLv > 0) {
               const radius = 34 + b.bombLv * 12;
@@ -846,8 +870,8 @@
           } else if (b.kind === 'shell') {
             b.dead = true;
             this.shellBlast(b.x, b.y, b.dmg);
-          } else if (b.kind === 'missile' || b.kind === 'float') {
-            // 可击爆弹撞到玩家：直接引爆
+          } else if (b.kind === 'missile' || b.hp > 0) {
+            // 可击爆弹（导弹/漂浮战斧等 hp>0）撞到玩家：直接引爆
             b.dead = true;
             this.shellBlast(b.x, b.y, b.dmg);
           } else {
@@ -863,28 +887,36 @@
     chainLightning(first, baseDmg) {
       const p = this.player;
       const C = CFG.chain;
+      // 首个受击点（草龙取最近露出节）
+      const startPt = first.segments
+        ? (first.nearestExposed(first.x, first.y) || { x: first.x, y: first.y })
+        : { x: first.x, y: first.y };
       const linked = new Set([first]);
-      let from = first;
-      const segPts = [{ x: first.x, y: first.y }];
+      let from = { x: startPt.x, y: startPt.y };
+      const segPts = [{ x: startPt.x, y: startPt.y }];
       for (let jump = 0; jump < p.chainJumps; jump++) {
-        // 找未链过、未死亡、在链接范围内的最近目标
-        let best = null, bestD = C.range;
+        // 找未链过、未死亡、在链接范围内的最近目标（草龙按露出节取点）
+        let best = null, bestD = C.range, bestPt = null;
         for (const e of this.targets()) {
           if (e.dead || linked.has(e)) continue;
           if (e.isBoss && e.state === 'enter') continue;
-          const d = Math.hypot(e.x - from.x, e.y - from.y);
-          if (d < bestD) { bestD = d; best = e; }
+          // 草龙：最近露出节即受击点；整龙全在地下则跳过
+          const pt = e.segments ? e.nearestExposed(from.x, from.y) : { x: e.x, y: e.y };
+          if (!pt) continue;
+          const d = Math.hypot(pt.x - from.x, pt.y - from.y);
+          if (d < bestD) { bestD = d; best = e; bestPt = pt; }
         }
         if (!best) break;
         linked.add(best);
         // 伤害：基础系数 + 强化等级，每跳衰减 15%
         const mul = (C.baseMul + C.dmgPerLv * p.chainDmgLv) * Math.pow(0.85, jump);
-        best.takeDamage(baseDmg * mul, this, {
+        if (best.segments) best.damageAt(bestPt.x, bestPt.y, baseDmg * mul, this);
+        else best.takeDamage(baseDmg * mul, this, {
           x: (best.x - from.x) * 2.2, y: (best.y - from.y) * 2.2
         });
-        burst(this, best.x, best.y, 4, ['#fff', '#ffe066', '#7fe7ff'], 130, 3, 0.22);
-        segPts.push({ x: best.x, y: best.y });
-        from = best;
+        burst(this, bestPt.x, bestPt.y, 4, ['#fff', '#ffe066', '#7fe7ff'], 130, 3, 0.22);
+        segPts.push({ x: bestPt.x, y: bestPt.y });
+        from = bestPt;
       }
       if (segPts.length > 1) {
         // 折线电弧：相邻目标间生成抖动折点

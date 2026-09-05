@@ -1138,7 +1138,7 @@
             const a = this.t * 0.8 + (TAU / n) * i;
             g.bullets.push(new Bullet(this.x, this.y,
               Math.cos(a) * 175, Math.sin(a) * 175,
-              { kind: 'orb', r: 7, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 7, color: '#ff5252' }));
+              { kind: 'axe', r: 7, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 7, color: '#ff5252', spinRate: 12 }));
           }
           SFX.enemyShoot(); g.shake(3);
         }
@@ -1171,7 +1171,7 @@
             for (let s = -1; s <= 1; s++) {
               g.bullets.push(new Bullet(h.px, h.py,
                 Math.cos(dir + s * 0.18) * 300, Math.sin(dir + s * 0.18) * 300,
-                { kind: 'orb', r: 8, dmg: 14 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ffd23b' }));
+                { kind: 'axe', r: 8, dmg: 14 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ffd23b', spinRate: 12 }));
             }
             SFX.enemyShoot();
           }
@@ -1184,8 +1184,8 @@
         const a = -Math.PI / 2 + (i - 2) * 0.5;
         const b = new Bullet(this.x - 50, this.y - 30,
           Math.cos(a) * 60, Math.sin(a) * 60,
-          { kind: 'float', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 9,
-            hp: 6, homing: true, turnRate: 0.55 });
+          { kind: 'axe', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 9,
+            hp: 6, homing: true, turnRate: 0.55, color: '#e0453a', spinRate: 7 });
         b.onBreak = (gg, bb) => gg.shellBlast(bb.x, bb.y, bb.dmg);
         b.onExpire = (gg, bb) => gg.shellBlast(bb.x, bb.y, bb.dmg);
         g.bullets.push(b);
@@ -1219,7 +1219,7 @@
     }
   }
 
-  /* ================ D3. 怪客（跳动光头巨汉：S 型冲刺 / 顶端飞刀散射 / 巨型十字弹 / 召唤雷公） ================ */
+  /* ================ D3. 怪客（跳动光头巨汉：S 型冲刺 / 飞空横身扫射红苹果 / 巨型苹果 / 召唤雷公） ================ */
   class Stranger extends Boss {
     constructor(g) {
       super(g, 30, 100);
@@ -1230,6 +1230,7 @@
       this.actIdx = 0;
       this.knifeFireT = 0;
       this.sy = 0;
+      this.bodyAngle = 0;        // 飞空时身体横过来（-π/2：头朝左、面朝下方）
       this.deathCols = ['#d9b38c', '#8d96a3', '#e0453a', '#ffd23b'];
     }
     update(dt, g) {
@@ -1237,6 +1238,9 @@
       this.flash = Math.max(0, this.flash - dt);
       this.commonMove(dt);
       const p = g.player;
+      // 飞空状态身体横过来，其余状态回正
+      const airState = (this.state === 'toTop' || this.state === 'knives');
+      this.bodyAngle += ((airState ? -Math.PI / 2 : 0) - this.bodyAngle) * Math.min(1, dt * 5);
 
       if (this.state === 'enter') {
         this.x -= 150 * dt;
@@ -1279,16 +1283,18 @@
         if (this.stateT > 1.4 || this.x < 110) { this.state = 'back'; this.stateT = 0; }
       }
       else if (this.state === 'toTop') {
-        // 移动到屏幕顶端
-        const tx = CFG.W * 0.5, ty = 120;
+        // 飞到玩家上方空域
+        const tx = clamp(p.x, 130, CFG.W - 130), ty = 130;
         this.x += (tx - this.x) * dt * 3.4;
         this.y += (ty - this.y) * dt * 3.4;
         if (this.stateT > 0.6) { this.state = 'knives'; this.stateT = 0; this.knifeFireT = 0.2; SFX.bossCharge(); }
       }
       else if (this.state === 'knives') {
-        // 顶端向下大范围散射飞刀（9 发/轮，扇形覆盖 ±0.64 弧度）
-        this.x = CFG.W * 0.5 + Math.sin(this.t * 1.2) * 70;
-        this.y = 120;
+        // 横身飞空：身体横过来，持续 4s 向玩家逼近（保持空中距离）并向下散射红苹果
+        const tx = clamp(p.x, 100, CFG.W - 100);
+        const ty = clamp(p.y - 180, 90, CFG.GROUND_Y - 250);
+        this.x += (tx - this.x) * dt * 1.7;
+        this.y += (ty - this.y) * dt * 1.7;
         this.knifeFireT -= dt;
         if (this.knifeFireT <= 0) {
           this.knifeFireT = 0.2;
@@ -1296,11 +1302,11 @@
             const a = Math.PI / 2 + i * 0.16;
             g.bullets.push(new Bullet(this.x, this.y + 50,
               Math.cos(a) * 360, Math.sin(a) * 360,
-              { kind: 'knife', r: 9, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5.5 }));
+              { kind: 'apple', r: 9, grav: 950, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5.5 }));
           }
           SFX.enemyShoot();
         }
-        if (this.stateT > 2.8) { this.state = 'back'; this.stateT = 0; }
+        if (this.stateT > 4) { this.state = 'back'; this.stateT = 0; }
       }
       else if (this.state === 'cross') {
         // 回到屏幕右侧
@@ -1309,11 +1315,11 @@
         this.y += (this.baseY - this.y) * dt * 2.6;
         if (this.stateT > 0.7) {
           this.state = 'back'; this.stateT = 0;
-          // 向左发射巨大十字型子弹（体积×2）
+          // 向玩家抛出巨型红苹果（抛物线飞行，触地向上弹起）
           const a = Math.atan2(p.y - this.y, p.x - this.x);
           g.bullets.push(new Bullet(this.x - 60, this.y,
-            Math.cos(a) * 210, Math.sin(a) * 210,
-            { kind: 'cross', r: 52, dmg: 22 * g.atkScale, dmgScale: g.atkScale, life: 6 }));
+            Math.cos(a) * 230, Math.sin(a) * 230,
+            { kind: 'apple', r: 40, grav: 820, dmg: 22 * g.atkScale, dmgScale: g.atkScale, life: 7 }));
           SFX.dash(); g.shake(6);
         }
       }
@@ -1325,9 +1331,9 @@
       }
     }
     render(ctx) {
-      // 持续跳动
+      // 持续跳动；飞空时身体横过来（bodyAngle → -π/2）
       const bob = Math.abs(Math.sin(this.t * 5)) * -12;
-      drawSprite(ctx, Sprites.strangerL, this.x, this.y + bob, 8.5, 8.5, Math.sin(this.t * 3) * 0.04, this.flash);
+      drawSprite(ctx, Sprites.strangerL, this.x, this.y + bob, 8.5, 8.5, this.bodyAngle + Math.sin(this.t * 3) * 0.04, this.flash);
     }
   }
 

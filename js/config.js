@@ -124,6 +124,11 @@
         name: '大型蝙蝠', hp: 90, speed: 100, contact: 18,
         bulletDmg: 12, xp: 18, score: 42, radius: 30, weight: 4, minBossKills: 3, elite: true,
         dynamicHp: true, fightTime: [3, 4]   // 动态血量：仅可承伤期(每8s中4s)能输出，反推血量保证墙钟交战 6-8 秒
+      },
+      grassdragon: {
+        name: '草龙', hp: 26, speed: 150, contact: 16,
+        bulletDmg: 12, xp: 3, score: 80, radius: 14, weight: 5, minBossKills: 1, elite: true,
+        oncePerRound: true   // 每轮至多出现一次（第 2 轮起解锁）
       }
     },
 
