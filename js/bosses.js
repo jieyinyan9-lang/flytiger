@@ -531,6 +531,7 @@
         this.legs.forEach(l => { l.state = 'idle'; l.t = 0; });
         g.shake(14);
         g.flashT = 0.3; g.flashColor = '#fff';
+        SFX.phaseRise();   // 阶段转换：电流上行 + 爆点
         g.toast('飞天狗王解体了！', 1.8);
         burst(g, this.x, this.y, 30, ['#8d96a3', '#e8eef7', '#fff'], 300, 6, 0.7, 100);
       }
