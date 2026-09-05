@@ -137,6 +137,29 @@
       tone(72, 0.55, 'sine', 0.26, 30, 1.0);          // 末端爆点
       noiseAt(1.0, 0.45, 0.22, 'lowpass', 1800, 280);
     },
+    /** Boss 危险招式蓄力（掷刀/冲刺/旋风/飞刀）：两声急促尖锐警报 + 短 riser，约 0.6s */
+    bossCharge() {
+      if (muted) return;
+      const now = performance.now();
+      if (now - (SFX._lastCharge || 0) < 400) return;  // 节流：防止同帧多招式叠加
+      SFX._lastCharge = now;
+      tone(1319, 0.075, 'square', 0.1);               // 嘀！
+      tone(1760, 0.13, 'square', 0.11, null, 0.12);   // 嘀——！
+      tone(240, 0.55, 'sawtooth', 0.07, 760);         // 蓄力上行
+      tone(62, 0.2, 'sine', 0.18, 34);                // 低频心跳
+    },
+    /** Boss 低血量狂暴（每只仅一次）：三连尖锐上行警报 + 怒吼下滑 + 轰鸣 */
+    bossEnrage() {
+      if (muted) return;
+      tone(880, 0.12, 'square', 0.11);
+      tone(1046, 0.12, 'square', 0.11, null, 0.16);
+      tone(1319, 0.3, 'square', 0.12, null, 0.32);
+      tone(150, 1.1, 'sawtooth', 0.14, 55);           // 怒吼下滑
+      tone(75, 1.2, 'square', 0.08, 46, 0.05);        // 低沉底
+      tone(1760, 0.4, 'square', 0.07, 1250, 0.95);    // 末端长啸
+      noiseAt(0, 1.0, 0.2, 'lowpass', 2400, 300);
+      tone(95, 0.5, 'sine', 0.24, 32, 0.05);          // 重击
+    },
     bossDie() {
       noise(1.0, 0.5, 500);
       tone(100, 0.9, 'sawtooth', 0.2, 30);

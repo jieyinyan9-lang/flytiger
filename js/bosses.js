@@ -33,11 +33,19 @@
       this.deathCols = ['#fff', '#ffd23b', '#ff7b2e'];
     }
     takeDamage(dmg, g, kb) {
-      if (this.dead || this.state === 'enter' || this.lockHp) return;   // 入场免伤；变身期锁血
+      if (this.dead || this.state === 'enter') return;   // 入场免伤
       this.hp -= dmg;
       this.flash = 0.08;
       if (kb) { this.kbX += kb.x * 0.25; this.kbY += kb.y * 0.25; }
       if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#fff', '#ffe08a'], 130, 3, 0.18);
+      // 低血量狂暴（每只 Boss 仅一次）：三连警报 + 怒吼 + 震屏 + 红色爆发
+      if (!this.enraged && this.hp > 0 && this.hp <= this.maxHp * 0.3) {
+        this.enraged = true;
+        SFX.bossEnrage();
+        g.shake(10);
+        g.toast(`${this.bossName} 狂暴了！`, 1.8);
+        burst(g, this.x, this.y, 24, ['#ff3b3b', '#ffd23b', '#fff'], 280, 6, 0.6, 130);
+      }
       if (this.hp <= 0) { this.hp = 0; this.die(g); }
     }
     die(g) {
@@ -1136,7 +1144,7 @@
         const tx = CFG.W * 0.5, ty = 120;
         this.x += (tx - this.x) * dt * 3.4;
         this.y += (ty - this.y) * dt * 3.4;
-        if (this.stateT > 0.6) { this.state = 'knives'; this.stateT = 0; this.knifeFireT = 0.2; }
+        if (this.stateT > 0.6) { this.state = 'knives'; this.stateT = 0; this.knifeFireT = 0.2; SFX.bossCharge(); }
       }
       else if (this.state === 'knives') {
         // 顶端向下大范围散射飞刀（9 发/轮，扇形覆盖 ±0.64 弧度）

@@ -406,6 +406,7 @@
         pick = p2[Math.floor(Math.random() * p2.length)];
       }
       this.pendingBoss = pick.cls;
+      this.pendingBossMusic = pick.music || 'boss';   // 预警期即切到该 Boss 专属曲目
       this.warnT = CFG.boss.warnTime;
       this.el.warnSub.textContent = '强大的气息逼近了！';
       this.el.warn.classList.remove('hidden');
@@ -413,6 +414,8 @@
     }
     spawnBoss(cls) {
       const b = new cls(this);
+      const entry = (window.BOSS_LIST || []).find(e => e.cls === cls);
+      b.musicTheme = (entry && entry.music) || 'boss';   // 专属 BGM（boss/eagle/pheasant/hero）
       this.bosses.push(b);
       this.bossSpawned++;
       this.lastBossCls = cls.name;
