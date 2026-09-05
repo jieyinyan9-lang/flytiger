@@ -51,18 +51,29 @@
         bgmBtn: document.getElementById('bgm-btn'),
         menuBgmBtn: document.getElementById('menu-bgm-btn'),
         modeKeyboard: document.getElementById('mode-keyboard'),
-        modeMouse: document.getElementById('mode-mouse')
+        modeMouse: document.getElementById('mode-mouse'),
+        menuMapBtn: document.getElementById('menu-map-btn')
       };
-      document.getElementById('start-btn').addEventListener('click', () => this.start());
-      document.getElementById('restart-btn').addEventListener('click', () => this.start());
-      this.el.muteBtn.addEventListener('click', () => this.toggleMute());
-      this.el.bgmBtn.addEventListener('click', () => this.toggleBgm());
-      this.el.menuBgmBtn.addEventListener('click', () => this.toggleBgm());
+      // 按钮统一走 onClick 安全绑定：元素缺失（如浏览器缓存了旧版 HTML）时仅跳过并告警，
+      // 绝不能让构造函数中断——否则 reset()/主循环不启动，背景音乐与音效会全部静默
+      this.onClick('start-btn', () => this.start());
+      this.onClick('restart-btn', () => this.start());
+      this.onClick('menu-map-btn', () => this.cycleMapChoice());
+      this.syncMapBtns();
+      this.onClick('mute-btn', () => this.toggleMute());
+      this.onClick('bgm-btn', () => this.toggleBgm());
+      this.onClick('menu-bgm-btn', () => this.toggleBgm());
       this.syncBgmBtn();
       // 操作模式选择（菜单）
       this.ctrlMode = 'keyboard';
-      this.el.modeKeyboard.addEventListener('click', () => this.setCtrlMode('keyboard'));
-      this.el.modeMouse.addEventListener('click', () => this.setCtrlMode('mouse'));
+      this.onClick('mode-keyboard', () => this.setCtrlMode('keyboard'));
+      this.onClick('mode-mouse', () => this.setCtrlMode('mouse'));
+
+      // 地图选择偏好（'random' 或具体地图 id）：从 localStorage 恢复
+      try {
+        const saved = localStorage.getItem('flytiger_map');
+        this.mapChoice = (saved === 'random' || (saved && CFG.maps.some(m => m.id === saved))) ? saved : 'random';
+      } catch (e) { this.mapChoice = 'random'; }
 
       this.reset();
       this.last = performance.now();
@@ -74,6 +85,13 @@
       const wrap = document.getElementById('game-wrap');
       const s = Math.min(window.innerWidth / CFG.W, window.innerHeight / CFG.H);
       wrap.style.transform = `translate(-50%, -50%) scale(${s})`;
+    }
+
+    /** 安全绑定点击：元素不存在（旧缓存 HTML / 新版缺节点）时跳过并告警，避免构造函数整体崩溃 */
+    onClick(id, fn) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', fn);
+      else console.warn('[flytiger] 缺少按钮节点，已跳过绑定: #' + id);
     }
 
     /* ---------------- 输入 ---------------- */
@@ -124,7 +142,7 @@
     toggleMute() {
       const m = !SFX.isMuted();
       SFX.setMuted(m);
-      this.el.muteBtn.textContent = m ? '音效 关' : '音效 开';
+      if (this.el.muteBtn) this.el.muteBtn.textContent = m ? '音效 关' : '音效 开';
     }
 
     /** 切换背景音乐开/关（HUD 按钮、菜单按钮、N 键共用） */
@@ -137,16 +155,18 @@
     /** 按当前静音状态同步两处按钮文案 */
     syncBgmBtn() {
       const m = window.Music ? Music.isMuted() : false;
-      this.el.bgmBtn.textContent = m ? '音乐 关' : '音乐 开';
-      this.el.menuBgmBtn.textContent = m ? '🎵 背景音乐：关' : '🎵 背景音乐：开';
-      this.el.menuBgmBtn.classList.toggle('off', m);
+      if (this.el.bgmBtn) this.el.bgmBtn.textContent = m ? '音乐 关' : '音乐 开';
+      if (this.el.menuBgmBtn) {
+        this.el.menuBgmBtn.textContent = m ? '🎵 背景音乐：关' : '🎵 背景音乐：开';
+        this.el.menuBgmBtn.classList.toggle('off', m);
+      }
     }
 
     /** 切换操作模式（菜单选择，战斗中不可改） */
     setCtrlMode(mode) {
       this.ctrlMode = mode;
-      this.el.modeKeyboard.classList.toggle('active', mode === 'keyboard');
-      this.el.modeMouse.classList.toggle('active', mode === 'mouse');
+      if (this.el.modeKeyboard) this.el.modeKeyboard.classList.toggle('active', mode === 'keyboard');
+      if (this.el.modeMouse) this.el.modeMouse.classList.toggle('active', mode === 'mouse');
       SFX.pick();
     }
 
@@ -236,17 +256,54 @@
       return { grassland: 'grass', desert: 'sand', snow: 'black', volcano: 'red', wasteland: 'bone', cyber: 'mech', ocean: 'sea' };
     }
 
-    /** 随机抽取一张地图；forceDiff=true 时保证与当前地图不同（复活换图） */
-    rollMap(forceDiff) {
-      let map;
-      do {
-        map = CFG.maps[Math.floor(Math.random() * CFG.maps.length)];
-      } while (forceDiff && map.id === this.mapId);
+    /** 地图选择按钮文案：随机 / 具体地图名 */
+    mapChoiceLabel() {
+      if (this.mapChoice === 'random') return '🎲 随机地图';
+      const m = CFG.maps.find(x => x.id === this.mapChoice);
+      return m ? `${m.icon} ${m.name}` : '🎲 随机地图';
+    }
+    /** 同步菜单地图按钮文案 */
+    syncMapBtns() {
+      const label = this.mapChoiceLabel();
+      if (this.el && this.el.menuMapBtn) this.el.menuMapBtn.textContent = label;
+    }
+    /** 循环切换地图选择：随机 → 草原 → 沙漠 → … → 大海 → 随机 */
+    cycleMapChoice() {
+      const ids = ['random'].concat(CFG.maps.map(m => m.id));
+      const i = Math.max(0, ids.indexOf(this.mapChoice));
+      this.mapChoice = ids[(i + 1) % ids.length];
+      try { localStorage.setItem('flytiger_map', this.mapChoice); } catch (e) {}
+      this.syncMapBtns();
+      if (this.state === 'menu') this.rollMap();   // 菜单中切换：立即预览所选地图背景
+      SFX.hit();
+    }
+
+    /**
+     * 抽取并应用一张地图。
+     *  - honorChoice：菜单中已指定地图时始终使用该地图（开局/菜单预览）；死亡换图传 false 强制随机
+     *  - forceDiff：保证与当前地图不同（复活换图）
+     *  - excludeOcean：排除大海（场上存在地面类敌人时，大海无其立足之地）
+     */
+    rollMap(opts) {
+      opts = opts || {};
+      let map = null;
+      if (opts.honorChoice !== false && this.mapChoice && this.mapChoice !== 'random') {
+        map = CFG.maps.find(m => m.id === this.mapChoice);
+      }
+      if (!map) {
+        let pool = CFG.maps.slice();
+        if (opts.excludeOcean) pool = pool.filter(m => m.id !== 'ocean');
+        if (opts.forceDiff) pool = pool.filter(m => m.id !== this.mapId);
+        if (!pool.length) pool = CFG.maps.filter(m => m.id !== this.mapId);
+        if (!pool.length) pool = CFG.maps.slice();
+        map = pool[Math.floor(Math.random() * pool.length)];
+      }
       this.map = map;
       this.mapId = map.id;
-      // 火焰山火山口：固定在地面，每 5s 抛射巨大火焰弹（接触不死亡不掉血）
+      // 火焰山火山口：场景物件，与障碍一样随卷轴向左移动（移出屏幕后从右侧重新出现）；
+      // 每 5s 抛射巨大火焰弹（接触火山口本身不死亡不掉血）
       this.crater = map.crater
-        ? { x: rand(200, CFG.W - 200), t: CFG.map.craterInterval, rumble: 0 }
+        ? { x: CFG.W + rand(140, 340), t: CFG.map.craterInterval, rumble: 0 }
         : null;
       // 大海：波浪海平面，每 10s 一次波动（幅度变大 + 海平面上升），接触微量掉血
       this.sea = map.sea
@@ -254,9 +311,19 @@
         : null;
     }
 
-    /** 死亡复活后刷新至另一张地图：清空旧地图障碍与残留龙系，保留轮次/成长/生命 */
+    /** 场上是否存在地面类敌人：地面小怪（弓箭手/炮师）或地面移动型 Boss（蛙哥/野鸡王）。
+     *  龙系怪物虽钻地但属飞行长身怪，不在此列 */
+    hasGroundUnits() {
+      if (this.enemies.some(e => !e.dead && CFG.enemies[e.type] && CFG.enemies[e.type].ground)) return true;
+      if (this.bosses && this.bosses.some(b => !b.dead &&
+          (window.BOSS_LIST || []).some(e => e.cls === b.constructor && e.ground))) return true;
+      return false;
+    }
+
+    /** 死亡复活后刷新至另一张地图：清空旧地图障碍与残留龙系，保留轮次/成长/生命。
+     *  随机切换；若场上有地面类敌人，则不会切到大海（大海不出现地面类敌人） */
     rerollMap() {
-      this.rollMap(true);
+      this.rollMap({ forceDiff: true, honorChoice: false, excludeOcean: this.hasGroundUnits() });
       this.rocks.length = 0;
       this.rockT = 1.2;
       // 旧地图的龙系怪物随之消失，新地图的龙当轮可再次出场
@@ -487,8 +554,10 @@
       // chance：部分 Boss（骷髅王/狗王）即使解锁也只有 30% 概率进入候选池
       const ord = this.bossSpawned + 1;
       const ordOk = b => b.minOrd <= ord && (b.maxOrd === undefined || ord <= b.maxOrd);
-      // map：地图限定 Boss（如狮身人面像仅沙漠）；sphinxSpawned：每局至多一次
+      // map：地图限定 Boss（如狮身人面像仅沙漠）；大海不出现地面移动型 Boss（蛙哥/野鸡王）
+      // sphinxSpawned：每局至多一次
       const mapOk = b => (b.map === undefined || b.map === this.mapId) &&
+                         !(b.ground && this.mapId === 'ocean') &&
                          (b.cls.name !== 'Sphinx' || !this.sphinxSpawned);
       let pool = window.BOSS_LIST.filter(b =>
         ordOk(b) &&
@@ -507,15 +576,14 @@
       // forceChance：部分 Boss 在指定出场序号有独立的直接出场概率（如大王首轮 60%）；
       // 未命中强制概率的该类 Boss 不再参与本轮随机池
       let pick = null;
-      const randomPool = [];
-      for (const b of pool) {
-        const fc = b.forceChance && b.forceChance[ord];
-        if (fc !== undefined) {
-          if (Math.random() < fc) { pick = b; break; }
-        } else {
-          randomPool.push(b);
-        }
+      // 地图限定 Boss（如狮身人面像仅沙漠）优先掷强制骰，避免被通用强制 Boss（大王）抢场而压低其出场率
+      const forceList = pool.filter(b => b.forceChance && b.forceChance[ord] !== undefined);
+      forceList.sort((a, b) => (a.map ? 0 : 1) - (b.map ? 0 : 1));
+      for (const b of forceList) {
+        if (Math.random() < b.forceChance[ord]) { pick = b; break; }
       }
+      // 未命中强制概率的 Boss 不进随机池
+      const randomPool = pool.filter(b => !(b.forceChance && b.forceChance[ord] !== undefined));
       if (!pick) {
         const p2 = randomPool.length ? randomPool : pool;
         pick = p2[Math.floor(Math.random() * p2.length)];
@@ -669,6 +737,7 @@
       Object.keys(CFG.enemies).forEach(type => {
         const def = CFG.enemies[type];
         if ((def.minBossKills || 0) > this.bossCount) return;        // 未达成 Boss 击败数：每击败1只Boss解锁1种
+        if (def.ground && this.mapId === 'ocean') return;           // 大海：不出现地面类敌人（弓箭手/炮师）
         if (def.oncePerRound && this.grassDragonThisRound) return;   // 草龙：每轮至多一次
         if ((def.elite || def.ground) && this.enemies.some(e => e.type === type && !e.isMini)) return;  // 精英/地面单位场上限 1（分裂小段不计）
         for (let i = 0; i < def.weight; i++) table.push(type);
@@ -771,20 +840,28 @@
             rand(-30, 30), rand(-90, -30), rand(0.3, 0.6), rand(3, 5), '#d8f2ff'));
         }
       }
-      // 火焰山火山口：喷发前 0.9s 蓄力（震动 + 火星），随后抛射巨大火焰弹
+      // 火焰山火山口：场景物件，随卷轴向左移动，移出屏幕后从右侧重新出现；
+      // 喷发前 0.9s 蓄力（震动 + 火星），随后抛射巨大火焰弹
       if (this.crater) {
         const c = this.crater;
-        c.t -= dt;
-        if (c.t < CFG.map.craterRumble) {
-          c.rumble = 1 - c.t / CFG.map.craterRumble;
-          this.shake(3 * c.rumble);
-          if (Math.random() < dt * 20) {
-            this.particles.push(new Particle(c.x + rand(-26, 26), CFG.GROUND_Y - 34,
-              rand(-40, 40), rand(-230, -120), rand(0.3, 0.7), rand(3, 6),
-              Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
-          }
-        } else c.rumble = 0;
-        if (c.t <= 0) { this.eruptCrater(); c.t = CFG.map.craterInterval; }
+        c.x -= 62 * dt;                        // 与地面卷轴同步
+        if (c.x < -120) {                      // 完全移出屏幕：从右侧重新出现
+          c.x = CFG.W + rand(160, 420);
+          c.t = CFG.map.craterInterval;
+          c.rumble = 0;
+        } else if (c.x < CFG.W + 20) {         // 进入屏幕后才开始蓄力/喷发
+          c.t -= dt;
+          if (c.t < CFG.map.craterRumble) {
+            c.rumble = 1 - c.t / CFG.map.craterRumble;
+            this.shake(3 * c.rumble);
+            if (Math.random() < dt * 20) {
+              this.particles.push(new Particle(c.x + rand(-26, 26), CFG.GROUND_Y - 34,
+                rand(-40, 40), rand(-230, -120), rand(0.3, 0.7), rand(3, 6),
+                Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
+            }
+          } else c.rumble = 0;
+          if (c.t <= 0) { this.eruptCrater(); c.t = CFG.map.craterInterval; }
+        }
       }
     }
     /** 火山口喷发：巨大火焰弹抛物线抛射至左右任意位置 */
