@@ -1634,7 +1634,7 @@
           for (let i = 0; i < n; i++) {
             const a = i * TAU / n + this.waveIdx * 0.21;
             g.bullets.push(new Bullet(this.x, this.y, Math.cos(a) * sp, Math.sin(a) * sp,
-              { kind: 'wave', r: this.waveIdx === 1 ? 11 : 9, dmg: 11 * g.atkScale, life: 7, color: this.waveIdx === 1 ? '#9fd8ff' : '#dff2ff' }));
+              { kind: 'wave', r: this.waveIdx === 1 ? 15 : 13, dmg: 11 * g.atkScale, life: 7, color: '#38bdf8' }));
           }
           this.waveIdx++; this.waveT = 0.55;
           g.shake(3); SFX.enemyShoot();
@@ -1667,7 +1667,7 @@
             for (let i = 0; i < 8; i++) {
               const a = i * TAU / 8;
               g.bullets.push(new Bullet(this.x, CFG.GROUND_Y - 60, Math.cos(a) * 250, Math.sin(a) * 250,
-                { kind: 'wave', r: 8, dmg: 12 * g.atkScale, life: 3, color: '#dff2ff' }));
+                { kind: 'wave', r: 12, dmg: 12 * g.atkScale, life: 3, color: '#38bdf8' }));
             }
             SFX.explode();
           }
