@@ -1133,6 +1133,8 @@
       this.groundUnit = !!def.ground;      // 地面单位：触碰山石不坠毁
       this.t = rand(0, 10);
       this.flash = 0;
+      this.hurtT = 0;          // 持续受伤红染（>0 时叠加红色 tint，不闪烁）
+      this.spawnInvuln = 0;    // 出场无敌时间
       this.kbX = 0; this.kbY = 0;
 
       // 难度缩放
@@ -1170,6 +1172,7 @@
         this.stops = 0;
         this.stopsTotal = randi(3, 4);
         this.atkT = 0.6;
+        this.spawnInvuln = 4;     // 出场 4s 无敌
       }
 
       // 飞天骷髅：悬停持续旋转，循环 瞄准连射 / 扇形散射 / 多方向环弹
@@ -1186,7 +1189,14 @@
       // 自爆骷髅：高速冲入屏幕中部 → 降速持续追击玩家 → 接触自爆
       if (type === 'skeleton') {
         this.state = 'rush';
+        this.spawnInvuln = 5;     // 出场 5s 无敌
+        this.radius = def.radius * 1.6;  // 体积变大
       }
+
+      // 飞鹰：出场 3s 无敌
+      if (type === 'eagle') this.spawnInvuln = 3;
+      // 小超人：出场 7s 无敌
+      if (type === 'superboy') this.spawnInvuln = 7;
     }
 
     /** 自爆骷髅：接触玩家引爆（无能量掉落，纯爆炸伤害） */
@@ -1207,8 +1217,10 @@
 
     takeDamage(dmg, g, kb) {
       if (this.dead) return;
+      if (this.spawnInvuln > 0) return;   // 出场无敌期内不受伤
       this.hp -= dmg;
       this.flash = 0.08;
+      this.hurtT = 0.12;   // 持续受伤红染：连续命中时 hurtT 始终 >0，不会闪烁
       if (kb) { this.kbX += kb.x; this.kbY += kb.y; }
       burst(g, this.x - 10, this.y, 2, ['#fff', '#ffe08a'], 120, 3, 0.18);
       SFX.hit();
@@ -1267,6 +1279,8 @@
       this.animT += dt;
       this.stateT += dt;
       this.flash = Math.max(0, this.flash - dt);
+      this.hurtT = Math.max(0, this.hurtT - dt);
+      this.spawnInvuln = Math.max(0, this.spawnInvuln - dt);
       // 击退衰减
       this.x += this.kbX * dt; this.y += this.kbY * dt;
       this.kbX *= 0.86; this.kbY *= 0.86;
@@ -1560,6 +1574,7 @@
     render(ctx) {
       const flip = this.flash > 0;
       const t = this.animT;
+      const hurtRed = this.hurtT > 0;   // 持续受伤红染（不闪烁）
       switch (this.type) {
         case 'eagle': {
           const spr = Math.floor(t * 7) % 2 === 0 ? Sprites.eagleAL : Sprites.eagleBL;
@@ -1592,7 +1607,6 @@
           const moving = this.state !== 'stop';
           const bob = moving ? Math.abs(Math.sin(t * (this.state === 'run' ? 14 : 8))) * -4 : 0;
           drawSprite(ctx, Sprites.cannoneerL, this.x, this.y + bob + 8, 4.0, 4.0, 0, this.flash);
-          // 开炮 muzzle flash（炮口朝左，体积×2 后偏移同步放大）
           if (this.state === 'stop' && this.atkT > 0.85) {
             const f = 10 + Math.sin(t * 40) * 4;
             ctx.fillStyle = '#ffd23b';
@@ -1603,22 +1617,37 @@
           break;
         }
         case 'superboy': {
-          // 少年超人：面朝玩家（左），悬停起伏
           drawSprite(ctx, Sprites.superboyL, this.x, this.y + Math.sin(t * 3.2) * 3, 2.6, 2.6, Math.sin(t * 3.2) * 0.05, this.flash);
           break;
         }
         case 'skull': {
-          // 头骨持续旋转，眼窝红光脉动
           const pulse = 1 + Math.sin(t * 6) * 0.06;
           drawSprite(ctx, Sprites.skullhead, this.x, this.y, 2.1 * pulse, 2.1 * pulse, this.rotA, this.flash);
           break;
         }
         case 'skeleton': {
-          // 追击时爆核急促脉动闪烁，提示即将自爆
+          // 黑色骷髅头模型，体积变大（scale 2.0→3.2）
           const pulse = this.state === 'chase' ? 1 + Math.sin(t * 16) * 0.08 : 1;
-          drawSprite(ctx, Sprites.skeletonL, this.x, this.y + 3, 2.0 * pulse, 2.0 * pulse, 0, this.flash);
+          drawSprite(ctx, Sprites.blackSkelL, this.x, this.y + 3, 3.2 * pulse, 3.2 * pulse, 0, this.flash);
           break;
         }
+      }
+      // 持续受伤红染：叠加半透明红色（连续命中时 hurtT 不会归零，呈持续红光而非闪烁）
+      if (hurtRed) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = 'rgba(255,40,40,0.32)';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 1.3, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+      // 出场无敌期：金色脉动护盾环
+      if (this.spawnInvuln > 0) {
+        const rr = this.radius + 6 + Math.sin(this.t * 12) * 3;
+        ctx.strokeStyle = `rgba(255,210,59,${0.45 + Math.sin(this.t * 12) * 0.3})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(this.x, this.y, rr, 0, TAU); ctx.stroke();
       }
       // 小型血条（精英）
       if (this.def.elite && this.hp < this.maxHp) {

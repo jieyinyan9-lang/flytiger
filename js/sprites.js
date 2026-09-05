@@ -394,6 +394,32 @@
     '...KKK..KKK...'
   ];
 
+  /* ---------------- 黑骷髅头（自爆骷髅新模型：黑色头骨，红眼） ---------------- */
+  const BLACK_SKEL_PAL = {
+    K: '#000000',  // 纯黑骨
+    D: '#1a1a22',  // 暗部
+    R: '#ff3b3b',  // 爆核红
+    F: '#ffd23b'   // 爆核炽心
+  };
+  const BLACK_SKEL = [
+    '......KKKK......',
+    '.....KDDDDK.....',
+    '....KDDDDDDK....',
+    '...KDDDDDDDDK...',
+    '...KDKKDDKKDK...',
+    '...KDRRDDRRDK...',
+    '...KDDDDDDDDK...',
+    '...KKKDDDDKKK...',
+    '....KKDDDDKK....',
+    '...KDDRRRRDDK...',
+    '..KDDRFFFFRDDK..',
+    '..KDDRRRRRRDDK..',
+    '...KDDRRRRDDK...',
+    '....KDDDDDDK....',
+    '....KD....DK....',
+    '...KKK....KKK...'
+  ];
+
   /* ---------------- 飞天骷髅头（持续旋转的攻击头骨） ---------------- */
   const SKULLHEAD_PAL = {
     K: '#101018',
@@ -719,6 +745,7 @@
     pig: build(PIG, PIG_PAL),
     archer: build(ARCHER, ARCHER_PAL),
     skeleton: build(SKEL, SKEL_PAL),
+    blackSkel: build(BLACK_SKEL, BLACK_SKEL_PAL),
     skullhead: build(SKULLHEAD, SKULLHEAD_PAL),
     cannoneer: build(CANNONEER, CAN_PAL),
     samurai: build(SAMURAI, SAMURAI_PAL),
@@ -744,6 +771,7 @@
   Sprites.pigL = flip(Sprites.pig);
   Sprites.archerL = flip(Sprites.archer);
   Sprites.skeletonL = flip(Sprites.skeleton);
+  Sprites.blackSkelL = flip(Sprites.blackSkel);
   Sprites.cannoneerL = flip(Sprites.cannoneer);
   Sprites.samuraiL = flip(Sprites.samurai);
   Sprites.swordEagleAL = flip(Sprites.swordEagleA);
