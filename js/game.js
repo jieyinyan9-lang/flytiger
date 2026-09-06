@@ -135,11 +135,6 @@
         // 测试模式快捷键：B 立即触发 Boss 预警（跳过倒计时），便于反复测试
         if (e.code === 'KeyB' && this.testBoss && this.state === 'playing' &&
             !this.bossActive && this.warnT <= 0) this.bossT = 0;
-        // 美术测试快捷键：1 召唤蛙哥，2 召唤鹤仙（仅 playing 且无 Boss 时）
-        if (this.state === 'playing' && !this.bossActive && window.Bosses) {
-          if (e.code === 'Digit1') this.spawnBoss(window.Bosses.FrogKing);
-          else if (e.code === 'Digit2') this.spawnBoss(window.Bosses.CraneSage);
-        }
         if (this.state === 'levelup' && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3')) {
           const idx = e.code === 'Digit1' ? 0 : e.code === 'Digit2' ? 1 : 2;
           if (this.pendingOptions[idx]) this.pickUpgrade(idx);
