@@ -366,6 +366,27 @@
           }
         }
       }
+      // 亡灵骷髅王小骷髅弹：记录飞行轨迹点（弧线拖尾数据源）+ 蓝绿色魂火粒子
+      if (this.kind === 'skull' && !this.dead) {
+        if (!this.skullPts) this.skullPts = [];
+        this.skullPts.push({ x: this.x, y: this.y });
+        if (this.skullPts.length > 14) this.skullPts.shift();
+        if (!this.neutralized) {
+          this.trail += dt;
+          if (this.trail > 0.045) {
+            this.trail = 0;
+            const spd = Math.hypot(this.vx, this.vy) || 1;
+            const bx = this.vx / spd, by = this.vy / spd;
+            const cols = ['#35e0ff', '#2ee6a8', '#7ff5d8', '#b8fff0'];
+            g.particles.push(new Particle(
+              this.x - bx * 12 + rand(-3, 3), this.y - by * 12 + rand(-3, 3),
+              -bx * rand(35, 90) + rand(-28, 28),
+              -by * rand(35, 90) + rand(-28, 28) - 18,
+              rand(0.25, 0.5), rand(2, 4.5),
+              cols[randi(0, cols.length - 1)]));
+          }
+        }
+      }
       // 怪客巨型十字弹：快速自转；先高速追踪玩家，逼近后绕天空区域边缘转一圈再碎裂
       if (this.kind === 'cross' && !this.neutralized && !this.dead) {
         const xL = 60, xR = CFG.W - 60, yTop = 70, yBot = CFG.GROUND_Y - 40, rc = 40;  // 绕场路径：贴天空边缘，底边沿地面上方
@@ -511,6 +532,46 @@
         ctx.fillRect(this.x - this.r, this.y - this.r, this.r * 2, this.r * 2);
         ctx.fillStyle = '#fff';
         ctx.fillRect(this.x - this.r * 0.4, this.y - this.r * 0.4, this.r * 0.5, this.r * 0.5);
+        return;
+      }
+      if (k === 'skull') {
+        // 亡灵骷髅王小骷髅弹：蓝绿色弧线拖尾（历史轨迹点 + 中段正弦摆弧，三层发光渐细）+ 1/4 Boss 体型旋转头骨
+        const baseA = ctx.globalAlpha;
+        const pts = this.skullPts;
+        if (pts && pts.length > 2) {
+          const n = pts.length;
+          // 摆弧轨迹点：偏移垂直于行进方向，首尾锚定、中段摆幅最大（sin 包络）
+          const ap = pts.map((pt, i) => {
+            if (i === 0) return { x: pt.x, y: pt.y };
+            const dx = pt.x - pts[i - 1].x, dy = pt.y - pts[i - 1].y;
+            const dl = Math.hypot(dx, dy) || 1;
+            const env = Math.sin((i / n) * Math.PI);
+            const w = Math.sin(this.t * 9 - i * 0.6) * 7 * env;
+            return { x: pt.x + (-dy / dl) * w, y: pt.y + (dx / dl) * w };
+          });
+          // 三层描边：外青绿光晕 → 中青线 → 内亮青芯；宽度/亮度向尾端渐细渐暗
+          const layers = [
+            { w: 9, col: '#1f9e8f', a: 0.28 },
+            { w: 5, col: '#2ee6a8', a: 0.5 },
+            { w: 2.4, col: '#7ff5e0', a: 0.85 }
+          ];
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          for (const L of layers) {
+            ctx.strokeStyle = L.col;
+            for (let i = 1; i < n; i++) {
+              const f = i / n;
+              ctx.globalAlpha = baseA * L.a * (0.25 + 0.75 * f);
+              ctx.lineWidth = L.w * (0.3 + 0.7 * f);
+              ctx.beginPath();
+              ctx.moveTo(ap[i - 1].x, ap[i - 1].y);
+              ctx.lineTo(ap[i].x, ap[i].y);
+              ctx.stroke();
+            }
+          }
+          ctx.globalAlpha = baseA;
+        }
+        // 小头骨：Boss 7.6 倍缩放的 1/4 = 1.9 倍，自旋飞行
+        drawSprite(ctx, Sprites.skullhead, this.x, this.y, 1.9, 1.9, this.spin, this.hitFlash);
         return;
       }
       if (k === 'shuriken') {

@@ -503,7 +503,7 @@
         const a = Math.atan2(p.y - this.y, p.x - this.x);
         g.bullets.push(new Bullet(this.x, this.y,
           Math.cos(a) * 285, Math.sin(a) * 285,
-          { kind: 'orb', r: 6, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#e8eef7' }));
+          { kind: 'skull', r: 12, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 6, spinRate: 5 }));
         SFX.enemyShoot();
       }
       // 扇形散射（9 发，随旋转偏转）
@@ -514,7 +514,7 @@
           const a = this.rotA + i * 0.17;
           g.bullets.push(new Bullet(this.x, this.y,
             Math.cos(a) * 235, Math.sin(a) * 235,
-            { kind: 'orb', r: 5, dmg: 11 * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#e8eef7' }));
+            { kind: 'skull', r: 11, dmg: 11 * g.atkScale, dmgScale: g.atkScale, life: 6, spinRate: 5 }));
         }
         SFX.enemyShoot();
       }
@@ -527,7 +527,7 @@
           const a = this.rotA + (TAU / n) * i;
           g.bullets.push(new Bullet(this.x, this.y,
             Math.cos(a) * 175, Math.sin(a) * 175,
-            { kind: 'orb', r: 6, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 7, color: '#ffb02e' }));
+            { kind: 'skull', r: 12, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 7, spinRate: 5 }));
         }
         SFX.enemyShoot();
         g.shake(4);
