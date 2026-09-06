@@ -88,6 +88,12 @@
       } catch (e) { this.charId = 'xiaobai'; }
       this.buildCharGrid();
 
+      // 测试模式：URL 参数 ?boss=niumo 强制指定 Boss 反复出现（仅测试用，便于调试专属 Boss）
+      try {
+        const p = new URLSearchParams(location.search).get('boss');
+        this.testBoss = (p && p.toLowerCase() === 'niumo') ? 'NiuMo' : null;
+      } catch (e) { this.testBoss = null; }
+
       this.reset();
       this.last = performance.now();
       requestAnimationFrame(t => this.loop(t));
@@ -126,6 +132,14 @@
         if (e.code === 'KeyP' && (this.state === 'playing' || this.state === 'paused')) this.togglePause();
         if (e.code === 'KeyM') this.toggleMute();
         if (e.code === 'KeyN') this.toggleBgm();
+        // 测试模式快捷键：B 立即触发 Boss 预警（跳过倒计时），便于反复测试
+        if (e.code === 'KeyB' && this.testBoss && this.state === 'playing' &&
+            !this.bossActive && this.warnT <= 0) this.bossT = 0;
+        // 美术测试快捷键：1 召唤蛙哥，2 召唤鹤仙（仅 playing 且无 Boss 时）
+        if (this.state === 'playing' && !this.bossActive && window.Bosses) {
+          if (e.code === 'Digit1') this.spawnBoss(window.Bosses.FrogKing);
+          else if (e.code === 'Digit2') this.spawnBoss(window.Bosses.CraneSage);
+        }
         if (this.state === 'levelup' && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3')) {
           const idx = e.code === 'Digit1' ? 0 : e.code === 'Digit2' ? 1 : 2;
           if (this.pendingOptions[idx]) this.pickUpgrade(idx);
@@ -267,6 +281,14 @@
 
       // 地图：每次进入游戏随机刷新一张（阻碍特性与草地一致）
       this.rollMap();
+      // 测试模式：锁定草原地图（牛魔草原专属）+ 首个 Boss 3 秒后出现，便于反复测试
+      if (this.testBoss === 'NiuMo') {
+        this.mapChoice = 'grassland';
+        const m = CFG.maps.find(x => x.id === 'grassland') || this.map;
+        this.map = m; this.mapId = 'grassland';
+        this.crater = null; this.sea = null;
+        this.bossT = 3;
+      }
     }
 
     /** 地图 → 龙系主题（草龙仅草原；沙虫/黑龙/红龙/骨蛇/机器蜈蚣/深海蓝龙各属其图） */
@@ -437,6 +459,7 @@
       this.el.bossHud.classList.add('hidden');
       this.syncBgmBtn();     // HUD 首次显示：音乐按钮文案与实际开关状态对齐
       this.toast(`${this.map.icon} ${this.map.name} · 第 1 轮战斗开始！`, 2.8);
+      if (this.testBoss) this.toast(`🧪 测试模式：强制 ${this.testBoss} 反复出场（B 键立即召唤）`, 3.2);
     }
 
     gameOver() {
@@ -788,6 +811,19 @@
       this.bossT = rand(CFG.boss.nextMin, CFG.boss.nextMax);
     }
     triggerBossWarn() {
+      // 测试模式：跳过全部出场规则（地图/单次/序号/概率），强制指定 Boss 反复出现
+      if (this.testBoss) {
+        const entry = (window.BOSS_LIST || []).find(e => e.cls.name === this.testBoss);
+        if (entry) {
+          this.pendingBoss = entry.cls;
+          this.pendingBossMusic = entry.music || 'boss';
+          this.warnT = CFG.boss.warnTime;
+          this.el.warnSub.textContent = '强大的气息逼近了！';
+          this.el.warn.classList.remove('hidden');
+          SFX.bossWarn();
+          return;
+        }
+      }
       // 除狮身人面像/牛魔特殊期等专属 Boss 外，所有 Boss 等权，每一轮都可能出现；
       // 本局已出场过的 Boss 后续出场权重持续减半（bossSeen），
       // 直至所有非专属 Boss 全部轮过一遍后清空记录、概率恢复正常（spawnBoss 中重置）
@@ -861,8 +897,12 @@
         this.niuMoGeneric = true;
         this.niuMoSpawned = false;
       }
-      if (cls.name === 'Sphinx') this.sphinxSpawned = true;   // 狮身人面像每局至多一次
-      if (cls.name === 'NiuMo' && !this.niuMoGeneric) this.niuMoSpawned = true;   // 牛魔特殊期每局至多一次
+      if (this.testBoss) {
+        // 测试模式：不登记单次出场、不转入通用池，保证指定 Boss 每轮必出且可重复
+      } else {
+        if (cls.name === 'Sphinx') this.sphinxSpawned = true;   // 狮身人面像每局至多一次
+        if (cls.name === 'NiuMo' && !this.niuMoGeneric) this.niuMoSpawned = true;   // 牛魔特殊期每局至多一次
+      }
       this.el.bossName.textContent = `${b.bossName}（${b.title}）`;
       this.el.bossHud.classList.remove('hidden');
       this.toast(`${b.bossName} 出现！`, 2);

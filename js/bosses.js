@@ -1493,7 +1493,7 @@
       this.tongue = null;          // { t, phase:'out'|'hold'|'back', len, max, ang, grabbed }
       this.grabT = 0;              // 玩家被拉拽剩余时间
       this.contactDmgBase = 20;
-      this.deathCols = ['#8fbf3f', '#6b9428', '#f2edbc', '#fff'];
+      this.deathCols = ['#7cae3a', '#5a7d24', '#b8860b', '#f2edbc', '#8a5a2b'];
     }
     update(dt, g) {
       this.t += dt; this.stateT += dt;
@@ -1653,29 +1653,37 @@
           ctx.restore();
         }
       }
-      // 身体（压扁表现蓄力/腾空拉伸）
+      // 身体（压扁表现蓄力/腾空拉伸）；Wage.png 448×352，缩放 0.82 → 显示约 367×289
+      const FS = 0.82, FH = 352;
       let sy = 1;
       if (this.state === 'chargeWind') sy = 0.78 + Math.sin(this.stateT * 22) * 0.05;
       else if (!this.onGround) sy = 1.08;
-      const w = 6.5, h = 6.5 * sy;
-      drawSprite(ctx, Sprites.frogL, this.x, this.y + (6.5 * 40 - h * 40) / 2, w, h, 0, this.flash);
-      // 舌头（加宽4倍：线宽12→48、舌尖13→52；初射点为模型靠左的红色口腔）
+      const w = FS, h = FS * sy;
+      drawSprite(ctx, Sprites.frogL, this.x, this.y + (FS * FH - h * FH) / 2, w, h, 0, this.flash);
+      // 舌头（细、深红、带黑边；初射点为口腔）
       if (this.tongue) {
         const tg = this.tongue;
-        const mouthX = this.x - 150, mouthY = this.y + 6;
+        const mouthX = this.x - 36, mouthY = this.y + 9;
         const tipX = mouthX + Math.cos(this.tongueAng) * tg.len;
         const tipY = mouthY + Math.sin(this.tongueAng) * tg.len;
-        ctx.strokeStyle = '#ff7ba0'; ctx.lineWidth = 48; ctx.lineCap = 'round';
+        const TW = 26, TR = 30;
+        // 黑边
+        ctx.strokeStyle = '#1a0a08'; ctx.lineWidth = TW + 10; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(mouthX, mouthY); ctx.lineTo(tipX, tipY); ctx.stroke();
-        ctx.fillStyle = '#ff5d8f';
-        ctx.beginPath(); ctx.arc(tipX, tipY, 52, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#1a0a08';
+        ctx.beginPath(); ctx.arc(tipX, tipY, TR + 5, 0, TAU); ctx.fill();
+        // 深红主体
+        ctx.strokeStyle = '#b83a2a'; ctx.lineWidth = TW;
+        ctx.beginPath(); ctx.moveTo(mouthX, mouthY); ctx.lineTo(tipX, tipY); ctx.stroke();
+        ctx.fillStyle = '#c94a38';
+        ctx.beginPath(); ctx.arc(tipX, tipY, TR, 0, TAU); ctx.fill();
       }
-      // 爪击挥影
+      // 爪击挥影（新美术左爪/火把位于身体左侧）
       if (this.state === 'clawHit') {
         ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 6;
         for (let i = 0; i < 3; i++) {
           ctx.beginPath();
-          ctx.arc(this.x - 40, this.y, 80 + i * 22, Math.PI * 0.75, Math.PI * 1.25);
+          ctx.arc(this.x - 100, this.y, 80 + i * 22, Math.PI * 0.75, Math.PI * 1.25);
           ctx.stroke();
         }
       }
@@ -1698,7 +1706,7 @@
       this.fallMarks = [];          // 万羽天葬落点预警 { x, t }
       this.waveIdx = 0; this.waveT = 0;
       this.fallRound = 0; this.fallT = 0;
-      this.deathCols = ['#f4f6f2', '#c9d2cc', '#d43f2f', '#fff'];
+      this.deathCols = ['#f4f6f2', '#3a8f9e', '#d43f2f', '#2a5a6a', '#fff'];
     }
     update(dt, g) {
       this.t += dt; this.stateT += dt;
@@ -1765,7 +1773,7 @@
         if (this.needleT <= 0 && this.needleN < 5) {
           this.needleN++; this.needleT = 0.36;
           const a = Math.atan2(p.y - this.y, p.x - this.x) + rand(-0.3, 0.3);
-          const b = new Bullet(this.x - 20, this.y - 10,
+          const b = new Bullet(this.x - 60, this.y - 25,
             Math.cos(a) * 350, Math.sin(a) * 350,
             { kind: 'feather', r: 7, dmg: 13 * g.atkScale, life: 7, color: '#fff',
               homing: true, turnRate: 1.0, hp: 1, invuln: 3 });
@@ -1786,7 +1794,7 @@
           const n = counts[this.waveIdx];
           for (let i = 0; i < n; i++) {
             const a = i * TAU / n + this.waveIdx * 0.21;
-            g.bullets.push(new Bullet(this.x, this.y, Math.cos(a) * sp, Math.sin(a) * sp,
+            g.bullets.push(new Bullet(this.x - 50, this.y - 25, Math.cos(a) * sp, Math.sin(a) * sp,
               { kind: 'wave', r: this.waveIdx === 1 ? 15 : 13, dmg: 11 * g.atkScale, life: 7, color: '#38bdf8' }));
           }
           this.waveIdx++; this.waveT = 0.55;
@@ -1902,12 +1910,12 @@
         ctx.beginPath(); ctx.arc(m.x, CFG.GROUND_Y - 12, 18, 0, TAU); ctx.fill();
         ctx.restore();
       }
-      // 俯冲时身体垂直
+      // 俯冲时身体垂直；Hexian.png 272×416，缩放 0.8125 → 显示约 221×338（与原尺寸一致）
       const dive = this.state === 'dive' && (this.phase === 'fall');
-      drawSprite(ctx, Sprites.craneL, this.x, this.y, 6.5, 6.5, dive ? Math.PI * 0.5 : Math.sin(this.t * 2) * 0.07, this.flash);
-      // 鹤鸣时颈部声波纹：三层扩散环，深色底描边+饱和亮青主环，粗大清晰、范围更大
+      drawSprite(ctx, Sprites.craneL, this.x, this.y, 0.8125, 0.8125, dive ? Math.PI * 0.5 : Math.sin(this.t * 2) * 0.07, this.flash);
+      // 鹤鸣时颈部声波纹：三层扩散环，从喙部发出（Hexian.png 喙部约在精灵 (70,165)）
       if (this.state === 'cry') {
-        const cx = this.x - 10, cy = this.y - 8;
+        const cx = this.x - 50, cy = this.y - 25;
         const prog = (this.stateT % 0.85) / 0.85;
         for (let i = 0; i < 3; i++) {
           const p = prog - i * 0.33;
