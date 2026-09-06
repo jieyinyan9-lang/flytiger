@@ -241,6 +241,8 @@
       this.elemPicksThisRound = 0;  // 每轮元素弹道成长选择次数（上限 2）
       this.grassDragonThisRound = false;   // 草龙每轮至多出现一次
       this.sphinxSpawned = false;         // 狮身人面像每局至多出现一次（沙漠专属）
+      this.niuMoSpawned = false;          // 牛魔特殊期每局至多出场一次（草原专属）
+      this.niuMoGeneric = false;          // 12 只通用 Boss 全部轮完后，牛魔转入普通池
       this.diffMul = 1;
       this.clouds = [];
       for (let i = 0; i < 7; i++) {
@@ -549,33 +551,44 @@
       this.bossT = rand(CFG.boss.nextMin, CFG.boss.nextMax);
     }
     triggerBossWarn() {
-      // 除狮身人面像等专属 Boss 外，所有 Boss 等权，每一轮都可能出现；
+      // 除狮身人面像/牛魔特殊期等专属 Boss 外，所有 Boss 等权，每一轮都可能出现；
       // 本局已出场过的 Boss 后续出场权重持续减半（bossSeen），
       // 直至所有非专属 Boss 全部轮过一遍后清空记录、概率恢复正常（spawnBoss 中重置）
-      // 狮身人面像保留专属规则：沙漠限定、每局一次、minOrd/maxOrd/forceChance
+      // 狮身人面像：沙漠限定、每局一次、minOrd/maxOrd/forceChance
+      // 牛魔：特殊期（!niuMoGeneric）草原限定、每局一次、第2-4轮强制概率；通用期一切限制旁路
       const ord = this.bossSpawned + 1;
-      // ordOk：仅对显式声明 minOrd/maxOrd 的 Boss（狮身人面像）生效；其余 Boss 每轮均可出场
-      const ordOk = b => (b.minOrd === undefined || b.minOrd <= ord) &&
-                         (b.maxOrd === undefined || ord <= b.maxOrd);
-      // map：地图限定 Boss（狮身人面像仅沙漠）；大海不出现地面移动型 Boss（蛙哥/野鸡王）
-      // sphinxSpawned：每局至多一次
-      const mapOk = b => (b.map === undefined || b.map === this.mapId) &&
-                         !(b.ground && this.mapId === 'ocean') &&
-                         (b.cls.name !== 'Sphinx' || !this.sphinxSpawned);
+      // ordOk：显式声明 minOrd/maxOrd 的 Boss（狮身人面像/牛魔特殊期）受限；牛魔通用期旁路
+      const ordOk = b => {
+        if (b.cls.name === 'NiuMo' && this.niuMoGeneric) return true;
+        return (b.minOrd === undefined || b.minOrd <= ord) &&
+               (b.maxOrd === undefined || ord <= b.maxOrd);
+      };
+      // map：狮身人面像仅沙漠且每局一次；牛魔特殊期仅草原且每局一次（通用期任意地图）；
+      // 大海不出现地面移动型 Boss（蛙哥/野鸡王）
+      const mapOk = b => {
+        if (b.cls.name === 'Sphinx') return b.map === this.mapId && !this.sphinxSpawned;
+        if (b.cls.name === 'NiuMo') return this.niuMoGeneric || (b.map === this.mapId && !this.niuMoSpawned);
+        return (b.map === undefined || b.map === this.mapId) &&
+               !(b.ground && this.mapId === 'ocean');
+      };
       let pool = window.BOSS_LIST.filter(b => ordOk(b) && mapOk(b));
       if (!pool.length) {
-        // 兜底1：放宽地图限制（防止空池卡死；仍受序号/单次限制）
-        pool = window.BOSS_LIST.filter(b => ordOk(b));
+        // 兜底1：放宽大海地面限制等通用地图限制（专属 Boss 的地图/单次限制不可放宽，防止空池卡死）
+        pool = window.BOSS_LIST.filter(b => ordOk(b) &&
+          b.cls.name !== 'Sphinx' && !(b.cls.name === 'NiuMo' && !this.niuMoGeneric));
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
-      // forceChance：狮身人面像在指定出场序号有独立的直接出场概率；未命中则不参与本轮随机池
+      // forceChance：专属 Boss 在指定出场序号有独立的直接出场概率；未命中则不参与本轮随机池
+      // 牛魔通用期不再走强制掷骰，作为普通等权成员进入随机池
+      const forceable = b => (b.forceChance && b.forceChance[ord] !== undefined) &&
+                             !(b.cls.name === 'NiuMo' && this.niuMoGeneric);
       let pick = null;
-      const forceList = pool.filter(b => b.forceChance && b.forceChance[ord] !== undefined);
+      const forceList = pool.filter(forceable);
       for (const b of forceList) {
         if (Math.random() < b.forceChance[ord]) { pick = b; break; }
       }
       // 加权随机：基础权重一致（等权），本局已出场过的 Boss 权重 ×0.5
-      const randomPool = pool.filter(b => !(b.forceChance && b.forceChance[ord] !== undefined));
+      const randomPool = pool.filter(b => !forceable(b));
       if (!pick) {
         const p2 = randomPool.length ? randomPool : pool;
         const weights = p2.map(b => (b.weight || 1) * (this.bossSeen.has(b.cls.name) ? 0.5 : 1));
@@ -602,12 +615,17 @@
       this.bosses.push(b);
       this.bossSpawned++;
       this.bossSeen.add(cls.name);   // 登记出场：后续抽取权重减半
-      // 所有非专属 Boss（狮身人面像等地图专属除外）均已轮过一遍 → 清空记录，概率恢复正常
-      const cyclable = (window.BOSS_LIST || []).filter(e => !e.map);
+      // 所有非专属 Boss（狮身人面像、牛魔特殊期除外）均已轮过一遍 → 清空记录，概率恢复正常；
+      // 同时牛魔结束特殊期、转入普通池（任意地图等权出场）
+      const cyclable = (window.BOSS_LIST || []).filter(e =>
+        e.cls.name !== 'Sphinx' && e.cls.name !== 'NiuMo');
       if (cyclable.length && cyclable.every(e => this.bossSeen.has(e.cls.name))) {
         this.bossSeen.clear();
+        this.niuMoGeneric = true;
+        this.niuMoSpawned = false;
       }
       if (cls.name === 'Sphinx') this.sphinxSpawned = true;   // 狮身人面像每局至多一次
+      if (cls.name === 'NiuMo' && !this.niuMoGeneric) this.niuMoSpawned = true;   // 牛魔特殊期每局至多一次
       this.el.bossName.textContent = `${b.bossName}（${b.title}）`;
       this.el.bossHud.classList.remove('hidden');
       this.toast(`${b.bossName} 出现！`, 2);

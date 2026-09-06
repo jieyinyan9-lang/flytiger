@@ -1112,6 +1112,76 @@
         ctx.restore();
         return;
       }
+      if (k === 'horn') {
+        // 牛魔牛角弹：小型弯角，尖角朝飞行方向，黑描边 + 红角身 + 亮角尖
+        const r = this.r;
+        const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        const hornPath = () => {
+          ctx.beginPath();
+          ctx.moveTo(r * 1.05, -r * 0.12);                              // 角尖
+          ctx.quadraticCurveTo(r * 0.25, -r * 0.95, -r * 0.85, -r * 0.62);   // 外缘向后弯
+          ctx.quadraticCurveTo(-r * 0.4, -r * 0.12, r * 1.05, r * 0.22);     // 内缘回角尖
+          ctx.closePath();
+        };
+        ctx.fillStyle = '#101018'; hornPath(); ctx.fill();
+        ctx.fillStyle = '#c92a2a';
+        ctx.beginPath();
+        ctx.moveTo(r * 0.9, -r * 0.08);
+        ctx.quadraticCurveTo(r * 0.2, -r * 0.72, -r * 0.62, -r * 0.48);
+        ctx.quadraticCurveTo(-r * 0.28, -r * 0.08, r * 0.9, r * 0.14);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ff6b5e';
+        ctx.beginPath(); ctx.arc(r * 0.72, -r * 0.02, r * 0.2, 0, TAU); ctx.fill();
+        ctx.restore();
+        return;
+      }
+      if (k === 'magicHorn') {
+        // 牛魔追踪魔角：大型弯角 + 暗红光晕脉动 + 亮红裂纹，尖角朝飞行方向
+        const r = this.r;
+        const f = 1 + Math.sin(this.t * 6) * 0.1;
+        const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a); ctx.scale(f, f);
+        ctx.fillStyle = 'rgba(224,60,50,0.3)';
+        ctx.beginPath(); ctx.arc(0, 0, r * 1.55, 0, TAU); ctx.fill();
+        const hornPath = () => {
+          ctx.beginPath();
+          ctx.moveTo(r * 1.1, -r * 0.14);
+          ctx.quadraticCurveTo(r * 0.25, -r * 1.0, -r * 0.9, -r * 0.66);
+          ctx.quadraticCurveTo(-r * 0.42, -r * 0.12, r * 1.1, r * 0.24);
+          ctx.closePath();
+        };
+        ctx.fillStyle = '#101018'; hornPath(); ctx.fill();
+        ctx.fillStyle = '#7a1622';
+        ctx.beginPath();
+        ctx.moveTo(r * 0.94, -r * 0.1);
+        ctx.quadraticCurveTo(r * 0.2, -r * 0.78, -r * 0.66, -r * 0.5);
+        ctx.quadraticCurveTo(-r * 0.3, -r * 0.08, r * 0.94, r * 0.16);
+        ctx.closePath(); ctx.fill();
+        // 裂纹亮线
+        ctx.strokeStyle = '#ff5a4a'; ctx.lineWidth = Math.max(1.4, r * 0.12); ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(r * 0.6, 0); ctx.lineTo(r * 0.1, -r * 0.34); ctx.lineTo(-r * 0.3, -r * 0.3); ctx.stroke();
+        ctx.fillStyle = '#ffd23b';
+        ctx.beginPath(); ctx.arc(r * 0.78, 0, r * 0.16, 0, TAU); ctx.fill();
+        ctx.restore();
+        return;
+      }
+      if (k === 'qi') {
+        // 牛魔魔气弹：暗红→红→橙芯脉动光球
+        const f = 1 + Math.sin(this.t * 11) * 0.14;
+        const r = this.r * f;
+        ctx.fillStyle = 'rgba(180,30,50,0.32)';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 1.5, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#7a1622';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#e0453a';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.68, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ff8a5c';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#fff0d0';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.17, 0, TAU); ctx.fill();
+        return;
+      }
     }
 
     /** 元素弹道专用渲染：火焰=红色圆形，毒液=绿色菱形，寒冰=蓝色锥型 */
