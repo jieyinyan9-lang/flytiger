@@ -52,12 +52,18 @@
         menuBgmBtn: document.getElementById('menu-bgm-btn'),
         modeKeyboard: document.getElementById('mode-keyboard'),
         modeMouse: document.getElementById('mode-mouse'),
-        menuMapBtn: document.getElementById('menu-map-btn')
+        menuMapBtn: document.getElementById('menu-map-btn'),
+        charSel: document.getElementById('charsel'),
+        charGrid: document.getElementById('char-grid'),
+        charSelTitle: document.getElementById('charsel-title')
       };
       // 按钮统一走 onClick 安全绑定：元素缺失（如浏览器缓存了旧版 HTML）时仅跳过并告警，
       // 绝不能让构造函数中断——否则 reset()/主循环不启动，背景音乐与音效会全部静默
-      this.onClick('start-btn', () => this.start());
+      this.onClick('start-btn', () => this.openCharSelect());
       this.onClick('restart-btn', () => this.start());
+      this.onClick('pause-restart-btn', () => this.start());
+      this.onClick('pause-select-btn', () => this.openCharSelect(true));
+      this.onClick('char-back-btn', () => this.closeCharSelect());
       this.onClick('menu-map-btn', () => this.cycleMapChoice());
       this.syncMapBtns();
       this.onClick('mute-btn', () => this.toggleMute());
@@ -74,6 +80,13 @@
         const saved = localStorage.getItem('flytiger_map');
         this.mapChoice = (saved === 'random' || (saved && CFG.maps.some(m => m.id === saved))) ? saved : 'random';
       } catch (e) { this.mapChoice = 'random'; }
+
+      // 出战角色：从 localStorage 恢复（默认小白）
+      try {
+        const sc = localStorage.getItem('flytiger_char');
+        this.charId = (sc && window.CHARS && window.CHARS.has(sc)) ? sc : 'xiaobai';
+      } catch (e) { this.charId = 'xiaobai'; }
+      this.buildCharGrid();
 
       this.reset();
       this.last = performance.now();
@@ -198,7 +211,7 @@
 
     /* ---------------- 开局 / 重置 ---------------- */
     reset() {
-      this.player = new Player();
+      this.player = new Player(this.charId);
       this.enemies = [];
       this.bosses = [];
       this.bullets = [];
@@ -237,6 +250,8 @@
       this.flashT = 0;        // 屏幕闪光剩余时间
       this.flashColor = '#fff';
       this.ultWave = null;    // 大招光波特效
+      this.slashFx = null;    // 侠客大招斩击特效 { x, y, t }
+      this.soundwaveT = 0;    // 不良少年声波禁锢剩余时间（敌人子弹冻结）
       this.round = 1;
       this.wayPicksThisRound = 0;   // 每轮弹道类成长选择次数（上限 3）
       this.elemPicksThisRound = 0;  // 每轮元素弹道成长选择次数（上限 2）
@@ -337,6 +352,74 @@
       this.toast(`${this.map.icon} 转移至：${this.map.name}！`, 2.6);
     }
 
+    /* ---------------- 角色选择 ---------------- */
+    /** 构建 30 槽位角色选择界面（前 6 个可用，其余问号预留） */
+    buildCharGrid() {
+      if (!this.el.charGrid || !window.CHARS) return;
+      const CH = window.CHARS;
+      const grid = this.el.charGrid;
+      grid.innerHTML = '';
+      for (let i = 0; i < CH.SLOTS; i++) {
+        const id = CH.ORDER[i];
+        const card = document.createElement('div');
+        if (id) {
+          const c = CH.get(id);
+          card.className = 'char-card' + (id === this.charId ? ' picked' : '');
+          card.innerHTML =
+            `<div class="char-thumb">${c.icon}</div>` +
+            `<div class="char-name">${c.name}</div>` +
+            `<div class="char-tag">${c.tag}</div>` +
+            `<div class="char-trait">${c.trait}</div>` +
+            `<div class="char-desc">${c.desc}</div>` +
+            `<div class="char-ult">大招：${this.ultName(c.ult)}</div>`;
+          card.addEventListener('click', () => this.chooseChar(id));
+        } else {
+          card.className = 'char-card locked';
+          card.innerHTML = `<div class="char-q">?</div><div class="char-name">敬请期待</div>`;
+        }
+        grid.appendChild(card);
+      }
+    }
+    /** 大招名称 */
+    ultName(ult) {
+      return { wave: '强光波', slash: '前方大斩击', shield: '魔法护盾', soundwave: '禁锢声波', bloodrage: '血怒', lasers: '五重激光串' }[ult] || ult;
+    }
+    /** 打开角色选择界面（fromPause=true 表示从局内暂停返回局外） */
+    openCharSelect(fromPause) {
+      if (fromPause) {
+        // 局内返回：清场并回到局外菜单状态
+        this.el.pause.classList.add('hidden');
+        this.el.hud.classList.add('hidden');
+        this.el.bossHud.classList.add('hidden');
+        this.el.warn.classList.add('hidden');
+        this.el.levelup.classList.add('hidden');
+        this.state = 'menu';
+      }
+      this.buildCharGrid();
+      if (this.el.charSelTitle) {
+        this.el.charSelTitle.textContent = fromPause ? '重新选择出战角色' : '选择出战角色';
+      }
+      if (this.el.charSel) this.el.charSel.classList.remove('hidden');
+      if (window.Music) Music.play('casual');
+    }
+    /** 关闭角色选择界面（返回菜单） */
+    closeCharSelect() {
+      if (this.el.charSel) this.el.charSel.classList.add('hidden');
+      // 从局内暂停进入（state 已是 menu、主菜单被隐藏）时：恢复主菜单显示
+      if (this.state === 'menu' && this.el.menu) this.el.menu.classList.remove('hidden');
+      SFX.hit();
+    }
+    /** 点选角色：保存偏好并以该角色开局 */
+    chooseChar(id) {
+      this.charId = id;
+      try { localStorage.setItem('flytiger_char', id); } catch (e) {}
+      if (this.el.charSel) this.el.charSel.classList.add('hidden');
+      const c = window.CHARS && window.CHARS.get(id);
+      SFX.levelup();
+      this.start();
+      if (c) this.toast(`${c.icon} ${c.name} 参战！${c.trait}`, 3);
+    }
+
     start() {
       if (!Sprites.cat) {
         alert('未找到白猫素材：请把图片保存为 assets/cat.png 后刷新页面');
@@ -408,9 +491,20 @@
       this.player.rage = Math.min(CFG.ultimate.rageMax, this.player.rage + v);
     }
 
-    /** 大招：强光波 —— 肃清屏幕内全部小怪，对 Boss 造成 20% 最大生命伤害 */
+    /** 大招分发：按出战角色释放对应大招 */
     castUltimate() {
       if (this.state !== 'playing') return;
+      const ult = this.player.char ? this.player.char.ult : 'wave';
+      if (ult === 'slash') return this.ultSlash();
+      if (ult === 'shield') return this.ultMagicShield();
+      if (ult === 'soundwave') return this.ultSoundwave();
+      if (ult === 'bloodrage') return this.ultBloodrage();
+      if (ult === 'lasers') return this.ultLasers();
+      return this.ultWaveBlast();
+    }
+
+    /** [小白] 强光波 —— 肃清屏幕内全部小怪，对 Boss 造成 20% 最大生命伤害 */
+    ultWaveBlast() {
       SFX.ultimate();
       this.shake(18);
       this.flashT = 0.5; this.flashColor = '#fff';
@@ -446,6 +540,142 @@
       this.toast('★ 强光波爆发！★', 1.8);
     }
 
+    /** [侠客] 前方大斩击：大范围剑气斩，秒杀接触小怪、直接摧毁障碍、龙类持续灼烧 */
+    ultSlash() {
+      const p = this.player;
+      SFX.ultimate();
+      this.shake(14);
+      this.flashT = 0.35; this.flashColor = '#d8ffe8';
+      const x0 = p.x, y0 = p.y;
+      const R = 340;                       // 斩击半径（前方大范围）
+      this.slashFx = { x: x0, y: y0, t: 0.4, max: 0.4 };
+      // 前方矩形区域：小怪全灭
+      this.enemies.slice().forEach(e => {
+        if (e.dead || e.isMini) return;
+        if (e.x > x0 - 40 && e.x < x0 + R && Math.abs(e.y - y0) < 300) {
+          if (e.type === 'grassdragon') {
+            // 龙类本体：持续灼烧 DoT（不吃秒杀，保留既有免疫约定）
+            e.dotT = 4; e.dotDps = 40 * this.atkScale; e.dotType = 'flame';
+            e.spawnInvuln = 0;
+          } else {
+            e.spawnInvuln = 0;
+            e.takeDamage(99999, this);
+          }
+        }
+      });
+      // 龙类分裂小段：灼烧 + 重伤
+      this.enemies.slice().forEach(e => {
+        if (e.dead || !e.segments || !e.isMini) return;
+        for (let i = 0; i < e.segments.length; i++) {
+          const s = e.segments[i];
+          if (s.dead || s.x < x0 - 40 || s.x > x0 + R || Math.abs(s.y - y0) > 300) continue;
+          e.damageSegment(i, 30, this, null, '');
+          e.dotT = Math.max(e.dotT || 0, 3); e.dotDps = Math.max(e.dotDps || 0, 24); e.dotType = 'flame';
+        }
+      });
+      // 接触的障碍物直接摧毁
+      this.rocks.slice().forEach(r => {
+        if (r.dead) return;
+        if (r.left < x0 + R && r.left + r.w > x0 - 40 && r.top < y0 + 300 && r.baseY > y0 - 300) r.destroy(this);
+      });
+      // 剑气粒子
+      for (let i = 0; i < 36; i++) {
+        const a = rand(-1.2, 1.2);
+        this.particles.push(new Particle(
+          x0 + Math.cos(a) * rand(60, R), y0 + Math.sin(a) * rand(60, 300) * (Math.random() < 0.5 ? 1 : -1) * 0.5,
+          Math.cos(a) * rand(200, 620), Math.sin(a) * rand(60, 220),
+          rand(0.25, 0.6), rand(3, 7),
+          ['#2fb37c', '#7ed46d', '#d8ffe8', '#fff'][randi(0, 3)]));
+      }
+      this.toast('🗡️ 疾风斩！', 1.6);
+    }
+
+    /** [法师] 魔法护盾：无敌 5s，期间击中的敌人困惑并下坠 2s（困惑逻辑在 collisions 中施加） */
+    ultMagicShield() {
+      SFX.ultimate();
+      const p = this.player;
+      p.magicShieldT = 5;
+      this.shake(6);
+      this.flashT = 0.3; this.flashColor = '#c99bff';
+      for (let i = 0; i < 30; i++) {
+        const a = rand(0, TAU);
+        this.particles.push(new Particle(
+          p.x, p.y, Math.cos(a) * rand(120, 340), Math.sin(a) * rand(120, 340),
+          rand(0.4, 0.8), rand(3, 6), ['#c99bff', '#8b3fd0', '#ffe066', '#fff'][randi(0, 3)]));
+      }
+      this.toast('✨ 魔法护盾展开！无敌 5 秒', 2);
+    }
+
+    /** [不良少年] 禁锢声波：禁锢所有敌人（小怪）与敌人子弹 4s */
+    ultSoundwave() {
+      SFX.ultimate();
+      this.shake(10);
+      this.flashT = 0.35; this.flashColor = '#7fe7ff';
+      this.ultWave = { r: 40, a: 1 };
+      this.soundwaveT = 4;                 // 敌方子弹冻结（update 中生效）
+      this.enemies.forEach(e => {
+        if (e.dead) return;                // 龙类（含分裂小段）也有 freezeT 支持，一并禁锢
+        e.freezeT = Math.max(e.freezeT || 0, 4);
+      });
+      for (let i = 0; i < 44; i++) {
+        const a = rand(0, TAU);
+        this.particles.push(new Particle(
+          this.player.x, this.player.y,
+          Math.cos(a) * rand(300, 780), Math.sin(a) * rand(300, 780),
+          rand(0.3, 0.7), rand(3, 7), ['#7fe7ff', '#fff', '#35e0ff'][randi(0, 2)]));
+      }
+      this.toast('🔊 禁锢声波！敌人静止 4 秒', 2);
+    }
+
+    /** [狂战士] 血怒：无敌（不死亡）5s，受创越多弹幕增伤越高（最高 3 倍） */
+    ultBloodrage() {
+      SFX.ultimate();
+      SFX.bossEnrage();
+      const p = this.player;
+      p.bloodRageT = 5;
+      p.rageBoost = 0;
+      this.shake(12);
+      this.flashT = 0.4; this.flashColor = '#ff5252';
+      for (let i = 0; i < 40; i++) {
+        const a = rand(0, TAU);
+        this.particles.push(new Particle(
+          p.x, p.y, Math.cos(a) * rand(150, 420), Math.sin(a) * rand(150, 420),
+          rand(0.35, 0.75), rand(3, 7), ['#ff2a0a', '#ff5a1a', '#ffd23b', '#fff'][randi(0, 3)]));
+      }
+      this.toast('🩸 血怒开启！受创越多，弹幕越强', 2.2);
+    }
+
+    /** [超级小子] 五重激光串：5 道追踪激光，秒杀小怪（含地下龙类）、每道对 Boss 造成 4% 最大生命、摧毁障碍；
+     *  5 道初射角度各不相同（扇形展开），发射后由追踪转向修正命中目标 */
+    ultLasers() {
+      SFX.ultimate();
+      this.shake(12);
+      this.flashT = 0.4; this.flashColor = '#35e0ff';
+      const p = this.player;
+      // 收集屏幕内目标（含地下龙类小段：以首节为代表目标；本体草龙免疫秒杀的约定保留——激光只杀伤小段与普通敌人）
+      const targets = [];
+      this.enemies.forEach(e => {
+        if (e.dead) return;
+        if (e.segments) {
+          if (e.isMini) { const fa = e.firstAlive(); if (fa) targets.push(fa.s); }   // 小段：以首节为追踪目标
+        } else targets.push(e);
+      });
+      this.bosses.forEach(b => { if (!b.dead && b.state !== 'enter' && b.state !== 'trans') targets.push(b); });
+      for (let i = 0; i < 5; i++) {
+        const t = targets.length ? targets[i % targets.length] : null;
+        const a = t ? Math.atan2((t.y || CFG.H / 2) - p.y, (t.x || CFG.W / 2) - p.x) : 0;
+        // 初射角度以瞄准角为中心扇形展开（i=0..4 → -0.64/-0.32/0/+0.32/+0.64 rad，各不相同）
+        const la = a + (i - 2) * 0.32;
+        this.bullets.push(new Bullet(p.x + 30, p.y, Math.cos(la) * 560, Math.sin(la) * 560, {
+          kind: 'ultlaser', friendly: true, dmg: 60, r: 9,
+          homing: true, turnRate: 5.5, target: t, life: 3.2,
+          ultraKill: true, bossDmgRatio: 0.04, rockBreak: true, rockReact: true,
+          trailCols: ['#35e0ff', '#a5f3fc', '#fff', '#7fe7ff'], trailLite: true
+        }));
+      }
+      this.toast('🦸 五重激光串！', 1.8);
+    }
+
     gainXp(v) {
       this.xp += v;
       this.tryLevelUp();
@@ -476,8 +706,13 @@
         if (!u.can(this.player, this)) return false;
         if (wayLimitReached && WAY_IDS.includes(u.id)) return false;
         if (elemLimitReached && ELEM_IDS.includes(u.id)) return false;
+        // 角色限定项：仅指定角色可见（如小白的子弹升级）
+        if (u.charOnly && this.player.charId !== u.charOnly) return false;
         return true;
       });
+      // 角色专属「子弹成长」项注入（侠客/法师/不良少年/狂战士/超级小子）
+      const cb = window.CHARS && window.CHARS.bulletUpgrade(this.player.charId);
+      if (cb && cb.can(this.player)) pool.push(cb);
       const opts = [];
       // guaranteed 项强制放入选项（从 pool 中提取，can 已验证通过）
       const guaranteed = pool.filter(u => u.guaranteed && u.guaranteed(this.player, this));
@@ -497,13 +732,14 @@
         const isGuaranteed = guaranteed.includes(u);
         card.className = 'lu-card ' + u.cls + (isGuaranteed ? ' lu-recommend' : '');
         const lv = u.level(this.player);
+        const descText = typeof u.desc === 'function' ? u.desc(this.player) : u.desc;
         card.innerHTML =
           `<div class="card-key">${i + 1}</div>` +
           (isGuaranteed ? '<div class="card-rec">★ 推荐</div>' : '') +
           `<div class="card-icon">${u.icon}</div>` +
           `<div class="card-name">${u.name}</div>` +
           `<div class="card-lv">${lv > 0 ? '当前 Lv.' + lv : '未拥有'}</div>` +
-          `<div class="card-desc">${u.desc}</div>`;
+          `<div class="card-desc">${descText}</div>`;
         card.addEventListener('click', () => this.pickUpgrade(i));
         this.el.luCards.appendChild(card);
       });
@@ -963,6 +1199,9 @@
         this.ultWave.a = Math.max(0, 1 - this.ultWave.r / 1500);
         if (this.ultWave.a <= 0) this.ultWave = null;
       }
+      // 声波禁锢 / 斩击特效计时
+      if (this.soundwaveT > 0) this.soundwaveT -= dt;
+      if (this.slashFx) { this.slashFx.t -= dt; if (this.slashFx.t <= 0) this.slashFx = null; }
 
       // 云
       this.clouds.forEach(c => {
@@ -990,12 +1229,24 @@
       // 实体更新
       this.player.update(dt, this);
       this.enemies.forEach(e => e.update(dt, this));
-      this.bosses.forEach(b => b.update(dt, this));
-      this.bullets.forEach(b => b.update(dt, this));
+      this.bosses.forEach(b => {
+        // 声波禁锢：Boss 行动完全冻结（仍可被玩家攻击）
+        if (this.soundwaveT > 0) return;
+        b.update(dt, this);
+      });
+      this.bullets.forEach(b => {
+        // 声波禁锢：敌方子弹冻结原地（仍可被击爆）
+        if (this.soundwaveT > 0 && !b.friendly) return;
+        b.update(dt, this);
+      });
       this.gems.forEach(g2 => g2.update(dt, this));
       this.particles.forEach(p => p.update(dt));
       this.lightnings.forEach(l => l.update(dt, this));
-      this.beams.forEach(b => b.update(dt, this));
+      this.beams.forEach(b => {
+        // 声波禁锢：敌方激光（预警/本体）一并冻结
+        if (this.soundwaveT > 0) return;
+        b.update(dt, this);
+      });
       this.rocks.forEach(r => r.update(dt, this));
       this.arcs.forEach(a => a.t += dt);
       this.fxRings.forEach(ring => { ring.t += dt; ring.r += ring.vr * dt; });
@@ -1043,6 +1294,29 @@
           if (hitSeg >= 0 || circleHit) {
             if (!b.hitSet) b.hitSet = new Set();
             b.hitSet.add(e);
+            // 超级小子激光串：秒杀小怪（含龙类小段全灭）；Boss 不在此列，落到下方按比例承伤
+            if (b.ultraKill && !e.isBoss) {
+              if (e.segments) {
+                if (e.isMini) {
+                  for (let i = e.segments.length - 1; i >= 0; i--) {
+                    if (!e.segments[i].dead) e.damageSegment(i, 99999, this, null, '');
+                  }
+                } else e.damageSegment(hitSeg, b.dmg, this, null, '');
+              } else {
+                e.spawnInvuln = 0;
+                e.takeDamage(999999, this);
+              }
+              burst(this, b.x, b.y, 16, ['#35e0ff', '#a5f3fc', '#fff'], 260, 5, 0.5);
+              b.dead = true;
+              break;
+            }
+            // 激光串对 Boss：每道按最大生命 4% 承伤
+            if (b.bossDmgRatio > 0 && e.isBoss) {
+              e.takeDamage(e.maxHp * b.bossDmgRatio, this);
+              burst(this, b.x, b.y, 16, ['#35e0ff', '#fff'], 260, 5, 0.5);
+              b.dead = true;
+              break;
+            }
             if (e.segments) {
               // 节命中：DoT / 冻结由 damageSegment 内部处理
               e.damageSegment(hitSeg, b.dmg, this, { x: 220, y: rand(-60, 60) }, b.element || '');
@@ -1060,6 +1334,10 @@
                 e.freezeT = 4;                                // 寒冰：冻结 4s
                 if (e.spawnInvuln > 0) e.invulnBreakT = 0.5; // 寒冰也破无敌
               }
+              // 法师魔法护盾期间击中敌人：困惑并下坠 2s
+              if (p.magicShieldT > 0) { e.confuseT = 2; e.confuseVy = 0; }
+              // 烟头/火把命中点燃：持续燃烧 DoT
+              if (b.burnOnHit) { e.dotT = Math.max(e.dotT || 0, 2.5); e.dotDps = Math.max(e.dotDps || 0, b.dmg * 0.45); e.dotType = 'flame'; }
             }
             // 闪电子弹：命中后闪电链跳跃链接附近敌人
             if (p.chainJumps >= 1 && !e.dead) this.chainLightning(e, b.dmg);
@@ -1068,6 +1346,20 @@
               const radius = 34 + b.bombLv * 12;
               this.aoe(b.x, b.y, radius, b.dmg * (0.55 + b.bombLv * 0.16));
               b.dead = true;
+            } else if (b.noDieOnHit && b.bouncesLeft > 0 && b.pierce <= 0) {
+              // 烟头/锯齿盾命中敌人：朝任意方向反弹（消耗反弹次数，不消失），反弹后速度/伤害减半
+              b.bouncesLeft--;
+              const rc = (hitSeg >= 0 && e.segments[hitSeg]) ? e.segments[hitSeg] : e;
+              const dx = b.x - rc.x, dy = b.y - rc.y;
+              const dl = Math.hypot(dx, dy) || 1;
+              const dn = (b.vx * dx + b.vy * dy) / (dl * dl);
+              b.vx -= 2 * dn * dx; b.vy -= 2 * dn * dy;
+              b.vx += rand(-90, 90); b.vy += rand(-90, 90);
+              b.vx *= 0.5; b.vy *= 0.5;                        // 反弹减速：速度降低一半
+              b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
+              b.angle = Math.atan2(b.vy, b.vx);
+              burst(this, b.x, b.y, 5, ['#fff', '#ff9d2e'], 150, 3, 0.25);
+              SFX.melee();
             } else {
               b.pierce--;
               if (b.pierce < 0) b.dead = true;
@@ -1075,6 +1367,42 @@
             if (b.dead) break;
           }
         }
+      }
+      // 角色弹 vs 障碍山石：反弹（烟头/盾牌/最终激光）/ 分裂（星星）/ 击穿摧毁（大招激光）
+      for (const b of this.bullets) {
+        if (!b.friendly || b.dead) continue;
+        if (!(b.rockReact || b.rockBreak)) continue;
+        for (const r of this.rocks) {
+          if (r.dead) continue;
+          if (!r.contains(b.x, b.y, b.r + 2)) continue;
+          if (b.rockBreak) {
+            // 激光串：直接摧毁障碍并继续飞行
+            r.destroy(this);
+            break;
+          }
+          if (b.splitN) { b.dead = true; break; }   // 星星：撞石碎裂（触发分裂）
+          if (b.bouncesLeft > 0) {
+            b.bouncesLeft--;
+            const cx = clamp(b.x, r.left, r.left + r.w);
+            const cy = clamp(b.y, r.top, r.baseY);
+            const nx = b.x - cx, ny = b.y - cy;
+            const nl = Math.hypot(nx, ny) || 1;
+            const dn = (b.vx * nx + b.vy * ny) / (nl * nl);
+            b.vx -= 2 * dn * nx; b.vy -= 2 * dn * ny;       // 镜面反射
+            b.x = cx + (nx / nl) * (b.r + 5); b.y = cy + (ny / nl) * (b.r + 5);
+            b.vx += rand(-70, 70); b.vy += rand(-70, 70);   // 随机扰动（任意方向反弹）
+            b.vx *= 0.5; b.vy *= 0.5;                        // 反弹减速：速度降低一半
+            b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
+            b.angle = Math.atan2(b.vy, b.vx);
+            burst(this, b.x, b.y, 5, ['#fff', '#caa06a'], 150, 3, 0.25);
+            SFX.melee();
+          } else b.dead = true;
+          break;
+        }
+      }
+      // 星星死亡分裂（命中敌人/障碍/过期统一触发）
+      for (const b of this.bullets) {
+        if (b.splitN && b.dead && !b.splitDone) b.splitStars(this);
       }
       // 我方子弹 vs 敌方炮弹/可击爆弹：
       //  - 炮弹（volatile）：击中即引爆
@@ -1678,6 +2006,24 @@
         // 敌人 / Boss
         this.enemies.forEach(e => e.render(ctx));
         this.bosses.forEach(b => b.render(ctx));
+        // 声波禁锢视觉：Boss / 龙类覆盖冰蓝色罩（普通敌人自带冻结渲染）
+        if (this.soundwaveT > 0) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(110,200,255,0.30)';
+          ctx.strokeStyle = 'rgba(180,235,255,0.75)';
+          ctx.lineWidth = 2;
+          this.bosses.forEach(b => {
+            if (b.dead) return;
+            const r = (b.radius || 40) * 1.25;
+            ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, TAU); ctx.fill(); ctx.stroke();
+          });
+          this.enemies.forEach(e => {
+            if (e.dead || !e.segments) return;
+            const r = (e.segR || 13) * 1.35;
+            ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, TAU); ctx.fill(); ctx.stroke();
+          });
+          ctx.restore();
+        }
         // 玩家
         if (this.player.hp > 0) this.player.render(ctx);
         // 闪电链电弧（子弹层前）：白色粗线 + 黄色细线
@@ -1701,6 +2047,24 @@
         this.beams.forEach(b => b.render(ctx));
         // 粒子
         this.particles.forEach(p => p.render(ctx));
+        // 侠客大招斩击特效：巨型翠绿剑气弧
+        if (this.slashFx) {
+          const fx = this.slashFx;
+          const pr = clamp(fx.t / fx.max, 0, 1);
+          const reach = 60 + (1 - pr) * 300;
+          ctx.save();
+          ctx.translate(fx.x, fx.y);
+          ctx.globalAlpha = pr * 0.9;
+          ctx.strokeStyle = '#2fb37c'; ctx.lineWidth = 14 * pr + 4;
+          ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.arc(0, 0, reach, -1.15, 1.15); ctx.stroke();
+          ctx.strokeStyle = '#7ed46d'; ctx.lineWidth = 7 * pr + 2;
+          ctx.beginPath(); ctx.arc(0, 0, reach, -1.05, 1.05); ctx.stroke();
+          ctx.strokeStyle = '#eafff2'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(0, 0, reach, -0.95, 0.95); ctx.stroke();
+          ctx.restore();
+          ctx.globalAlpha = 1;
+        }
         // Toast
         this.toasts.forEach(t => {
           const a = clamp(t.t / 0.5, 0, 1);
@@ -1715,8 +2079,8 @@
           ctx.textAlign = 'left';
         });
       } else {
-        // 菜单展示白猫主角（右下角浮空，直接绘制原图）
-        const cat = Sprites.cat;
+        // 菜单展示出战角色（右下角浮空，直接绘制原图）
+        const cat = (Sprites.charArt && Sprites.charArt[this.charId]) || Sprites.cat;
         if (cat) {
           const bob = Math.sin(performance.now() / 400) * 8;
           const targetLen = 230;

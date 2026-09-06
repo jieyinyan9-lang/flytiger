@@ -13,7 +13,7 @@
     player: {
       speed: 260,           // px/s
       baseHp: 100,
-      baseDmg: 12,
+      baseDmg: 10,          // 小白基础伤害（其他角色按此基准增减）
       fireInterval: 0.12,   // 秒/发
       bulletSpeed: 620,     // px/s
       radius: 20,            // 碰撞半径基础值
@@ -168,7 +168,7 @@
         level(p) { return p.spdLv; }
       },
       {
-        id: 'tier', icon: '✦', cls: 'c-tier', name: '子弹升级',
+        id: 'tier', icon: '✦', cls: 'c-tier', name: '子弹升级', charOnly: 'xiaobai',
         desc: '普通弹升级为高阶强化弹：更大、更亮、附带穿透（共 3 阶）',
         can(p) { return p.bulletTier < 3; },
         apply(p) { p.bulletTier++; p.tierLv++; p.dmg += 4; },

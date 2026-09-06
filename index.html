@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>飞虎的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260906r44">
+<link rel="stylesheet" href="css/style.css?v=20260906r60">
 </head>
 <body>
 <div id="game-wrap">
@@ -101,6 +101,17 @@
   <!-- 暂停 -->
   <div id="pause" class="hidden">
     <div class="pause-text">暂 停<br><span>按 P 继续</span></div>
+    <div class="pause-btns">
+      <button id="pause-restart-btn" class="pause-btn" type="button">↻ 重新开始</button>
+      <button id="pause-select-btn" class="pause-btn alt" type="button">🐱 返回角色选择</button>
+    </div>
+  </div>
+
+  <!-- 角色选择 -->
+  <div id="charsel" class="hidden">
+    <div id="charsel-title">选择出战角色</div>
+    <div id="char-grid"></div>
+    <button id="char-back-btn" class="pause-btn alt" type="button">← 返回菜单</button>
   </div>
 
   <!-- 游戏结束 -->
@@ -112,11 +123,12 @@
 </div>
 
 <script src="js/sprites.js?v=20260906r30"></script>
-<script src="js/config.js?v=20260906r61"></script>
+<script src="js/characters.js?v=20260906r63"></script>
+<script src="js/config.js?v=20260906r60"></script>
 <script src="js/audio.js?v=20260906r30"></script>
 <script src="js/music.js?v=20260906r53"></script>
-<script src="js/entities.js?v=20260906r61"></script>
+<script src="js/entities.js?v=20260906r68"></script>
 <script src="js/bosses.js?v=20260906r59"></script>
-<script src="js/game.js?v=20260906r61"></script>
+<script src="js/game.js?v=20260906r68"></script>
 </body>
 </html>
