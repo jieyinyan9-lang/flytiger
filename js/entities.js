@@ -3022,7 +3022,8 @@
           break;
         }
         case 'leigong':
-          drawSprite(ctx, Sprites.leigongL, this.x, this.y + Math.sin(t * 2) * 3, 2.2, 2.2, 0, this.flash);
+          // leigong.png 152×160 与 Boss 共用，缩放 0.275 → 显示约 42×44（与旧像素精灵 2.2 倍尺寸一致）
+          drawSprite(ctx, Sprites.leigongL, this.x, this.y + Math.sin(t * 2) * 3, 0.275, 0.275, 0, this.flash);
           break;
         case 'pig':
           // 火猪血量与体积 ×3（缩放 2.1 → 3.2）
@@ -5186,5 +5187,5 @@
     return s.dead ? null : s;
   }
 
-  window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, GrassDragon, DRAGON_THEMES, burst, drawSprite, rand, randi, clamp, dist };
+  window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, GrassDragon, DRAGON_THEMES, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, dist };
 })();

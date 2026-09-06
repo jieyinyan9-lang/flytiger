@@ -241,6 +241,7 @@
       this.kills = 0;
       this.bossCount = 0;       // 已击败 Boss 数（成长叠加）
       this.bossSpawned = 0;     // 已出现 Boss 数
+      this.lastBossName = null;  // 上一只出场 Boss（禁止连续两轮重复）
       this.totalLevels = 0;
       this.xp = 0;
       this.xpNeed = CFG.xpNeed(0);
@@ -846,6 +847,11 @@
           b.cls.name !== 'Sphinx' && !(b.cls.name === 'NiuMo' && !this.niuMoGeneric));
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
+      // 不连续两轮出现同一个 Boss：从最终候选池剔除上一只（池中有其他选择时才剔除）
+      if (this.lastBossName) {
+        const withoutLast = pool.filter(b => b.cls.name !== this.lastBossName);
+        if (withoutLast.length) pool = withoutLast;
+      }
       // forceChance：专属 Boss 在指定出场序号有独立的直接出场概率；未命中则不参与本轮随机池
       // 牛魔通用期不再走强制掷骰，作为普通等权成员进入随机池
       const forceable = b => (b.forceChance && b.forceChance[ord] !== undefined) &&
@@ -882,6 +888,7 @@
       b.musicTheme = (entry && entry.music) || 'boss';   // 专属 BGM（boss/eagle/pheasant/hero）
       this.bosses.push(b);
       this.bossSpawned++;
+      this.lastBossName = cls.name;   // 记录上一只：下一轮抽取时剔除，禁止连续重复
       this.bossSeen.add(cls.name);   // 登记出场：后续抽取权重减半
       // 所有非专属 Boss（狮身人面像、牛魔特殊期除外）均已轮过一遍 → 清空记录，概率恢复正常；
       // 同时牛魔结束特殊期、转入普通池（任意地图等权出场）

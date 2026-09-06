@@ -6,14 +6,29 @@
 (function () {
   'use strict';
 
-  const { Bullet, Lightning, Beam, CurveBeam, burst, drawSprite, rand, randi, clamp, Particle } = window.FT;
+  const { Bullet, Lightning, Beam, CurveBeam, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, Particle } = window.FT;
   const TAU = Math.PI * 2;
+
+  /** Boss 受击闪红时长（秒）与冷却（秒，含闪红持续期） */
+  const BOSS_FLASH_TIME = 0.3, BOSS_FLASH_CD = 4;
+  /** 闪红当前强度 0..0.85：前 0.18s 满重色，随后快速衰减 */
+  function bossFlashAlpha(flash) {
+    return flash > 0 ? 0.85 * Math.min(1, flash / 0.18) : 0;
+  }
+  /** Boss 精灵绘制：正常绘制 + 受击时重色红染叠层（替代 drawSprite 的 brightness 白闪） */
+  function drawBossSprite(ctx, spr, x, y, sx, sy, angle, flash) {
+    sy = sy || sx;
+    drawSprite(ctx, spr, x, y, sx, sy, angle, 0);
+    const a = bossFlashAlpha(flash);
+    if (a > 0) drawSpriteTinted(ctx, spr, x, y, spr.width * sx, spr.height * sy, angle || 0, '#ff1e10', a);
+  }
 
   class Boss {
     constructor(g, contactDmg, radius) {
       this.isBoss = true;
       this.dead = false;
-      this.flash = 0;
+      this.flash = 0;            // 受击闪红剩余时长（秒）
+      this.lastFlashT = -999;    // 上次触发闪红的时间戳（this.t 轴），4s 冷却
       this.t = 0;
       this.kbX = 0; this.kbY = 0;
       this.state = 'enter';
@@ -35,9 +50,9 @@
     takeDamage(dmg, g, kb) {
       if (this.dead || this.state === 'enter') return;   // 入场免伤
       this.hp -= dmg;
-      this.flash = 0.08;
+      this.hitFlash();
       // Boss 免疫击退：忽略 kb 参数，防止被持续攻击推出屏幕外
-      if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#fff', '#ffe08a'], 130, 3, 0.18);
+      if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#ff3b3b', '#ff7b2e'], 130, 3, 0.18);
       // 低血量狂暴（每只 Boss 仅一次）：三连警报 + 怒吼 + 震屏 + 红色爆发
       if (!this.enraged && this.hp > 0 && this.hp <= this.maxHp * 0.3) {
         this.enraged = true;
@@ -51,6 +66,13 @@
     die(g) {
       this.dead = true;
       g.onBossDefeated(this);
+    }
+    /** 受击闪红：4s 冷却一次，重色红染 0.3s（冷却期内受击不重复闪） */
+    hitFlash() {
+      if (this.t - this.lastFlashT >= BOSS_FLASH_CD) {
+        this.lastFlashT = this.t;
+        this.flash = BOSS_FLASH_TIME;
+      }
     }
     commonMove(dt) {
       this.x += this.kbX * dt; this.y += this.kbY * dt;
@@ -139,7 +161,7 @@
     }
     render(ctx) {
       const bob = Math.sin(this.t * 2.2) * 4;
-      drawSprite(ctx, Sprites.pigL, this.x, this.y + bob, 7.2, 7.2, 0, this.flash);
+      drawBossSprite(ctx, Sprites.pigL, this.x, this.y + bob, 7.2, 7.2, 0, this.flash);
       // 背部火焰加强
       if (Math.floor(this.t * 10) % 2 === 0) {
         ctx.fillStyle = '#ff7b2e';
@@ -233,7 +255,8 @@
       }
     }
     render(ctx) {
-      drawSprite(ctx, Sprites.leigongL, this.x, this.y + Math.sin(this.t * 2) * 4, 8.0, 8.0, 0, this.flash);
+      // leigong.png 152×160 正面图，缩放 1.0 → 显示 152×160（与旧像素精灵 8.0 倍尺寸一致）
+      drawBossSprite(ctx, Sprites.leigongL, this.x, this.y + Math.sin(this.t * 2) * 4, 1.0, 1.0, 0, this.flash);
       // 狂暴时周身电弧
       if (this.enraged && Math.floor(this.t * 8) % 2 === 0) {
         ctx.strokeStyle = 'rgba(140,210,255,0.7)';
@@ -346,9 +369,9 @@
           ctx.stroke();
           ctx.restore();
         }
-        drawSprite(ctx, Sprites.samuraiL, this.x, this.y, 4.6, 4.6, 0, 0.5);
+        drawBossSprite(ctx, Sprites.samuraiL, this.x, this.y, 0.58, 0.58, 0, 0.5);
       } else {
-        drawSprite(ctx, Sprites.samuraiL, this.x, this.y, 4.6, 4.6, angle, this.flash);
+        drawBossSprite(ctx, Sprites.samuraiL, this.x, this.y, 0.58, 0.58, angle, this.flash);
       }
     }
   }
@@ -365,16 +388,23 @@
       this.whirlT = 7.0;
       this.rushT = 12.0;
       this.spiralA = 0;
+      this.trail = [];          // 移动白色拖尾轨迹点（{x,y,life}）
       this.deathCols = ['#8b96a8', '#e8eef7', '#c0392b', '#fff'];
     }
     update(dt, g) {
       this.t += dt; this.stateT += dt;
       this.flash = Math.max(0, this.flash - dt);
+      // 拖尾点寿命衰减
+      for (let i = this.trail.length - 1; i >= 0; i--) {
+        this.trail[i].life -= dt;
+        if (this.trail[i].life <= 0) this.trail.splice(i, 1);
+      }
       this.commonMove(dt);
       const p = g.player;
 
       if (this.state === 'enter') {
         this.x -= 170 * dt;
+        this.recordTrail(this.x + 62, this.y + 6);   // 尾部炮管锚点
         if (this.x <= this.hoverX) { this.state = 'fight'; this.stateT = 0; }
         return;
       }
@@ -384,6 +414,7 @@
         this.baseY += (clamp(p.y, 100, CFG.GROUND_Y - 110) - this.baseY) * dt * 1.6;
         this.y = this.baseY + Math.sin(this.t * 3.2) * 60;
         this.x = this.hoverX + Math.sin(this.t * 1.4) * 90;
+        this.recordTrail(this.x + 62, this.y + 6);   // 尾部炮管锚点（高速游弋）
 
         // 羽毛扇形射击：密度差异化 —— 每 3 次齐射有 1 次稀疏（3 发大间隔），其余 9 发密集
         this.featherT -= dt;
@@ -426,6 +457,7 @@
           }
         }
         if (this.stateT >= 3.0) { this.state = 'fight'; this.stateT = 0; }
+        this.recordTrail(this.x, this.y);   // 原地旋转：基本不产生新点，旧拖尾自然消散
       }
       else if (this.state === 'rushWind') {
         if (this.stateT >= 0.5) { this.state = 'rush'; this.stateT = 0; SFX.dash(); }
@@ -438,20 +470,50 @@
         this.y += Math.sin(a) * sp * dt;
         this.x = clamp(this.x, 80, CFG.W - 40);
         this.y = clamp(this.y, 70, CFG.GROUND_Y - 60);
+        this.recordTrail(this.x, this.y);   // 突袭高速冲锋（身体旋转中）：从中心拉出白色光尾
         // 拖尾
         g.particles.push(new Particle(this.x + 20, this.y, rand(-40, 40), rand(-40, 40),
           0.35, 5, '#bfe9ff'));
         if (this.stateT >= 6.0) { this.state = 'fight'; this.stateT = 0; }
       }
     }
+    /** 记录拖尾点：静止（帧位移 < 2px）时不记录，队列硬上限 30 点 */
+    recordTrail(px, py) {
+      const tr = this.trail;
+      const last = tr[tr.length - 1];
+      if (last && Math.hypot(px - last.x, py - last.y) < 2) return;
+      tr.push({ x: px, y: py, life: 0.55 });
+      if (tr.length > 30) tr.shift();
+    }
     render(ctx) {
+      // 白色线性拖尾：双层描边（外发光 + 内亮芯），随寿命渐变收细变淡，画在鹰身下
+      const tr = this.trail;
+      if (tr.length > 1) {
+        ctx.save();
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        for (let pass = 0; pass < 2; pass++) {
+          for (let i = 1; i < tr.length; i++) {
+            const a = tr[i - 1], b = tr[i];
+            const f = clamp(b.life / 0.55, 0, 1);
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = pass === 0
+              ? `rgba(255,255,255,${(0.22 * f).toFixed(3)})`
+              : `rgba(255,255,255,${(0.85 * f).toFixed(3)})`;
+            ctx.lineWidth = pass === 0 ? 1 + 9 * f : 0.5 + 3.5 * f;
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
       const spr = Math.floor(this.t * 8) % 2 === 0 ? Sprites.swordEagleAL : Sprites.swordEagleBL;
       let angle = Math.sin(this.t * 2) * 0.1;
       if (this.state === 'whirl' || this.state === 'rush') angle = this.t * 12;
+      // ying1/ying2 224×160，缩放 0.65 → 显示约 146×104（与旧像素精灵 5.2 倍尺寸一致）
       if (this.state === 'rushWind') {
-        drawSprite(ctx, spr, this.x, this.y, 5.2, 5.2, 0, Math.floor(this.t * 10) % 2 ? 0.4 : 0);
+        drawSprite(ctx, spr, this.x, this.y, 0.65, 0.65, 0, Math.floor(this.t * 10) % 2 ? 0.4 : 0);
       } else {
-        drawSprite(ctx, spr, this.x, this.y, 5.2, 5.2, angle, this.flash);
+        drawBossSprite(ctx, spr, this.x, this.y, 0.65, 0.65, angle, this.flash);
       }
       // 爪中剑
       ctx.save();
@@ -541,7 +603,7 @@
       ctx.fillStyle = '#ff3b5c';
       ctx.beginPath(); ctx.arc(this.x, this.y, this.radius * 1.1, 0, TAU); ctx.fill();
       ctx.restore();
-      drawSprite(ctx, Sprites.skullhead, this.x, this.y, 7.6 * pulse, 7.6 * pulse, this.rotA, this.flash);
+      drawBossSprite(ctx, Sprites.skullhead, this.x, this.y, 7.6 * pulse, 7.6 * pulse, this.rotA, this.flash);
     }
   }
 
@@ -714,9 +776,9 @@
       };
       // 腿画在狗头下层
       (this.phase === 1 ? this.legs : this.limbs).forEach(l => drawLeg(l, this.phase === 1 ? 12 : 11));
-      // 狗头
+      // 狗头：goutou.png 272×192，缩放 0.68 → 显示约 185×131（与原像素精灵 5.4 倍尺寸一致）
       const ang = this.phase === 2 ? Math.sin(this.t * 10) * 0.12 : Math.sin(this.t * 1.5) * 0.06;
-      drawSprite(ctx, Sprites.dogHeadL, this.x, this.y, 5.4, 5.4, ang, this.flash);
+      drawBossSprite(ctx, Sprites.dogHeadL, this.x, this.y, 0.68, 0.68, ang, this.flash);
       // 阶段2：解体电弧
       if (this.phase === 2 && Math.floor(this.t * 8) % 2 === 0) {
         ctx.strokeStyle = 'rgba(127,231,255,0.5)';
@@ -867,8 +929,8 @@
     }
     render(ctx) {
       const bob = Math.abs(Math.sin(this.t * 7)) * -6;
-      // 尾羽微摆（体型×2）
-      drawSprite(ctx, Sprites.pheasantL, this.x, this.y + bob, 6.8, 6.8, Math.sin(this.t * 3) * 0.05, this.flash);
+      // 尾羽微摆：huoji.png 368×208，缩放 0.85 → 显示约 313×177（与旧像素精灵 6.8 倍尺寸一致）
+      drawBossSprite(ctx, Sprites.pheasantL, this.x, this.y + bob, 0.85, 0.85, Math.sin(this.t * 3) * 0.05, this.flash);
       // 冲冠怒气尘土
       if (Math.floor(this.t * 9) % 3 === 0) {
         ctx.fillStyle = 'rgba(140,110,70,0.5)';
@@ -989,7 +1051,7 @@
           this.spinFire = 0.42;
           for (let k = 0; k < 2; k++) {
             const a = aimA + this.spinOff + k * Math.PI;
-            g.beams.push(new Beam(this.x, this.y, a, 1400, 13, Math.round(15 * g.atkScale), 0.72, true));
+            g.beams.push(new Beam(this.x, this.y - 30, a, 1400, 13, Math.round(15 * g.atkScale), 0.72, true));
           }
           SFX.zap();
         }
@@ -1018,7 +1080,7 @@
         if (this.stateT > 0.55) {
           // 朝上三束紧密垂直激光（中间竖直、两侧微偏）
           for (let k = -1; k <= 1; k++) {
-            g.beams.push(new Beam(this.x, this.y - 24, -Math.PI / 2 + k * 0.13, 1500, 15,
+            g.beams.push(new Beam(this.x, this.y - 34, -Math.PI / 2 + k * 0.13, 1500, 15,
               Math.round(18 * g.atkScale), 0.08, false));
           }
           SFX.warn(); g.shake(8);
@@ -1036,7 +1098,7 @@
     fireBeamSweep(g, p) {
       const base = Math.atan2(p.y - this.y, p.x - this.x);
       for (let i = -1; i <= 1; i++) {
-        g.beams.push(new Beam(this.x - 24, this.y, base + i * 0.26, 1400, 15, Math.round(17 * g.atkScale), 0.8, true));
+        g.beams.push(new Beam(this.x, this.y - 34, base + i * 0.26, 1400, 15, Math.round(17 * g.atkScale), 0.8, true));
       }
       SFX.warn(); g.shake(4);
     }
@@ -1048,12 +1110,13 @@
         return;
       }
       const ang = this.state === 'spin' ? this.spinOff : Math.sin(this.t * 2) * 0.06;
-      drawSprite(ctx, Sprites.homelanderL, this.x, this.y, 6.2, 6.2, ang, this.flash);
-      // 旋转激光 / 瞬移激光蓄力：双眼红光
+      // zuguoren.png 240×256 正面图，缩放 0.78 → 显示约 187×200（与原像素精灵 6.2 倍尺寸一致）
+      drawBossSprite(ctx, Sprites.homelanderL, this.x, this.y, 0.78, 0.78, ang, this.flash);
+      // 旋转激光 / 瞬移激光蓄力：双眼红光（正面图双眼在头部左右）
       if (this.state === 'spin' || this.state === 'teleAim') {
         ctx.fillStyle = Math.floor(this.t * 10) % 2 ? '#ff3b3b' : '#ffd23b';
-        ctx.fillRect(this.x - 30, this.y - 14, 8, 5);
-        ctx.fillRect(this.x - 30, this.y + 9, 8, 5);
+        ctx.fillRect(this.x - 32, this.y - 38, 14, 8);
+        ctx.fillRect(this.x + 18, this.y - 38, 14, 8);
       }
       // 瞬移落点：三条垂直红色预警虚线（与实际激光同轨迹）
       if (this.state === 'teleAim') {
@@ -1063,8 +1126,8 @@
           ctx.strokeStyle = 'rgba(255,70,70,0.85)'; ctx.lineWidth = 4; ctx.setLineDash([14, 10]);
           for (let k = -1; k <= 1; k++) {
             const a = -Math.PI / 2 + k * 0.13;
-            ctx.beginPath(); ctx.moveTo(this.x, this.y - 24);
-            ctx.lineTo(this.x + Math.cos(a) * 1500, this.y - 24 + Math.sin(a) * 1500);
+            ctx.beginPath(); ctx.moveTo(this.x, this.y - 34);
+            ctx.lineTo(this.x + Math.cos(a) * 1500, this.y - 34 + Math.sin(a) * 1500);
             ctx.stroke();
           }
           ctx.restore();
@@ -1085,10 +1148,10 @@
       this.actT = 2.4;
       this.actIdx = 0;
       this.summoned = false;
-      // 双手（锚点相对身体）
+      // 双手（锚点相对身体）：dawang_1.png 正面图，双手举斧在肩部两侧
       this.hands = [
-        { ox: -40, oy: -80, px: 0, py: 0, tx: 0, ty: 0, state: 'idle', t: 0, fireT: 0 },
-        { ox: -40, oy: 80, px: 0, py: 0, tx: 0, ty: 0, state: 'idle', t: 0, fireT: 0 }
+        { ox: -55, oy: -6, px: 0, py: 0, tx: 0, ty: 0, state: 'idle', t: 0, fireT: 0 },
+        { ox: 55, oy: -6, px: 0, py: 0, tx: 0, ty: 0, state: 'idle', t: 0, fireT: 0 }
       ];
       this.ringT = 2.0;
       this.eyeT = 3.0;
@@ -1214,15 +1277,15 @@
         this.eyeT -= dt;
         if (this.eyeT <= 0) {
           this.eyeT = rand(3.2, 4.0);
-          // 双眼位置：bossHeadL 为 24×22 精灵缩放 13 倍居中绘制，翻转后两个黑色瞳孔
-          // 中心在精灵坐标 (14,12)/(9,12)，换算为相对中心的局部偏移 (±32.5,+19.5) 并随头部微旋
+          // 双眼位置：bossHeadL 为 dawang_2.png（192×176）缩放 1.625 倍居中绘制
+          // 炮管/加特林双眼在精灵坐标 (62,90)/(128,91)，换算为相对中心的局部偏移 (±54,+6) 并随头部微旋
           const th = Math.sin(this.t * 1.4) * 0.05;
           const co = Math.cos(th), si = Math.sin(th);
           const eyeAt = (lx, ly) => ({
             x: this.x + lx * co - ly * si,
             y: this.y + lx * si + ly * co
           });
-          const eyes = [eyeAt(-33, 20), eyeAt(33, 20)];
+          const eyes = [eyeAt(-54, 6), eyeAt(54, 6)];
           // 屏幕最左竖轴上的两个随机落点，彼此保持一定距离
           const lo = 80, hi = CFG.GROUND_Y - 60;
           let y1 = rand(lo, hi), y2 = rand(lo, hi);
@@ -1293,7 +1356,7 @@
     launchFloaters(g) {
       for (let i = 0; i < 5; i++) {
         const a = -Math.PI / 2 + (i - 2) * 0.5;
-        const b = new Bullet(this.x - 50, this.y - 30,
+        const b = new Bullet(this.x, this.y - 60,
           Math.cos(a) * 60, Math.sin(a) * 60,
           { kind: 'axe', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 9,
             hp: 6, homing: true, turnRate: 0.55, color: '#e0453a', spinRate: 7 });
@@ -1319,14 +1382,14 @@
         ctx.restore();
       }
       if (this.phase === 2) {
-        // 变身后巨头（占据近半屏）
+        // 变身后巨头（占据近半屏）：dawang_2.png 192×176，缩放 1.625 → 显示约 312×286
         const pulse = 1 + Math.sin(this.t * 4) * 0.02;
-        drawSprite(ctx, Sprites.bossHeadL, this.x, this.y, 13 * pulse, 13 * pulse, Math.sin(this.t * 1.4) * 0.05, this.flash);
+        drawBossSprite(ctx, Sprites.bossHeadL, this.x, this.y, 1.625 * pulse, 1.625 * pulse, Math.sin(this.t * 1.4) * 0.05, this.flash);
         return;
       }
       if (this.state !== 'transform') {
-        // 西装身体（占据近半屏）
-        drawSprite(ctx, Sprites.bossManL, this.x, this.y, 9.0, 9.0, Math.sin(this.t * 1.6) * 0.03, this.flash);
+        // 西装身体（占据近半屏）：dawang_1.png 240×304，缩放 1.125 → 显示约 270×342
+        drawBossSprite(ctx, Sprites.bossManL, this.x, this.y, 1.125, 1.125, Math.sin(this.t * 1.6) * 0.03, this.flash);
         // 双手：袖管 + 拳头
         this.hands.forEach(h => {
           if (h.state === 'idle') return;
@@ -1338,8 +1401,8 @@
           ctx.fillStyle = '#1c1f27'; ctx.fillRect(h.px - 11, h.py - 11, 22, 5);
         });
       } else {
-        // 碎裂中：身体闪烁崩坏
-        drawSprite(ctx, Sprites.bossManL, this.x, this.y, 9.0, 9.0, 0, Math.floor(this.t * 14) % 2 ? 0.6 : this.flash);
+        // 碎裂中：身体闪烁崩坏（白闪为碎裂演出，非受击反馈）
+        drawSprite(ctx, Sprites.bossManL, this.x, this.y, 1.125, 1.125, 0, Math.floor(this.t * 14) % 2 ? 0.6 : 0);
       }
     }
   }
@@ -1469,8 +1532,9 @@
     }
     render(ctx) {
       // 持续跳动；飞空时身体横过来（bodyAngle → -π/2）
+      // guaike.png 224×288，缩放 1.06 → 显示约 237×305（与原像素精灵 8.5 倍尺寸一致）
       const bob = Math.abs(Math.sin(this.t * 5)) * -12;
-      drawSprite(ctx, Sprites.strangerL, this.x, this.y + bob, 8.5, 8.5, this.bodyAngle + Math.sin(this.t * 3) * 0.04, this.flash);
+      drawBossSprite(ctx, Sprites.strangerL, this.x, this.y + bob, 1.06, 1.06, this.bodyAngle + Math.sin(this.t * 3) * 0.04, this.flash);
     }
   }
 
@@ -1659,7 +1723,7 @@
       if (this.state === 'chargeWind') sy = 0.78 + Math.sin(this.stateT * 22) * 0.05;
       else if (!this.onGround) sy = 1.08;
       const w = FS, h = FS * sy;
-      drawSprite(ctx, Sprites.frogL, this.x, this.y + (FS * FH - h * FH) / 2, w, h, 0, this.flash);
+      drawBossSprite(ctx, Sprites.frogL, this.x, this.y + (FS * FH - h * FH) / 2, w, h, 0, this.flash);
       // 舌头（细、深红、带黑边；初射点为口腔）
       if (this.tongue) {
         const tg = this.tongue;
@@ -1912,7 +1976,7 @@
       }
       // 俯冲时身体垂直；Hexian.png 272×416，缩放 0.8125 → 显示约 221×338（与原尺寸一致）
       const dive = this.state === 'dive' && (this.phase === 'fall');
-      drawSprite(ctx, Sprites.craneL, this.x, this.y, 0.8125, 0.8125, dive ? Math.PI * 0.5 : Math.sin(this.t * 2) * 0.07, this.flash);
+      drawBossSprite(ctx, Sprites.craneL, this.x, this.y, 0.8125, 0.8125, dive ? Math.PI * 0.5 : Math.sin(this.t * 2) * 0.07, this.flash);
       // 鹤鸣时颈部声波纹：三层扩散环，从喙部发出（Hexian.png 喙部约在精灵 (70,165)）
       if (this.state === 'cry') {
         const cx = this.x - 50, cy = this.y - 25;
@@ -2067,8 +2131,8 @@
     takeDamage(dmg, g) {
       if (this.dead || this.state === 'enter' || this.state === 'trans') return;   // 入场/转场免伤
       this.hp -= dmg;
-      this.flash = 0.08;
-      if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#fff', '#9fd8ff'], 130, 3, 0.18);
+      this.hitFlash();
+      if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#ff3b3b', '#ff7b2e'], 130, 3, 0.18);
       if (this.hp <= 0) { this.hp = 0; this.advancePhase(g, true); }
     }
 
@@ -2500,13 +2564,14 @@
         ctx.fillRect(dx - d.sz / 2, dy - d.sz / 2, d.sz, 2);
       }
 
-      // —— 受击闪红 ——
-      if (this.flash > 0) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-atop';
-        ctx.fillStyle = `rgba(255,60,50,${Math.min(0.5, this.flash * 5)})`;
+      // —— 受击闪红（重色，4s 冷却一次）：径向渐变，中心满红、边缘淡出，避免在天空留下硬边 ——
+      const sphinxFlashA = bossFlashAlpha(this.flash);
+      if (sphinxFlashA > 0) {
+        const gr = ctx.createRadialGradient(0, 0, 20, 0, 0, 175);
+        gr.addColorStop(0, `rgba(255,30,16,${sphinxFlashA})`);
+        gr.addColorStop(1, 'rgba(255,30,16,0)');
+        ctx.fillStyle = gr;
         ctx.beginPath(); ctx.ellipse(0, 0, 180, 170, 0, 0, TAU); ctx.fill();
-        ctx.restore();
       }
       ctx.restore();
 
@@ -2891,10 +2956,10 @@
 
     takeDamage(dmg, g) {
       if (this.dead || this.state === 'enter' || this.state === 'trans') return;   // 入场/转场免伤
-      if (this.lockHpT > 0) { this.flash = 0.08; return; }                         // 锁血期免疫伤害
+      if (this.lockHpT > 0) return;                                              // 锁血期免疫伤害（护盾环为反馈）
       this.hp -= dmg;
-      this.flash = 0.08;
-      if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#fff', '#ffb0a0'], 130, 3, 0.18);
+      this.hitFlash();
+      if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#ff3b3b', '#ff7b2e'], 130, 3, 0.18);
       if (!this.enraged && this.hp > 0 && this.hp <= this.maxHp * 0.3) {
         this.enraged = true;
         SFX.bossEnrage(); g.shake(10);
@@ -3351,8 +3416,8 @@
       // 牛角扇形弹 ×2 组（双角尖，朝左扇形扩散）
       this.fireHornFan(g, this.x - 60 * 1.25 * s, this.y - 66 * 1.25 * s, 6, 1.0, 14);
       this.fireHornFan(g, this.x + 60 * 1.25 * s, this.y - 66 * 1.25 * s, 6, 1.0, 14);
-      // 眼部激光 ×2（双眼瞄向玩家区域）
-      const eyes = [{ x: this.x - 18 * s, y: this.y - 12 * s }, { x: this.x + 18 * s, y: this.y - 12 * s }];
+      // 眼部激光 ×2（双眼瞄向玩家区域；锚点对齐 niu3 重绘图红眼中心）
+      const eyes = [{ x: this.x - 22 * s, y: this.y - 28 * s }, { x: this.x + 22 * s, y: this.y - 28 * s }];
       eyes.forEach((e, i) => {
         const a = Math.atan2(p.y - e.y, p.x - e.x) + (i ? 0.12 : -0.12);
         g.beams.push(new Beam(e.x, e.y, a, 1500, 14, Math.round(18 * g.atkScale), 0.55, false));
@@ -3397,73 +3462,15 @@
       ctx.translate(this.x, this.y);
       ctx.scale(s, s);
 
-      // 魔气光晕（P2/P3）
-      if (inP2 || inP3) {
-        const gr = ctx.createRadialGradient(0, 0, 20, 0, 0, inP3 ? 110 : 85);
-        gr.addColorStop(0, inP3 ? 'rgba(255,60,40,0.4)' : 'rgba(224,60,50,0.25)');
-        gr.addColorStop(1, 'rgba(255,60,40,0)');
-        ctx.fillStyle = gr;
-        ctx.beginPath(); ctx.arc(0, 0, inP3 ? 110 : 85, 0, TAU); ctx.fill();
-      }
-
-      // 双角（先画，压在头后）
-      this.drawHorn(ctx, -1, inP2, inP3);
-      this.drawHorn(ctx, 1, inP2, inP3);
-
-      // 圆形牛头
-      ctx.fillStyle = '#1a0d0a';
-      ctx.beginPath(); ctx.arc(0, 0, 48, 0, TAU); ctx.fill();
-      ctx.fillStyle = inP3 ? '#8a2f22' : '#7a3524';
-      ctx.beginPath(); ctx.arc(0, 0, 44, 0, TAU); ctx.fill();
-      ctx.fillStyle = inP3 ? '#a04530' : '#8f4530';
-      ctx.beginPath(); ctx.arc(-4, -6, 34, 0, TAU); ctx.fill();
-      // 鼻吻部（整体缩小）
-      ctx.fillStyle = '#5a2418';
-      ctx.beginPath(); ctx.ellipse(0, 22, 18, 12, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#6e3020';
-      ctx.beginPath(); ctx.ellipse(-1, 20, 15, 9, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#1a0d0a';
-      ctx.beginPath(); ctx.ellipse(-5, 23, 2.5, 3.5, 0, 0, TAU); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(5, 23, 2.5, 3.5, 0, 0, TAU); ctx.fill();
-
-      // 双眼（扩大2倍，下调至眉下、鼻两侧靠上）+ 眼珠扩大
-      const eyeX = 26, eyeY = 5, browY = -16;
-      for (const side of [-1, 1]) {
-        const ex = side * eyeX, ey = eyeY;
-        if (inP3) {
-          ctx.fillStyle = 'rgba(255,60,40,0.35)';
-          ctx.beginPath(); ctx.arc(ex, ey, 18, 0, TAU); ctx.fill();
-          ctx.fillStyle = '#ff2a1a';
-          ctx.beginPath(); ctx.arc(ex, ey, 11, 0, TAU); ctx.fill();
-          ctx.fillStyle = '#ffd23b';
-          ctx.beginPath(); ctx.arc(ex + side * 2, ey + 1, 5.5, 0, TAU); ctx.fill();
-        } else {
-          ctx.fillStyle = '#fff';
-          ctx.beginPath(); ctx.arc(ex, ey, 13, 0, TAU); ctx.fill();
-          ctx.fillStyle = inP2 ? '#ff2a1a' : '#2a1410';
-          ctx.beginPath(); ctx.arc(ex + side * 3, ey + 2, inP2 ? 8.5 : 6.4, 0, TAU); ctx.fill();
-        }
-        // 愤怒眉（留在额上，眼在眉下方）：左眉左上右下／右眉右上左下
-        ctx.strokeStyle = '#1a0d0a'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(ex + side * 8, browY - 4); ctx.lineTo(ex - side * 9, browY + 8);
-        ctx.stroke();
-      }
-
-      // 嘴：P1 抿紧 / P2、P3 张嘴獠牙
-      if (inP2 || inP3) {
-        ctx.fillStyle = '#2a0d0a';
-        ctx.beginPath(); ctx.ellipse(0, 34, inP3 ? 15 : 12, inP3 ? 12 : 9, 0, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#fff5e8';
-        for (const side of [-1, 1]) {
-          ctx.beginPath();
-          ctx.moveTo(side * 7, 27); ctx.lineTo(side * 12, 27); ctx.lineTo(side * 9.5, 38);
-          ctx.closePath(); ctx.fill();
-        }
-      } else {
-        ctx.strokeStyle = '#1a0d0a'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(-10, 36); ctx.quadraticCurveTo(0, 31, 10, 36); ctx.stroke();
-      }
+      // —— 重绘美术：niu1/niu2/niu3 三阶段正面牛头（含双角与阶段光晕）。
+      //    参考图由 scale(2)×bodyScale 渲染后 autocrop 导出，故图像素→基准坐标
+      //    系数 k = 1/(2×bodyScale)；原点为牛头中心，角部高耸故图心在原点上方。
+      const niuSpr = inP3 ? Sprites.niu3 : inP2 ? Sprites.niu2 : Sprites.niu1;
+      const niuK = inP3 ? 1 / 2.56 : inP2 ? 1 / 2.24 : 0.5;
+      const nw = niuSpr.width * niuK, nh = niuSpr.height * niuK;
+      const niuOX = 0;
+      const niuOY = inP3 ? -22 : inP2 ? -28 : -34;
+      ctx.drawImage(niuSpr, -nw / 2 + niuOX, -nh / 2 + niuOY, nw, nh);
 
       // —— 锁血护盾（生命≤10%触发期）：脉动红环 + 金边 ——
       if (this.lockHpT > 0) {
@@ -3483,13 +3490,10 @@
         }
         ctx.restore();
       }
-      // 受击闪红
-      if (this.flash > 0) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-atop';
-        ctx.fillStyle = `rgba(255,60,50,${Math.min(0.5, this.flash * 5)})`;
-        ctx.beginPath(); ctx.arc(0, 0, 90, 0, TAU); ctx.fill();
-        ctx.restore();
+      // 受击闪红（重色，4s 冷却一次）：离屏红染只作用于牛魔图像素，不染背景天空
+      const niuFlashA = bossFlashAlpha(this.flash);
+      if (niuFlashA > 0) {
+        drawSpriteTinted(ctx, niuSpr, niuOX, niuOY, nw, nh, 0, '#ff1e10', niuFlashA);
       }
       ctx.restore();
     }

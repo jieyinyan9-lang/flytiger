@@ -770,6 +770,203 @@
     return cv;
   }
 
+  /** 祖国人美术资源：加载 assets/Boss/zuguoren.png（240×256，正面像素风）。
+   *  Sprites.homelanderL 直接指向本 canvas（正面图无需翻转，异步加载不可 flip 预拷）。 */
+  function buildZuguoren() {
+    const W = 240, H = 256;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] zuguoren.png 加载失败');
+    img.src = 'assets/Boss/zuguoren.png';
+    return cv;
+  }
+
+  /** 大王状态1美术资源：加载 assets/Boss/dawang_1.png（240×304，正面西装巨人，双手持斧）。
+   *  Sprites.bossManL 直接指向本 canvas（正面图无需翻转）。 */
+  function buildDaWang1() {
+    const W = 240, H = 304;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] dawang_1.png 加载失败');
+    img.src = 'assets/Boss/dawang_1.png';
+    return cv;
+  }
+
+  /** 大王状态2美术资源：加载 assets/Boss/dawang_2.png（192×176，正面破损巨头，炮管/加特林双眼）。
+   *  Sprites.bossHeadL 直接指向本 canvas（正面图无需翻转）。 */
+  function buildDaWang2() {
+    const W = 192, H = 176;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] dawang_2.png 加载失败');
+    img.src = 'assets/Boss/dawang_2.png';
+    return cv;
+  }
+
+  /** 咬剑鹰展翅帧：加载 assets/Boss/ying1.png（224×160，机械鹰翅膀上张，已朝左）。
+   *  Sprites.swordEagleAL 直接指向本 canvas（已朝左，不可 flip 预拷）。 */
+  function buildYing1() {
+    const W = 224, H = 160;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] ying1.png 加载失败');
+    img.src = 'assets/Boss/ying1.png';
+    return cv;
+  }
+
+  /** 咬剑鹰垂翅帧：加载 assets/Boss/ying2.png（224×160，机械鹰翅膀下垂，已朝左）。
+   *  Sprites.swordEagleBL 直接指向本 canvas（已朝左，不可 flip 预拷）。 */
+  function buildYing2() {
+    const W = 224, H = 160;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] ying2.png 加载失败');
+    img.src = 'assets/Boss/ying2.png';
+    return cv;
+  }
+
+  /** 牛魔（牛头）三阶段美术资源：加载 assets/Boss/niu1~3.png（正面牛头含双角，
+   *  尺寸 310×336 / 388×466 / 524×638，与导出参考图 autocrop 尺寸 1:1）。 */
+  function buildNiu(file, W, H) {
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] ' + file + ' 加载失败');
+    img.src = 'assets/Boss/' + file;
+    return cv;
+  }
+
+  /** 火鸡王美术资源：加载 assets/Boss/huoji.png（368×208，侧面火鸡、火焰尾羽，已朝左）。
+   *  Sprites.pheasantL 直接指向本 canvas（已朝左，不可 flip 预拷）。 */
+  function buildHuoji() {
+    const W = 368, H = 208;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] huoji.png 加载失败');
+    img.src = 'assets/Boss/huoji.png';
+    return cv;
+  }
+
+  /** 雷公美术资源：加载 assets/Boss/leigong.png（152×160，正面机械雷神，恰好为旧 19×20 精灵的 8 倍）。
+   *  Sprites.leigongL 直接指向本 canvas（正面图无需翻转）；雷公巨兽 Boss 与雷公小怪共用此图。 */
+  function buildLeigong() {
+    const W = 152, H = 160;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] leigong.png 加载失败');
+    img.src = 'assets/Boss/leigong.png';
+    return cv;
+  }
+
+  /** 武士美术资源：加载 assets/Boss/wushi.png（128×176，鬼面红甲，已朝左）。
+   *  Sprites.samuraiL 直接指向本 canvas（已朝左，不可 flip 预拷）。 */
+  function buildWushi() {
+    const W = 128, H = 176;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] wushi.png 加载失败');
+    img.src = 'assets/Boss/wushi.png';
+    return cv;
+  }
+
+  /** 狗王美术资源：加载 assets/Boss/goutou.png（272×192，机械狗头+喷气管，已朝左）。
+   *  Sprites.dogHeadL 直接指向本 canvas（已朝左，不可 flip 预拷）。 */
+  function buildGoutou() {
+    const W = 272, H = 192;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] goutou.png 加载失败');
+    img.src = 'assets/Boss/goutou.png';
+    return cv;
+  }
+
+  /** 怪客美术资源：加载 assets/Boss/guaike.png（224×288，流浪汉抱苹果篮，已朝左）。
+   *  Sprites.strangerL 直接指向本 canvas（已朝左，不可 flip 预拷）。 */
+  function buildGuaike() {
+    const W = 224, H = 288;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] guaike.png 加载失败');
+    img.src = 'assets/Boss/guaike.png';
+    return cv;
+  }
+
   /** 程序化绘制大型蝙蝠（暗黑紫翼展怪，对称双翅），返回 44×30 canvas
    * frame 0：双翼上扬 / frame 1：双翼下压 */
   function buildBigBat(frame) {
@@ -820,23 +1017,26 @@
     demonB: build(DEMON_B, DEMON_PAL),
     batA: build(BAT_A, BAT_PAL),
     batB: build(BAT_B, BAT_PAL),
-    leigong: build(LEIGONG, LEI_PAL),
+    leigong: buildLeigong(),
     pig: build(PIG, PIG_PAL),
     archer: build(ARCHER, ARCHER_PAL),
     skeleton: build(SKEL, SKEL_PAL),
     blackSkel: build(BLACK_SKEL, BLACK_SKEL_PAL),
     skullhead: build(SKULLHEAD, SKULLHEAD_PAL),
     cannoneer: build(CANNONEER, CAN_PAL),
-    samurai: build(SAMURAI, SAMURAI_PAL),
-    swordEagleA: buildEagle(0, SWORD_EAGLE_PAL),
-    swordEagleB: buildEagle(1, SWORD_EAGLE_PAL),
-    dogHead: buildDogHead(),
-    pheasant: buildPheasant(),
+    samurai: buildWushi(),
+    swordEagleA: buildYing1(),
+    swordEagleB: buildYing2(),
+    niu1: buildNiu('niu1.png', 310, 336),
+    niu2: buildNiu('niu2.png', 388, 466),
+    niu3: buildNiu('niu3.png', 524, 638),
+    dogHead: buildGoutou(),
+    pheasant: buildHuoji(),
     superboy: buildSuperboy(),
-    homelander: buildHomelander(),
-    bossMan: buildBossMan(),
-    bossHead: buildBossHead(),
-    stranger: buildStranger(),
+    homelander: buildZuguoren(),
+    bossMan: buildDaWang1(),
+    bossHead: buildDaWang2(),
+    stranger: buildGuaike(),
     frog: buildFrog(),
     crane: buildCrane(),
     bigbatA: buildBigBat(0),
@@ -850,22 +1050,22 @@
   Sprites.demonBL = flip(Sprites.demonB);
   Sprites.batAL = flip(Sprites.batA);
   Sprites.batBL = flip(Sprites.batB);
-  Sprites.leigongL = flip(Sprites.leigong);
+  Sprites.leigongL = Sprites.leigong;    // leigong.png 正面图，直接复用（异步加载，不可 flip 预拷）
   Sprites.pigL = flip(Sprites.pig);
   Sprites.archerL = flip(Sprites.archer);
   Sprites.skeletonL = flip(Sprites.skeleton);
   Sprites.blackSkelL = flip(Sprites.blackSkel);
   Sprites.cannoneerL = flip(Sprites.cannoneer);
-  Sprites.samuraiL = flip(Sprites.samurai);
-  Sprites.swordEagleAL = flip(Sprites.swordEagleA);
-  Sprites.swordEagleBL = flip(Sprites.swordEagleB);
-  Sprites.dogHeadL = flip(Sprites.dogHead);
-  Sprites.pheasantL = flip(Sprites.pheasant);
+  Sprites.samuraiL = Sprites.samurai;    // wushi.png 已朝左，直接复用（异步加载，不可 flip 预拷）
+  Sprites.swordEagleAL = Sprites.swordEagleA;  // ying1.png 已朝左，直接复用（异步加载，不可 flip 预拷）
+  Sprites.swordEagleBL = Sprites.swordEagleB;  // ying2.png 已朝左，直接复用
+  Sprites.dogHeadL = Sprites.dogHead;    // goutou.png 已朝左，直接复用（异步加载，不可 flip 预拷）
+  Sprites.pheasantL = Sprites.pheasant;  // huoji.png 已朝左，直接复用（异步加载，不可 flip 预拷）
   Sprites.superboyL = flip(Sprites.superboy);
-  Sprites.homelanderL = flip(Sprites.homelander);
-  Sprites.bossManL = flip(Sprites.bossMan);
-  Sprites.bossHeadL = flip(Sprites.bossHead);
-  Sprites.strangerL = flip(Sprites.stranger);
+  Sprites.homelanderL = Sprites.homelander;  // zuguoren.png 正面图，直接复用（异步加载，不可 flip 预拷）
+  Sprites.bossManL = Sprites.bossMan;        // dawang_1.png 正面图，直接复用
+  Sprites.bossHeadL = Sprites.bossHead;      // dawang_2.png 正面图，直接复用
+  Sprites.strangerL = Sprites.stranger;   // guaike.png 已朝左，直接复用（异步加载，不可 flip 预拷）
   Sprites.frogL = Sprites.frog;            // Wage.png 已朝左，直接复用（异步加载，不可 flip 预拷）
   Sprites.craneL = Sprites.crane;          // Hexian.png 已朝左，直接复用（异步加载，不可 flip 预拷）
 
