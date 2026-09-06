@@ -1041,6 +1041,77 @@
         ctx.restore();
         return;
       }
+      if (k === 'shard') {
+        // 狮身人面像石片：金色三角石质（深金边→金体→高光）+ 蓝色能量核心，缓慢自旋
+        const r = this.r;
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.spin);
+        ctx.fillStyle = '#6b4f24';
+        ctx.beginPath();
+        ctx.moveTo(r + 1.6, 0); ctx.lineTo(-r * 0.82, -r * 0.78); ctx.lineTo(-r * 0.82, r * 0.78);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#d9a94f';
+        ctx.beginPath();
+        ctx.moveTo(r, 0); ctx.lineTo(-r * 0.72, -r * 0.64); ctx.lineTo(-r * 0.72, r * 0.64);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#f0d496';
+        ctx.beginPath();
+        ctx.moveTo(r * 0.42, 0); ctx.lineTo(-r * 0.28, -r * 0.3); ctx.lineTo(-r * 0.28, r * 0.3);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#1f8fd6';
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.27, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#bfeeff';
+        ctx.beginPath(); ctx.arc(-r * 0.06, -r * 0.06, r * 0.11, 0, TAU); ctx.fill();
+        ctx.restore();
+        return;
+      }
+      if (k === 'eyeGem') {
+        // 神眼菱形：蓝色外光晕 + 金菱形 + 中央黑色眼睛图案（不随菱形旋转）
+        const r = this.r;
+        const f = 1 + Math.sin(this.t * 8) * 0.08;
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(Math.PI / 4 + this.spin * 0.35);
+        ctx.fillStyle = 'rgba(64,190,255,0.28)';
+        ctx.fillRect(-r * 1.55 * f, -r * 1.55 * f, r * 3.1 * f, r * 3.1 * f);
+        ctx.fillStyle = '#2b6ea8';
+        ctx.fillRect(-r * 1.16 * f, -r * 1.16 * f, r * 2.32 * f, r * 2.32 * f);
+        ctx.fillStyle = '#e8c165';
+        ctx.fillRect(-r * f, -r * f, r * 2 * f, r * 2 * f);
+        ctx.fillStyle = '#fff0c0';
+        ctx.fillRect(-r * 0.55 * f, -r * 0.55 * f, r * 0.5 * f, r * 0.5 * f);
+        ctx.restore();
+        ctx.fillStyle = '#0b0b14';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.42, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#54c8ff';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.2, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#dff6ff';
+        ctx.beginPath(); ctx.arc(this.x - r * 0.08, this.y - r * 0.08, r * 0.07, 0, TAU); ctx.fill();
+        return;
+      }
+      if (k === 'crescent') {
+        // 月牙能量刃：蓝色月牙（双层弧相减）+ 灰金石质纹理碎点 + 白刃口
+        const r = this.r;
+        const a = Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        ctx.fillStyle = '#0b3a66';
+        ctx.beginPath();
+        ctx.arc(0, 0, r + 1.5, -1.05, 1.05);
+        ctx.arc(r * 0.58, 0, r * 0.86, 1.05, -1.05, true);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#3fb6ff';
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.78, -0.95, 0.95);
+        ctx.arc(r * 0.46, 0, r * 0.6, 0.95, -0.95, true);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#caa45e';
+        for (let i = 0; i < 3; i++) {
+          const aa = -0.62 + i * 0.62, rr = r * 0.52;
+          ctx.fillRect(Math.cos(aa) * rr - 1.2, Math.sin(aa) * rr - 1.2, 2.6, 2.6);
+        }
+        ctx.strokeStyle = 'rgba(220,245,255,0.9)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.78, -0.95, 0.95); ctx.stroke();
+        ctx.restore();
+        return;
+      }
     }
 
     /** 元素弹道专用渲染：火焰=红色圆形，毒液=绿色菱形，寒冰=蓝色锥型 */
@@ -1416,7 +1487,7 @@
       // 接触敌人造成伤害（每敌 0.5s 一次；草龙按最近露出节判定）
       g.targets().forEach(e => {
         if (e.dead) return;
-        if (e.isBoss && e.state === 'enter') return;   // Boss 入场免伤
+        if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) return;   // Boss 入场/转场免伤
         for (let i = 0; i < this.blades; i++) {
           const bp = this.bladePos(i);
           let hx = null, hy = null;

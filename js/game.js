@@ -424,7 +424,7 @@
       });
       // Boss 受到 20% 最大生命伤害（入场免伤状态除外），大招无视无敌
       this.bosses.forEach(b => {
-        if (!b.dead && b.state !== 'enter') {
+        if (!b.dead && b.state !== 'enter' && b.state !== 'trans') {
           const wasInv = b.lockHp;
           b.lockHp = false;
           b.takeDamage(b.maxHp * CFG.ultimate.bossDmgRatio, this);
@@ -1012,7 +1012,7 @@
         if (!b.friendly || b.dead) continue;
         for (const e of this.targets()) {
           if (e.dead) continue;
-          if (e.isBoss && e.state === 'enter') continue;   // Boss 入场免伤
+          if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) continue;   // Boss 入场/转场免伤（子弹穿透不吞弹）
           if (b.hitSet && b.hitSet.has(e)) continue;
           // 草龙：子弹逐节命中（仅露出地面的节）
           let hitSeg = -1;
@@ -1133,7 +1133,7 @@
         let best = null, bestD = C.range, bestPt = null;
         for (const e of this.targets()) {
           if (e.dead || linked.has(e)) continue;
-          if (e.isBoss && e.state === 'enter') continue;
+          if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) continue;   // 入场/转场免伤不链接
           // 草龙：最近露出节即受击点；整龙全在地下则跳过
           const pt = e.segments ? e.nearestExposed(from.x, from.y) : { x: e.x, y: e.y };
           if (!pt) continue;
