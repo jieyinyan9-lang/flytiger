@@ -2029,6 +2029,7 @@
       this.marks.length = 0;
       this.pendingSlam = null;
       this.beamT = 0.9; this.ringT = 1.1; this.ringRot = rand(0, TAU);
+      this._sweepA0 = null; this._triA0 = null; this._tbA0 = null;   // 扫射瞄准角锁定（开火瞬间锁定玩家位置）
       if (this.phase === 'p1') {
         this.act = 'slam';
         this.clawSeq = 0; this.clawTimer = 1.0;
@@ -2101,6 +2102,11 @@
     }
 
     /* ---------------- 弹幕助手 ---------------- */
+    /** 瞄准角：发射点 (x,y) → 玩家当前位置 */
+    aimAt(g, x, y) {
+      const p = g.player;
+      return Math.atan2(p.y - y, p.x - x);
+    }
     eyePos(g) {
       // 与 drawFace 绘制位置对齐：双眼面部 (±17,-14)、额头第三眼 (0,-34)
       return { L: { x: this.x - 17, y: this.y - 14 }, R: { x: this.x + 17, y: this.y - 14 }, F: { x: this.x, y: this.y - 34 } };
@@ -2190,15 +2196,14 @@
           this.pendingSlam = null;
           this.slamFlash = 0.22;
           g.shake(9); SFX.shock();
+          // 扇形中线 = 爪落点 → 玩家当前位置（单爪120°、双爪各~92°，均覆盖玩家所在侧）
+          if (kind === 0 || kind === 1) {
+            this.fireFan(g, pts[0].x, pts[0].y, this.aimAt(g, pts[0].x, pts[0].y), 2.1, 8, 'shard', 210, 280, 9, 13);
+          } else {
+            this.fireFan(g, pts[0].x, pts[0].y, this.aimAt(g, pts[0].x, pts[0].y), 1.6, 7, 'shard', 220, 290, 9, 13);
+            this.fireFan(g, pts[1].x, pts[1].y, this.aimAt(g, pts[1].x, pts[1].y), 1.6, 7, 'shard', 220, 290, 9, 13);
+          }
           for (const pt of pts) {
-            if (kind === 0) {        // 右爪：120° 扇形，右→左
-              this.fireFan(g, pt.x, pt.y, Math.PI / 2, 2.1, 8, 'shard', 210, 280, 9, 13);
-            } else if (kind === 1) { // 左爪：120° 扇形，左→右
-              this.fireFan(g, pt.x, pt.y, Math.PI / 2, 2.1, 8, 'shard', 210, 280, 9, 13);
-            } else {                 // 双爪：两道扇形汇聚中央下方
-              this.fireFan(g, pts[0].x, pts[0].y, 0.96, 1.6, 7, 'shard', 220, 290, 9, 13);
-              this.fireFan(g, pts[1].x, pts[1].y, 2.18, 1.6, 7, 'shard', 220, 290, 9, 13);
-            }
             this.shockRing(g, pt.x, pt.y);
             burst(g, pt.x, pt.y, 14, ['#c9a45c', '#f0d496', '#7fd4ff'], 200, 5, 0.5);
           }
@@ -2235,9 +2240,12 @@
 
       if (act === 'sweepL' || act === 'sweepR') {
         const local = act === 'sweepL' ? T : T - 3;
+        if (local <= 0.7) { this._sweepA0 = null; }   // 蓄力期：待开火瞬间锁定玩家
         if (local > 0.7) {   // 蓄力后开火
+          if (this._sweepA0 == null) this._sweepA0 = this.aimAt(g, this.x, e.L.y);
           const u = clamp((local - 0.7) / 2.3, 0, 1);
-          const a = act === 'sweepL' ? 0.45 + u * 2.2 : 2.65 - u * 2.2;   // 右→左 / 左→右
+          // 扫射以玩家方向为中心 ±1.1rad：sweepL 右→左（扫过玩家并覆盖其左侧），sweepR 反向
+          const a = act === 'sweepL' ? this._sweepA0 - 1.1 + u * 2.2 : this._sweepA0 + 1.1 - u * 2.2;
           this.beamT -= dt;
           if (this.beamT <= 0) {
             this.beamT = 0.32;
@@ -2247,15 +2255,17 @@
         }
       } else if (act === 'triEye') {
         const local = T - 6;
+        if (local <= 0.7) { this._triA0 = null; }
         if (local > 0.7) {
+          if (this._triA0 == null) this._triA0 = this.aimAt(g, e.F.x, e.F.y);
           const u = clamp((local - 0.7) / 4.3, 0, 1);
-          const off = 0.42 * Math.cos(u * TAU);   // 左→中→右→中→左
+          const off = 0.42 * Math.cos(u * TAU);   // 左→中→右→中→左（中束扫过玩家，左束覆盖玩家左侧）
           this.beamT -= dt;
           if (this.beamT <= 0) {
             this.beamT = 0.34;
-            this.fireBeam(g, e.L.x, e.L.y, 2.55 + off, 16, 13);
-            this.fireBeam(g, e.F.x, e.F.y, Math.PI / 2 + off, 16, 13);
-            this.fireBeam(g, e.R.x, e.R.y, 0.58 + off, 16, 13);
+            this.fireBeam(g, e.L.x, e.L.y, this._triA0 + 0.99 + off, 16, 13);
+            this.fireBeam(g, e.F.x, e.F.y, this._triA0 + off, 16, 13);
+            this.fireBeam(g, e.R.x, e.R.y, this._triA0 - 0.99 + off, 16, 13);
           }
         }
       } else {
@@ -2288,13 +2298,12 @@
           // 残影粒子
           g.particles.push(new Particle(this.x + rand(-30, 30), this.y + rand(-20, 40),
             rand(-40, 40), rand(-20, 30), 0.35, 5, '#9fd8ff'));
-          // 尾尖月牙刃：中央冲向左侧时刃气左→右（vx>0）；右侧返回中央时刃气右→左（vx<0）
+          // 尾尖月牙刃：初射方向 = 尾尖 → 玩家当前位置（小扇形覆盖玩家）
           this.beamT -= dt;
           if (this.beamT <= 0 && this.movingDir !== 0) {
             this.beamT = 0.28;
             const tipX = this.x - this.movingDir * 78, tipY = this.y - 50;
-            const dirA = (this.movingDir < 0 && this.wpIdx !== 3) ? 0 : Math.PI;
-            this.fireFan(g, tipX, tipY, dirA, 0.75, 3, 'crescent', 280, 330, 12, 15);
+            this.fireFan(g, tipX, tipY, this.aimAt(g, tipX, tipY), 0.75, 3, 'crescent', 280, 330, 12, 15);
           }
         }
         if (T > 5.0) { this.act = 'clap'; this.actT = 0; }
@@ -2304,22 +2313,25 @@
         if (this.actT > 0.9 && !this._clapped) {
           this._clapped = true;
           g.shake(8); SFX.shock();
-          this.fireFan(g, this.x - 95, this.y + 30, 1.05, 1.4, 9, 'shard', 240, 300, 11, 14);
-          this.fireFan(g, this.x + 95, this.y + 30, 2.10, 1.4, 9, 'shard', 240, 300, 11, 14);
+          // 双爪合击：两扇均以爪位 → 玩家为中线，向玩家所在处拍合
+          this.fireFan(g, this.x - 95, this.y + 30, this.aimAt(g, this.x - 95, this.y + 30), 1.4, 9, 'shard', 240, 300, 11, 14);
+          this.fireFan(g, this.x + 95, this.y + 30, this.aimAt(g, this.x + 95, this.y + 30), 1.4, 9, 'shard', 240, 300, 11, 14);
         }
         if (T > 7.4) { this.act = 'triBeam'; this.actT = 0; this._clapped = false; }
       } else if (this.act === 'triBeam') {
         this.x += (this.anchor.x - this.x) * Math.min(1, dt * 4);
         this.y += (this.anchor.y - this.y) * Math.min(1, dt * 4);
+        if (this.actT <= 0.8) { this._tbA0 = null; }
         if (this.actT > 0.8) {
+          if (this._tbA0 == null) this._tbA0 = this.aimAt(g, e.F.x, e.F.y);
           const u = clamp((this.actT - 0.8) / 4.4, 0, 1);
-          const off = 0.42 * Math.cos(u * TAU);
+          const off = 0.42 * Math.cos(u * TAU);   // 中束扫过玩家，左右束覆盖两侧（左束达玩家左侧外）
           this.beamT -= dt;
           if (this.beamT <= 0) {
             this.beamT = 0.34;
-            this.fireBeam(g, e.L.x, e.L.y, 2.55 + off, 16, 14);
-            this.fireBeam(g, e.F.x, e.F.y, Math.PI / 2 + off, 16, 14);
-            this.fireBeam(g, e.R.x, e.R.y, 0.58 + off, 16, 14);
+            this.fireBeam(g, e.L.x, e.L.y, this._tbA0 + 0.99 + off, 16, 14);
+            this.fireBeam(g, e.F.x, e.F.y, this._tbA0 + off, 16, 14);
+            this.fireBeam(g, e.R.x, e.R.y, this._tbA0 - 0.99 + off, 16, 14);
           }
         }
         if (T > 13.0) { this.act = 'spin'; this.actT = 0; }
@@ -2352,14 +2364,17 @@
         if (u > 1.1 && !this._f1) {
           this._f1 = true;
           g.shake(9); SFX.shock();
-          this.fireFan(g, this.x - 100, this.y + 20, 1.05, 1.3, 11, 'shard', 250, 310, 11, 14);
-          this.fireFan(g, this.x + 100, this.y + 20, 2.10, 1.3, 11, 'shard', 250, 310, 11, 14);
+          // 双爪弹幕：两扇中线均指向玩家
+          this.fireFan(g, this.x - 100, this.y + 20, this.aimAt(g, this.x - 100, this.y + 20), 1.3, 11, 'shard', 250, 310, 11, 14);
+          this.fireFan(g, this.x + 100, this.y + 20, this.aimAt(g, this.x + 100, this.y + 20), 1.3, 11, 'shard', 250, 310, 11, 14);
         }
         if (u > 1.7 && !this._f2) {
           this._f2 = true;
-          this.fireBeam(g, e.L.x, e.L.y, 2.7, 18, 15);
-          this.fireBeam(g, e.F.x, e.F.y, Math.PI / 2, 18, 15);
-          this.fireBeam(g, e.R.x, e.R.y, 0.45, 18, 15);
+          // 三眼激光：中束直指玩家，左右束各偏 0.99rad 覆盖两侧（含玩家左侧）
+          const a0 = this.aimAt(g, e.F.x, e.F.y);
+          this.fireBeam(g, e.L.x, e.L.y, a0 + 0.99, 18, 15);
+          this.fireBeam(g, e.F.x, e.F.y, a0, 18, 15);
+          this.fireBeam(g, e.R.x, e.R.y, a0 - 0.99, 18, 15);
           g.shake(8);
         }
         if (u > 2.3 && !this._f3) {
