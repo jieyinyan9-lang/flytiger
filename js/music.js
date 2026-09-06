@@ -10,6 +10,7 @@
  *   imperial 帝王军乐（大王：苏军进行曲风格）
  *   crane    悲壮像素摇滚（鹤仙：170BPM 小调，失真吉他+哭腔主音）
  *   sphinx   埃及沙漠神秘风（狮身人面像：124BPM 弗里吉亚属调式，手鼓+寺庙锣）
+ *   niumo    魔牛重踏战舞（牛魔：132BPM E小调，铜管号角+魔牛战角+太鼓+锣）
  * ============================================================ */
 (function () {
   'use strict';
@@ -263,6 +264,44 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
     o.connect(g); g.connect(dest);
     o.start(t); o.stop(t + 0.2);
+  }
+
+  /** 魔牛战角：双失谐锯齿低频号角 + 方波低八度，音高 G2→Bb2 缓慢推升、
+   *  深颤音渐深（牛吼抖动），配带通气声扫频；牛魔王每循环一声的压迫低鸣 */
+  function bellow(t, dest) {
+    const dur = 1.55;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.Q.value = 2.5;
+    f.frequency.setValueAtTime(420, t);
+    f.frequency.exponentialRampToValueAtTime(1500, t + 0.45);
+    f.frequency.exponentialRampToValueAtTime(620, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.15, t + 0.16);
+    g.gain.setValueAtTime(0.13, t + dur * 0.62);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const f0 = mf(43), f1 = mf(46);   // G2 → Bb2（号角推升，Bb 带出三全音阴影）
+    const car = ctx.createOscillator(); car.type = 'sawtooth';
+    const car2 = ctx.createOscillator(); car2.type = 'sawtooth'; car2.detune.value = -14;
+    const sub = ctx.createOscillator(); sub.type = 'square';
+    const subg = ctx.createGain(); subg.gain.value = 0.45;
+    [car, car2].forEach(o => {
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.linearRampToValueAtTime(f1, t + 0.3);
+    });
+    sub.frequency.setValueAtTime(f0 / 2, t);
+    sub.frequency.linearRampToValueAtTime(f1 / 2, t + 0.3);
+    // 深颤音渐深：牛吼般的抖动
+    const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 4.8;
+    const lg = ctx.createGain();
+    lg.gain.setValueAtTime(1.2, t);
+    lg.gain.exponentialRampToValueAtTime(7.5, t + dur * 0.85);
+    lfo.connect(lg); lg.connect(car.frequency); lg.connect(car2.frequency);
+    // 气声：带通噪声上扫
+    noiseHit(t, dur * 0.85, 0.05, 'bandpass', 280, 2400, dest);
+    car.connect(f); car2.connect(f); sub.connect(subg); subg.connect(f);
+    f.connect(g); g.connect(dest);
+    [car, car2, sub, lfo].forEach(o => { o.start(t); o.stop(t + dur + 0.1); });
   }
 
   /* ---------------- 摇滚乐器（鹤仙：悲壮 16-bit 像素摇滚） ---------------- */
@@ -737,6 +776,71 @@
           // 末小节：军鼓滚奏 → 寺庙锣收束
           R(['K', '.', 't', '.', 'K', '.', 't', '.', 'S', '.', 'r', '.', 'r', '.', 'g', '.'])
         ]
+      }
+    },
+
+    /* 10. 牛魔：E 小调 132BPM 重踏战舞，i-bVI-bVII-i（Em-C-D-Em）暗黑进行；
+     *    双锯齿铜管奏魔王号角，锯齿贝斯如牛蹄重踏，方波琶音如红色魔气翻涌；
+     *    每循环开头一声魔牛战角（bellow：低频号角+深颤音+气声），
+     *    太鼓重拍驱动，末小节军鼓滚奏蓄力上扫收于锣声，三全音 Bb 音凸显魔性 */
+    niumo: {
+      bpm: 132,
+      lead: {
+        wave: 'brass', vol: 0.095, vel: [0.9, 1.0, 1.12, 1.3],
+        bars: [
+          // Em：五声音阶号角呼唤 E-G-B-D-B-G-E
+          R([64, 0, 64, 0, 67, 0, 71, 0, 74, 0, 71, 0, 67, 0, 64, 0]),
+          // C（bVI）：C-E-G-Bb，Bb 降七音压顶
+          R([60, 0, 60, 0, 64, 0, 67, 0, 70, 0, 67, 0, 64, 0, 60, 0]),
+          // D（bVII）：D-F#-A-C 属七张力
+          R([62, 0, 62, 0, 66, 0, 69, 0, 72, 0, 69, 0, 66, 0, 62, 0]),
+          // Em：三全音 Bb 刺击 → A-G-F# 坠落，让出声场给滚奏与锣
+          R([64, 0, 0, 70, 0, 0, 69, 0, 67, 0, 66, 0, 64, 0, 0, 0])
+        ]
+      },
+      bass: {
+        wave: 'sawtooth', vol: 0.14,
+        bars: [
+          // E2 牛蹄重踏，E3 音头推进
+          R([40, 0, 40, 0, 40, 0, 40, 40, 40, 0, 40, 0, 40, 40, 52, 0]),
+          // C2 根音低伏，C3 抬起
+          R([36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 36, 48, 0, 36, 0]),
+          // D2 驱动，D3 上行
+          R([38, 0, 38, 0, 38, 0, 38, 38, 38, 0, 38, 0, 50, 0, 38, 0]),
+          // E2 → Bb2 三全音践踏 → E 收
+          R([40, 0, 40, 0, 40, 0, 40, 0, 40, 0, 46, 0, 40, 40, 40, 0])
+        ]
+      },
+      arp: {
+        wave: 'square', vol: 0.05,
+        bars: [
+          // Em：E5-G5-B5 魔气点点，尾上 C6 掠音
+          R([76, 0, 79, 0, 83, 0, 79, 0, 76, 0, 79, 0, 83, 84, 83, 0]),
+          // C：C5-E5-G5，Bb5 魔音高悬
+          R([72, 0, 76, 0, 79, 0, 76, 0, 72, 0, 76, 0, 82, 0, 79, 0]),
+          // D：D5-F#5-A5，C6→B5→A5 级降
+          R([74, 0, 78, 0, 81, 0, 78, 0, 74, 0, 78, 0, 84, 83, 81, 0]),
+          // Em：Bb5 三全音与 E5 交替盘旋，级级下坠
+          R([76, 0, 82, 0, 81, 0, 79, 0, 76, 0, 74, 0, 71, 0, 0, 0])
+        ]
+      },
+      drum: {
+        vol: 1.0,
+        bars: [
+          // 太鼓四拍重踏，如魔牛步步逼近
+          R(['T', '.', '.', '.', 'T', '.', '.', '.', 'T', '.', '.', '.', 'T', '.', 'T', '.']),
+          // 加入踩镲与小鼓驱动，尾部小鼓连咬
+          R(['T', '.', 'h', '.', 'T', '.', 'h', 't', 'T', '.', 'h', '.', 'T', '.', 'h', 'T']),
+          // 底鼓×太鼓交替重拍
+          R(['K', '.', 'h', '.', 'T', '.', 'h', '.', 'K', '.', 'h', '.', 'T', '.', 'h', '.']),
+          // 加密太鼓 → 军鼓滚奏 → 蓄力锣声收束
+          R(['T', '.', 'T', '.', 'T', '.', 'r', '.', 'r', '.', 'r', '.', 'r', 'r', 'g', '.'])
+        ]
+      },
+      /** 每循环开头一声魔牛战角；末小节蓄力上扫导入锣声爆发 */
+      onBar(bar, t, spb, dest) {
+        if (bar === 0) bellow(t + spb, dest);
+        if (bar === 3) riser(t + spb, spb * 12, dest);
       }
     }
   };

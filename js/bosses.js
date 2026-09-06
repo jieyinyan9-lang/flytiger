@@ -3463,6 +3463,6 @@
     // 牛魔：特殊期仅草原（map），每局至多一次；第2轮60%/第3轮70%/第4轮80%独立强制出场
     // 12 只通用 Boss 全部轮过一遍后转入普通池（任意地图、等权、无强制概率，game.js niuMoGeneric 控制）
     { cls: NiuMo, weight: 3, map: 'grassland', minOrd: 2, maxOrd: 4,
-      forceChance: { 2: 0.6, 3: 0.7, 4: 0.8 }, music: 'boss' }
+      forceChance: { 2: 0.6, 3: 0.7, 4: 0.8 }, music: 'niumo' }
   ];
 })();
