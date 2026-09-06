@@ -2470,8 +2470,18 @@
       // —— 胸口太阳圆环（P2 起） ——
       if (inP2 || inP3) this.drawSunRing(ctx, col, inP3, cyc);
 
-      // —— 循环破损：裂纹 ——
-      if (cyc >= 2) this.drawCracks(ctx, cyc, col);
+      // —— 循环破损：裂纹（P3 动态发光）——
+      if (cyc >= 2) this.drawCracks(ctx, cyc, col, inP3);
+
+      // P3 蓝色能量体表辉光（裂纹渗光叠加）
+      if (inP3) {
+        const ep = 0.12 + Math.sin(this.t * 4) * 0.06;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = `rgba(84,200,255,${ep})`;
+        ctx.beginPath(); ctx.ellipse(0, -46, 110, 56, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
 
       // —— 环绕浮石 ——
       for (const d of this.debris) {
@@ -2673,14 +2683,43 @@
       ctx.strokeStyle = '#8a6a38'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, 12); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(-8, 20); ctx.quadraticCurveTo(0, 25, 8, 20); ctx.stroke();
-      // 循环3：人面破碎缺块
+      // 循环3：人面破碎动画（多块崩裂 + 震动 + 蓝色能量渗出）
       if (cyc >= 3) {
+        const sh = inP3 ? Math.sin(this.t * 15) * 1.4 : 0;   // P3 人面微震
+        const fp = 0.5 + Math.sin(this.t * 7) * 0.3;
+        // 人面扩展裂纹
+        ctx.strokeStyle = col.blue; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -40); ctx.lineTo(-8, -20); ctx.lineTo(-4, 4); ctx.lineTo(-12, 18);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(6, -28); ctx.lineTo(12, -8); ctx.lineTo(4, 10);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(159,230,255,${0.4 * fp})`; ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(0, -40); ctx.lineTo(-8, -20); ctx.lineTo(-4, 4);
+        ctx.stroke();
+        // 缺块1：左脸大面积脱落
         ctx.fillStyle = 'rgba(11,58,102,0.95)';
         ctx.beginPath();
-        ctx.moveTo(-30, -2); ctx.lineTo(-14, 6); ctx.lineTo(-22, 22); ctx.lineTo(-30, 16);
+        ctx.moveTo(-30 + sh, -2); ctx.lineTo(-14 + sh, 6); ctx.lineTo(-22 + sh, 22); ctx.lineTo(-30 + sh, 16);
         ctx.closePath(); ctx.fill();
+        ctx.fillStyle = `rgba(84,200,255,${0.3 * fp})`;
+        ctx.beginPath(); ctx.arc(-22 + sh, 12, 6, 0, TAU); ctx.fill();
         ctx.fillStyle = col.blue;
-        ctx.beginPath(); ctx.arc(-22, 12, 3, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(-22 + sh, 12, 3, 0, TAU); ctx.fill();
+        // 缺块2：右额头崩裂
+        ctx.fillStyle = 'rgba(11,58,102,0.9)';
+        ctx.beginPath();
+        ctx.moveTo(20 - sh, -38); ctx.lineTo(28 - sh, -28); ctx.lineTo(22 - sh, -14); ctx.lineTo(12 - sh, -24);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = `rgba(84,200,255,${0.25 * fp})`;
+        ctx.beginPath(); ctx.arc(20 - sh, -28, 5, 0, TAU); ctx.fill();
+        // 缺块3：下巴碎裂
+        ctx.fillStyle = 'rgba(11,58,102,0.85)';
+        ctx.beginPath();
+        ctx.moveTo(8 + sh, 20); ctx.lineTo(18 + sh, 24); ctx.lineTo(10 + sh, 28);
+        ctx.closePath(); ctx.fill();
       }
     }
 
@@ -2715,10 +2754,11 @@
       ctx.restore();
     }
 
-    drawCracks(ctx, cyc, col) {
+    drawCracks(ctx, cyc, col, inP3) {
+      const pulse = inP3 ? (0.55 + Math.sin(this.t * 5) * 0.35) : cyc >= 3 ? 0.7 : 1;
+      // 人面裂纹
       ctx.strokeStyle = cyc >= 3 ? col.blue : col.stoneDD;
       ctx.lineWidth = cyc >= 3 ? 2.5 : 2;
-      // 人面裂纹
       ctx.beginPath();
       ctx.moveTo(-12, -30); ctx.lineTo(-6, -16); ctx.lineTo(-14, -2); ctx.lineTo(-6, 12);
       ctx.stroke();
@@ -2726,17 +2766,41 @@
       ctx.moveTo(14, -24); ctx.lineTo(8, -10); ctx.lineTo(16, 4);
       ctx.stroke();
       if (cyc >= 3) {
-        // 躯干裂缝泄蓝光
+        // 躯干主裂缝：蓝色能量脉冲渗出
+        ctx.strokeStyle = `rgba(84,200,255,${0.7 * pulse})`; ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.moveTo(-60, -60); ctx.lineTo(-40, -46); ctx.lineTo(-52, -30); ctx.lineTo(-30, -16);
         ctx.stroke();
         ctx.beginPath();
         ctx.moveTo(58, -56); ctx.lineTo(40, -40); ctx.lineTo(52, -24);
         ctx.stroke();
-        ctx.strokeStyle = col.blueL; ctx.lineWidth = 1.2;
+        // 内层亮线
+        ctx.strokeStyle = `rgba(159,230,255,${0.5 * pulse})`; ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(-60, -60); ctx.lineTo(-40, -46); ctx.lineTo(-52, -30);
         ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(58, -56); ctx.lineTo(40, -40); ctx.lineTo(52, -24);
+        ctx.stroke();
+        // P3 额外裂纹网络
+        if (inP3) {
+          ctx.strokeStyle = `rgba(84,200,255,${0.45 * pulse})`; ctx.lineWidth = 1.8;
+          ctx.beginPath(); ctx.moveTo(-90, -40); ctx.lineTo(-72, -28); ctx.lineTo(-80, -10); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(88, -36); ctx.lineTo(70, -22); ctx.lineTo(78, -4); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(-20, -70); ctx.lineTo(-8, -58); ctx.lineTo(-14, -42); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(22, -66); ctx.lineTo(10, -54); ctx.lineTo(18, -38); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(-70, -10); ctx.lineTo(-58, 0); ctx.lineTo(-64, 14); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(68, -6); ctx.lineTo(56, 6); ctx.lineTo(62, 20); ctx.stroke();
+          // 裂纹能量火花（沿裂缝随机闪烁）
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * TAU + this.t * 0.3;
+            const r = 55 + Math.sin(this.t * 4 + i * 1.7) * 30;
+            const sx = Math.cos(a) * r, sy = Math.sin(a) * r * 0.6 - 30;
+            const sa = 0.3 + Math.sin(this.t * 9 + i * 1.3) * 0.25;
+            ctx.fillStyle = `rgba(159,230,255,${Math.max(0, sa)})`;
+            ctx.beginPath(); ctx.arc(sx, sy, 1.8, 0, TAU); ctx.fill();
+          }
+        }
       }
     }
   }
