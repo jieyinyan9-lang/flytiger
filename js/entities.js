@@ -2730,6 +2730,8 @@
       this.baseY = CFG.GROUND_Y;
       this.dead = false;
       this.warned = false;
+      this.flashT = 0;       // 剩余闪白时长（秒）
+      this.flashCd = 0;      // 闪白冷却剩余（秒，含闪白持续期）
     }
     get left() { return this.x - this.w / 2; }
     get top() { return this.baseY - this.h; }
@@ -2755,10 +2757,18 @@
       return true;
     }
     update(dt, g) {
-      this.x -= 62 * dt;                  // 与地面卷轴同步
+      this.x -= 62 * dt * (g.map.scrollMul || 1);   // 与地面卷轴同步
       if (this.x < -this.w / 2 - 60) this.dead = true;
-      // 与飞虎碰撞：暴毙（走生命条数系统）
+      // 闪白计时与触发：玩家横向接近时闪白 2s，之后 3s 冷却
+      this.flashT = Math.max(0, this.flashT - dt);
+      this.flashCd = Math.max(0, this.flashCd - dt);
       const p = g.player;
+      if (this.flashCd <= 0 && p.hp > 0 &&
+          p.x > this.left - 130 && p.x < this.left + this.w + 70) {
+        this.flashT = 2;
+        this.flashCd = 2 + 3;     // 闪白 2s + 冷却 3s
+      }
+      // 与飞虎碰撞：暴毙（走生命条数系统）
       if (this.contains(p.x, p.y, p.radius * 0.55) && p.invT <= 0) {
         SFX.shock();
         burst(g, p.x, p.y, 40, this.debris.concat(['#f7941d']), 320, 7, 0.9, 260);
@@ -2788,17 +2798,57 @@
       }
     }
     render(ctx) {
-      switch (this.def.shape) {
-        case 'cactus': drawCactus(ctx, this); break;
-        case 'ice': drawIce(ctx, this); break;
-        case 'vrock': drawVrock(ctx, this); break;
-        case 'tree': drawTree(ctx, this); break;
-        case 'pole': drawPole(ctx, this); break;
-        case 'booth': drawBooth(ctx, this); break;
-        case 'building': drawBuilding(ctx, this); break;
-        case 'reef': drawReef(ctx, this); break;
-        case 'coral': drawCoral(ctx, this); break;
-        default: this.renderRock(ctx);
+      const draw = (c) => {
+        switch (this.def.shape) {
+          case 'cactus': drawCactus(c, this); break;
+          case 'ice': drawIce(c, this); break;
+          case 'vrock': drawVrock(c, this); break;
+          case 'tree': drawTree(c, this); break;
+          case 'pole': drawPole(c, this); break;
+          case 'booth': drawBooth(c, this); break;
+          case 'building': drawBuilding(c, this); break;
+          case 'reef': drawReef(c, this); break;
+          case 'coral': drawCoral(c, this); break;
+          default: this.renderRock(c);
+        }
+      };
+      if (this.flashT > 0) {
+        // 闪白：先将障碍绘制到离屏画布，再生成白色剪影叠加（仅染色障碍本体像素）
+        const pad = 36;
+        const ow = Math.ceil(this.w + pad * 2);
+        const oh = Math.ceil(this.h + pad * 2);
+        const off = Rock._off || (Rock._off = document.createElement('canvas'));
+        if (off.width !== ow || off.height !== oh) { off.width = ow; off.height = oh; }
+        const octx = off.getContext('2d');
+        octx.setTransform(1, 0, 0, 1, 0, 0);
+        octx.globalAlpha = 1;
+        octx.globalCompositeOperation = 'source-over';
+        octx.clearRect(0, 0, ow, oh);
+        octx.translate(-this.left + pad, -(this.baseY - this.h) + pad);
+        draw(octx);
+        // 白色剪影画布
+        const off2 = Rock._off2 || (Rock._off2 = document.createElement('canvas'));
+        if (off2.width !== ow || off2.height !== oh) { off2.width = ow; off2.height = oh; }
+        const o2 = off2.getContext('2d');
+        o2.setTransform(1, 0, 0, 1, 0, 0);
+        o2.globalAlpha = 1;
+        o2.globalCompositeOperation = 'source-over';
+        o2.clearRect(0, 0, ow, oh);
+        o2.fillStyle = '#ffffff';
+        o2.fillRect(0, 0, ow, oh);
+        o2.globalCompositeOperation = 'destination-in';
+        o2.drawImage(off, 0, 0);
+        o2.globalCompositeOperation = 'source-over';
+        // 绘制障碍本体
+        ctx.drawImage(off, this.left - pad, this.baseY - this.h - pad);
+        // 叠加白色闪白（最后 0.5s 渐隐）
+        const a = 0.6 * Math.min(1, this.flashT / 0.5);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.drawImage(off2, this.left - pad, this.baseY - this.h - pad);
+        ctx.restore();
+      } else {
+        draw(ctx);
       }
     }
     /** 草原山石（原像素岩丘 / 梯形石） */

@@ -377,7 +377,7 @@
       { id: 'snow',      name: '雪地',       icon: '❄️', obs: ['iceT', 'iceM', 'iceL'] },
       { id: 'volcano',   name: '火焰山',     icon: '🌋', obs: ['vrockT', 'vrockM', 'vrockL'], crater: true },
       { id: 'wasteland', name: '紫色荒地',   icon: '🌆', obs: ['treeT', 'treeM', 'treeL'] },
-      { id: 'cyber',     name: '赛博朋克都市', icon: '🏙️', obs: ['poleT', 'boothL', 'buildM'] },
+      { id: 'cyber',     name: '赛博朋克都市', icon: '🏙️', obs: ['poleT', 'boothL', 'buildM'], scrollMul: 2 },
       { id: 'ocean',     name: '大海',       icon: '🌊', obs: ['reefT', 'reefM', 'coralL'], sea: true }
     ],
 

@@ -867,7 +867,7 @@
       // 喷发前 0.9s 蓄力（震动 + 火星），随后抛射巨大火焰弹
       if (this.crater) {
         const c = this.crater;
-        c.x -= 62 * dt;                        // 与地面卷轴同步
+        c.x -= 62 * dt * (this.map.scrollMul || 1);           // 与地面卷轴同步
         if (c.x < -120) {                      // 完全移出屏幕：从右侧重新出现
           c.x = CFG.W + rand(160, 420);
           c.t = CFG.map.craterInterval;
@@ -951,7 +951,7 @@
 
     update(dt) {
       this.time += dt;
-      this.scrollX += dt * 110;
+      this.scrollX += dt * 110 * (this.map.scrollMul || 1);
       this.shakeMag = Math.max(0, this.shakeMag - dt * 30);
       if (this.flashT > 0) this.flashT = Math.max(0, this.flashT - dt);
       // 怪物潮倒计时（Boss 战/预警期间暂停，不浪费潮次）
