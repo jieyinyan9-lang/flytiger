@@ -207,6 +207,7 @@
       this.lightnings = [];
       this.beams = [];         // 长线光束（狗王解体攻击）
       this.arcs = [];          // 闪电链电弧视觉
+      this.fxRings = [];       // 冲击波环（障碍碎裂爆炸等）{ x,y,r,vr,t,life,col }
       this.rocks = [];
       this.toasts = [];
       this.ctrlMode = this.ctrlMode || 'keyboard';   // 操作模式：'keyboard' | 'mouse'（菜单选择）
@@ -997,6 +998,7 @@
       this.beams.forEach(b => b.update(dt, this));
       this.rocks.forEach(r => r.update(dt, this));
       this.arcs.forEach(a => a.t += dt);
+      this.fxRings.forEach(ring => { ring.t += dt; ring.r += ring.vr * dt; });
 
       this.collisions();
 
@@ -1010,6 +1012,7 @@
       this.beams = this.beams.filter(b => !b.dead);
       this.rocks = this.rocks.filter(r => !r.dead);
       this.arcs = this.arcs.filter(a => a.t < a.life);
+      this.fxRings = this.fxRings.filter(ring => ring.t < ring.life);
       if (this.bosses.length === 0) this.el.bossHud.classList.add('hidden');
 
       // 能量满足门槛即触发选择（可连续触发，无冷却锁）
@@ -1733,6 +1736,21 @@
           ctx.fillText('未找到 assets/cat.png，请放入白猫图片', CFG.W - 260, CFG.H - 120);
           ctx.restore();
         }
+      }
+
+      // 冲击波环（障碍碎裂爆炸等）
+      if (this.fxRings.length) {
+        ctx.save();
+        for (const ring of this.fxRings) {
+          const k = ring.t / ring.life;
+          ctx.globalAlpha = (1 - k) * 0.75;
+          ctx.strokeStyle = ring.col; ctx.lineWidth = 16 * (1 - k) + 4;
+          ctx.beginPath(); ctx.arc(ring.x, ring.y, ring.r, 0, TAU); ctx.stroke();
+          ctx.globalAlpha = (1 - k) * 0.55;
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 6 * (1 - k) + 2;
+          ctx.beginPath(); ctx.arc(ring.x, ring.y, ring.r * 0.8, 0, TAU); ctx.stroke();
+        }
+        ctx.restore();
       }
 
       // 大招光波（金光扩散环）

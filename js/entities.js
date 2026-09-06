@@ -2677,7 +2677,7 @@
     }
   }
 
-  /* ---------------- 地面障碍物（触碰暴毙；各地图外形不同，阻碍特性与草地一致） ---------------- */
+  /* ---------------- 地面障碍物（飞虎撞击掉 30% 生命并撞碎；各地图外形不同，阻碍特性与草地一致） ---------------- */
   const ROCK_DEBRIS = ['#7d8794', '#a7b3c2', '#5a5f66', '#fff', '#ff7b2e'];
   const OBS = {
     // 草原山石（原样保留）：grass0 大 / grass1 中 / grass2 小 / grass3 长梯形 / grass4 短梯形
@@ -2737,13 +2737,35 @@
     get left() { return this.x - this.w / 2; }
     get top() { return this.baseY - this.h; }
     get debris() { return this.def.debris || ROCK_DEBRIS; }
-    /** 被野鸡撞击 / 炮弹炸毁：障碍爆炸 */
-    destroy(g) {
+    /** 被飞虎撞碎 / 野鸡撞击 / 炮弹炸毁：明显碎裂 + 爆炸（大块碎石炸飞、火星、冲击环、屏幕闪光） */
+    destroy(g, big) {
       if (this.dead) return;
       this.dead = true;
-      burst(g, this.x, this.baseY - this.h * 0.4, 30, this.debris, 300, 7, 0.8, 260);
-      SFX.explode(false);
-      g.shake(7);
+      const cx = this.x, cy = this.baseY - this.h * 0.4;
+      const cols = this.debris;
+      // 大块碎石：像素块向上炸飞后重力坠落（碎裂主体）
+      const chunkN = big ? 22 : 14;
+      for (let i = 0; i < chunkN; i++) {
+        const a = rand(-Math.PI * 0.95, -Math.PI * 0.05);        // 上半圆
+        const sp = rand(140, big ? 460 : 340);
+        g.particles.push(new Particle(
+          cx + rand(-this.w * 0.3, this.w * 0.3), cy + rand(-this.h * 0.3, this.h * 0.2),
+          Math.cos(a) * sp, Math.sin(a) * sp - rand(60, 160),
+          rand(0.7, big ? 1.4 : 1.1), rand(9, big ? 22 : 16),
+          cols[randi(0, Math.min(cols.length - 1, 3))], 780));
+      }
+      // 细碎渣
+      burst(g, cx, cy, big ? 30 : 22, cols, 320, 7, 0.8, 520);
+      // 爆炸火星 + 白热核心
+      burst(g, cx, cy, big ? 30 : 20, ['#ff7b2e', '#ffd23b', '#fff5d0', '#fff'], big ? 440 : 340, 6, 0.55, 240);
+      for (let i = 0; i < (big ? 6 : 3); i++) {
+        g.particles.push(new Particle(cx, cy, rand(-60, 60), rand(-60, 60), 0.22, rand(14, 24), '#fff5d0', 0));
+      }
+      // 冲击波环
+      if (g.fxRings) g.fxRings.push({ x: cx, y: cy, r: 14, vr: big ? 1050 : 820, t: 0, life: big ? 0.45 : 0.38, col: '#ffd9b0' });
+      SFX.explode(!!big);
+      g.shake(big ? 10 : 7);
+      if (big) { g.flashT = Math.max(g.flashT, 0.22); g.flashColor = '#ffd9b0'; }
     }
     /** 点是否在障碍截面内（梯形按上窄下宽收边） */
     contains(px, py, pad) {
@@ -2769,12 +2791,16 @@
         this.flashT = 2;
         this.flashCd = 2 + 3;     // 闪白 2s + 冷却 3s
       }
-      // 与飞虎碰撞：暴毙（走生命条数系统）
+      // 与飞虎碰撞：撞碎障碍！飞虎损失 30% 最大生命（走统一受伤通道：取整/防护罩/血怒/生命条数），障碍碎裂爆炸
       if (this.contains(p.x, p.y, p.radius * 0.55) && p.invT <= 0) {
-        SFX.shock();
-        burst(g, p.x, p.y, 40, this.debris.concat(['#f7941d']), 320, 7, 0.9, 260);
-        p.hp = 0;
-        p.die(g);
+        p.hurt(Math.round(p.maxHp * 0.3), g);
+        // 撞击点火花
+        burst(g, p.x, p.y, 18, ['#ff7b2e', '#ffd23b', '#fff5d0', '#fff'], 380, 6, 0.5, 200);
+        // 障碍碎裂爆炸（大块碎石 + 火星 + 冲击环）
+        this.destroy(g, true);
+        // 击退：弹向远离障碍一侧并抬升
+        p.x += (p.x < this.x ? -1 : 1) * 40;
+        p.y = Math.max(CFG.TOP_Y, p.y - 56);
       }
       // 小怪撞障碍：坠毁死亡（地面单位 / Boss 不受影响）
       for (const e of g.enemies) {
