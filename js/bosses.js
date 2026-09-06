@@ -2833,6 +2833,8 @@
       this._c4 = null;          // P3 四连冲撞状态
       this.hoverX = 750;
       this.baseY = CFG.H / 2;
+      this.lockHp = false;        // 生命剩余10%时触发的3s锁血（仅一次）
+      this.lockHpT = 0;           // 锁血剩余时间
       this.deathCols = ['#ff3b3b', '#ff7b2e', '#ffd23b', '#fff'];
       this.xpValue = 260;
     }
@@ -2843,6 +2845,7 @@
     update(dt, g) {
       this.t += dt; this.stateT += dt; this.actT += dt;
       this.flash = Math.max(0, this.flash - dt);
+      if (this.lockHpT > 0) this.lockHpT = Math.max(0, this.lockHpT - dt);
       this.commonMove(dt);
       const p = g.player;
       this.scl += (this.bodyScale() - this.scl) * Math.min(1, dt * 3);
@@ -2880,6 +2883,7 @@
 
     takeDamage(dmg, g) {
       if (this.dead || this.state === 'enter' || this.state === 'trans') return;   // 入场/转场免伤
+      if (this.lockHpT > 0) { this.flash = 0.08; return; }                         // 锁血期免疫伤害
       this.hp -= dmg;
       this.flash = 0.08;
       if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#fff', '#ffb0a0'], 130, 3, 0.18);
@@ -2888,6 +2892,14 @@
         SFX.bossEnrage(); g.shake(10);
         g.toast(`${this.bossName} 狂暴了！`, 1.8);
         burst(g, this.x, this.y, 24, ['#ff3b3b', '#ffd23b', '#fff'], 280, 6, 0.6, 130);
+      }
+      // 生命剩余10%：3s 锁血（仅一次），锁定在10%线
+      if (!this.lockHp && this.hp > 0 && this.hp <= this.maxHp * 0.1) {
+        this.lockHp = true; this.lockHpT = 3;
+        this.hp = Math.ceil(this.maxHp * 0.1);
+        SFX.bossEnrage(); g.shake(12);
+        g.toast('牛魔进入锁血状态！', 2);
+        burst(g, this.x, this.y, 28, ['#ff3b3b', '#ffd23b', '#fff'], 300, 6, 0.65, 140);
       }
       if (this.hp <= 0) { this.hp = 0; this.die(g); }
     }
@@ -3028,7 +3040,7 @@
         const a = Math.PI + rand(-0.3, 0.3);
         const sp = 240;
         g.bullets.push(new Bullet(tp.x, tp.y, Math.cos(a) * sp, Math.sin(a) * sp,
-          { kind: 'magicHorn', r: 14, dmg: Math.round(15 * g.atkScale), life: 5.5,
+          { kind: 'magicHorn', r: 20, dmg: Math.round(15 * g.atkScale), life: 5.5,
             homing: true, turnRate: 1.6 }));
       });
       SFX.enemyShoot();
@@ -3068,7 +3080,7 @@
         state: 'travel', t: 0, hitCd: 0, spd: 460, tx: x, ty: y,
         hoverT: 0.6, afterHover: 'lunge', orbitR: 130, orbitDir: 1, orbitTurns: 1,
         orbitSpd: 3.4, orbitAcc: 0, orbitAng: null, lungeSpd: 660,
-        vx: 0, vy: 0, retSide: 0
+        vx: 0, vy: 0, retSide: 0, trail: []
       }, opts));
     }
     /** P1-4 牛角回旋：双角飞向玩家上/下方，绕一圈后回收 */
@@ -3173,6 +3185,12 @@
           h.x += h.vx * dt; h.y += h.vy * dt;
           h.ang = Math.atan2(h.vy, h.vx);
           if (h.t > 2.4 || h.x < -90 || h.x > CFG.W + 90 || h.y < -90 || h.y > CFG.H + 90) h.dead = true;
+        }
+        // 红色极长拖尾：记录轨迹点（静止悬停不记，避免堆叠成团）
+        const last = h.trail[h.trail.length - 1];
+        if (!last || (last.x - h.x) ** 2 + (last.y - h.y) ** 2 > 4) {
+          h.trail.push({ x: h.x, y: h.y });
+          if (h.trail.length > 26) h.trail.shift();
         }
         // 碰撞（悬停预警期不造成伤害；转场/入场免伤）
         if (!h.dead && h.state !== 'hover' && h.hitCd <= 0 &&
@@ -3364,7 +3382,7 @@
       }
 
       // —— 魔角演员 ——
-      for (const h of this.horns) this.drawMagicHorn(ctx, h.x, h.y, h.ang, h.r / 15, h.state === 'hover', inP3);
+      for (const h of this.horns) this.drawMagicHorn(ctx, h.x, h.y, h.ang, h.r / 15, h.state === 'hover', inP3, h.trail);
 
       // —— Boss 本体 ——
       ctx.save();
@@ -3391,35 +3409,36 @@
       ctx.beginPath(); ctx.arc(0, 0, 44, 0, TAU); ctx.fill();
       ctx.fillStyle = inP3 ? '#a04530' : '#8f4530';
       ctx.beginPath(); ctx.arc(-4, -6, 34, 0, TAU); ctx.fill();
-      // 鼻吻部
+      // 鼻吻部（整体缩小）
       ctx.fillStyle = '#5a2418';
-      ctx.beginPath(); ctx.ellipse(0, 20, 26, 18, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, 22, 18, 12, 0, 0, TAU); ctx.fill();
       ctx.fillStyle = '#6e3020';
-      ctx.beginPath(); ctx.ellipse(-2, 17, 22, 14, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-1, 20, 15, 9, 0, 0, TAU); ctx.fill();
       ctx.fillStyle = '#1a0d0a';
-      ctx.beginPath(); ctx.ellipse(-9, 22, 3.5, 5, 0, 0, TAU); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(9, 22, 3.5, 5, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-5, 23, 2.5, 3.5, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(5, 23, 2.5, 3.5, 0, 0, TAU); ctx.fill();
 
-      // 双眼
+      // 双眼（扩大2倍，下调至眉下、鼻两侧靠上）+ 眼珠扩大
+      const eyeX = 26, eyeY = 5, browY = -16;
       for (const side of [-1, 1]) {
-        const ex = side * 17, ey = -12;
+        const ex = side * eyeX, ey = eyeY;
         if (inP3) {
           ctx.fillStyle = 'rgba(255,60,40,0.35)';
-          ctx.beginPath(); ctx.arc(ex, ey, 11, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.arc(ex, ey, 18, 0, TAU); ctx.fill();
           ctx.fillStyle = '#ff2a1a';
-          ctx.beginPath(); ctx.arc(ex, ey, 7, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.arc(ex, ey, 11, 0, TAU); ctx.fill();
           ctx.fillStyle = '#ffd23b';
-          ctx.beginPath(); ctx.arc(ex, ey, 3, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.arc(ex + side * 2, ey + 1, 5.5, 0, TAU); ctx.fill();
         } else {
           ctx.fillStyle = '#fff';
-          ctx.beginPath(); ctx.arc(ex, ey, 6.5, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.arc(ex, ey, 13, 0, TAU); ctx.fill();
           ctx.fillStyle = inP2 ? '#ff2a1a' : '#2a1410';
-          ctx.beginPath(); ctx.arc(ex + side * 1.5, ey + 1, inP2 ? 4 : 3.2, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.arc(ex + side * 3, ey + 2, inP2 ? 8.5 : 6.4, 0, TAU); ctx.fill();
         }
-        // 愤怒眉
-        ctx.strokeStyle = '#1a0d0a'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+        // 愤怒眉（留在额上，眼在眉下方）：左眉左上右下／右眉右上左下
+        ctx.strokeStyle = '#1a0d0a'; ctx.lineWidth = 5; ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(ex - side * 9, ey - 11); ctx.lineTo(ex + side * 8, ey - 5);
+        ctx.moveTo(ex + side * 8, browY - 4); ctx.lineTo(ex - side * 9, browY + 8);
         ctx.stroke();
       }
 
@@ -3438,6 +3457,24 @@
         ctx.beginPath(); ctx.moveTo(-10, 36); ctx.quadraticCurveTo(0, 31, 10, 36); ctx.stroke();
       }
 
+      // —— 锁血护盾（生命≤10%触发期）：脉动红环 + 金边 ——
+      if (this.lockHpT > 0) {
+        const pk = 1 + Math.sin(this.t * 14) * 0.05;
+        ctx.save();
+        ctx.scale(pk, pk);
+        ctx.strokeStyle = `rgba(255,60,40,${0.5 + Math.sin(this.t * 10) * 0.25})`;
+        ctx.lineWidth = 6; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(0, 0, 72, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,200,120,0.45)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, 79, 0, TAU); ctx.stroke();
+        // 旋转碎点
+        for (let i = 0; i < 6; i++) {
+          const a = this.t * 2.4 + i * (TAU / 6);
+          ctx.fillStyle = `rgba(255,180,90,${0.6})`;
+          ctx.beginPath(); ctx.arc(Math.cos(a) * 75, Math.sin(a) * 75, 2.6, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+      }
       // 受击闪红
       if (this.flash > 0) {
         ctx.save();
@@ -3449,68 +3486,155 @@
       ctx.restore();
     }
 
-    /** 头上弯角：头顶 (±20,-30) 向外上方弯至 (±60len,-66len)；P1 角尖微红/P2 粗长/P3 裂纹红光 */
+    /** 头上弯角：纯黑角身 + 白色横向细致花纹（整体化），向上收束成更尖锐的长角尖 */
     drawHorn(ctx, side, inP2, inP3) {
       const len = inP3 ? 1.25 : inP2 ? 1.12 : 1;
       const w = inP3 ? 1.3 : inP2 ? 1.15 : 1;
       ctx.save();
       ctx.scale(side, 1);
-      const tx = 60 * len, ty = -66 * len;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#1a0d0a'; ctx.lineWidth = 20 * w;
+      // 角根落在该侧眉毛外端的左上/右上侧（眉毛外端=眼心外推8px、y=browY-4=-20）
+      const bx = 30, by = -22;                     // 角根（贴眉外端左/右上侧）
+      const cx = 50 * len, cy = -50 * len;          // 控制点
+      const tx = 66 * len, ty = -66 * len;          // 角身终点
+      const px = 70 * len, py = -116 * len;         // 拉长的尖锐角尖
+      // —— 纯黑角身（butt cap，避免顶端圆头；角身止于 tx,ty，角尖另画长锥） ——
+      ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#0a0606'; ctx.lineWidth = 20 * w;
       ctx.beginPath();
-      ctx.moveTo(18, -30);
-      ctx.quadraticCurveTo(40 * len, -52 * len, tx, ty);
+      ctx.moveTo(bx, by);
+      ctx.quadraticCurveTo(cx, cy, tx, ty);
       ctx.stroke();
-      ctx.strokeStyle = '#f0e6d2'; ctx.lineWidth = 13 * w;
+      // —— 尖锐长角尖：底边匹配角身宽度，长锥收束成尖点 ——
+      ctx.fillStyle = '#0a0606';
       ctx.beginPath();
-      ctx.moveTo(20, -31);
-      ctx.quadraticCurveTo(40 * len, -52 * len, tx - 2, ty + 2);
-      ctx.stroke();
+      ctx.moveTo(tx - 9.5 * w, ty + 5);
+      ctx.lineTo(tx + 9.5 * w, ty + 5);
+      ctx.lineTo(px, py);
+      ctx.closePath(); ctx.fill();
+      // —— 白色横向细致花纹 ——
+      ctx.strokeStyle = '#f5efe2';
+      // 角身段（二次曲线）
+      for (let i = 1; i <= 6; i++) {
+        const t = i / 7, omt = 1 - t;
+        const sx = omt * omt * bx + 2 * omt * t * cx + t * t * tx;
+        const sy = omt * omt * by + 2 * omt * t * cy + t * t * ty;
+        let tgx = 2 * omt * (cx - bx) + 2 * t * (tx - cx);
+        let tgy = 2 * omt * (cy - by) + 2 * t * (ty - cy);
+        const tl = Math.hypot(tgx, tgy) || 1; tgx /= tl; tgy /= tl;
+        const nx = -tgy, ny = tgx;
+        const half = (9 - i * 0.7) * w;           // 靠尖处纹路渐细
+        ctx.lineWidth = 1.4 * w;
+        ctx.beginPath();
+        ctx.moveTo(sx - nx * half, sy - ny * half);
+        ctx.lineTo(sx + nx * half, sy + ny * half);
+        ctx.stroke();
+      }
+      // 角尖段（直线 tx,ty → px,py，两条细纹）
+      for (let i = 1; i <= 2; i++) {
+        const t = i / 3;
+        const sx = tx + (px - tx) * t;
+        const sy = ty + (py - ty) * t;
+        let tgx = px - tx, tgy = py - ty;
+        const tl = Math.hypot(tgx, tgy) || 1; tgx /= tl; tgy /= tl;
+        const nx = -tgy, ny = tgx;
+        const half = (5 - i * 1.6) * w;            // 角尖纹路更细
+        ctx.lineWidth = 1.1 * w;
+        ctx.beginPath();
+        ctx.moveTo(sx - nx * half, sy - ny * half);
+        ctx.lineTo(sx + nx * half, sy + ny * half);
+        ctx.stroke();
+      }
+      // —— 角尖红光（P2/P3） ——
       const tipGlow = inP3 ? 1 : inP2 ? 0.75 : 0.4;
-      ctx.strokeStyle = `rgba(255,70,50,${tipGlow})`; ctx.lineWidth = 8 * w;
-      ctx.beginPath();
-      ctx.moveTo(46 * len, -56 * len);
-      ctx.quadraticCurveTo(52 * len, -62 * len, tx - 2, ty + 2);
-      ctx.stroke();
+      if (inP2 || inP3) {
+        ctx.strokeStyle = `rgba(255,70,50,${tipGlow})`; ctx.lineWidth = 6 * w;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(px, py);
+        ctx.stroke();
+      }
       if (inP3) {
         ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.moveTo(30, -40); ctx.lineTo(38, -48); ctx.lineTo(34, -56);
+        ctx.moveTo(36, -36); ctx.lineTo(46, -48); ctx.lineTo(40, -60);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(46, -50); ctx.lineTo(52, -58);
+        ctx.moveTo(54, -52); ctx.lineTo(60, -66);
         ctx.stroke();
       }
       ctx.restore();
     }
 
     /** 魔角演员（世界坐标）：弯角尖角朝 +x，悬停预警时脉动 */
-    drawMagicHorn(ctx, x, y, ang, size, hover, p3) {
+    drawMagicHorn(ctx, x, y, ang, size, hover, p3, trail) {
       const pulse = hover ? 1 + Math.sin(this.t * 16) * 0.15 : 1;
+      // —— 红色极长拖尾（世界坐标，先画压在角身下；尾淡头亮，三层叠加） ——
+      if (trail && trail.length > 1) {
+        const n = trail.length;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        for (let i = 0; i < n - 1; i++) {
+          const t = (i + 1) / n;                 // 0=尾端(旧) → 1=头端(新,近角)
+          const a = trail[i], b = trail[i + 1];
+          // 外层柔光（暗红，最宽）
+          ctx.strokeStyle = `rgba(255,60,40,${0.05 + 0.25 * t})`;
+          ctx.lineWidth = 4 + 14 * t;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          // 中层橙红
+          ctx.strokeStyle = `rgba(255,130,80,${0.15 + 0.6 * t})`;
+          ctx.lineWidth = 1.5 + 4.5 * t;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          // 内层热白芯
+          ctx.strokeStyle = `rgba(255,225,170,${0.6 * t})`;
+          ctx.lineWidth = 0.5 + 1.8 * t;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+      }
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(ang);
       ctx.scale(size * pulse, size * pulse);
-      ctx.fillStyle = p3 ? 'rgba(255,60,40,0.4)' : 'rgba(224,60,50,0.28)';
-      ctx.beginPath(); ctx.arc(0, 0, 26, 0, TAU); ctx.fill();
+      // 暗红光晕
+      ctx.fillStyle = p3 ? 'rgba(255,60,40,0.42)' : 'rgba(224,60,50,0.3)';
+      ctx.beginPath(); ctx.arc(0, 0, 32, 0, TAU); ctx.fill();
+      // —— 纯黑角身（整体化）+ 尖锐角尖 ——
+      const P0x = -16, P0y = 8, P1x = 5, P1y = -17, tx = 25, ty = -13;
+      const px = 32, py = -19;                       // 尖锐角尖
       ctx.lineCap = 'round';
-      ctx.strokeStyle = '#101018'; ctx.lineWidth = 13;
+      ctx.strokeStyle = '#0a0606'; ctx.lineWidth = 15;
       ctx.beginPath();
-      ctx.moveTo(-14, 6);
-      ctx.quadraticCurveTo(2, -16, 20, -10);
+      ctx.moveTo(P0x, P0y);
+      ctx.quadraticCurveTo(P1x, P1y, tx, ty);
+      ctx.lineTo(px, py);
       ctx.stroke();
-      ctx.strokeStyle = '#7a1622'; ctx.lineWidth = 8;
+      // —— 白色横向细致花纹 ——
+      ctx.strokeStyle = '#f5efe2';
+      for (let i = 1; i <= 6; i++) {
+        const t = i / 7, omt = 1 - t;
+        const bx = omt * omt * P0x + 2 * omt * t * P1x + t * t * tx;
+        const by = omt * omt * P0y + 2 * omt * t * P1y + t * t * ty;
+        let tgx = 2 * omt * (P1x - P0x) + 2 * t * (tx - P1x);
+        let tgy = 2 * omt * (P1y - P0y) + 2 * t * (ty - P1y);
+        const tl = Math.hypot(tgx, tgy) || 1; tgx /= tl; tgy /= tl;
+        const nx = -tgy, ny = tgx;
+        const half = 6.5 - i * 0.6;
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(bx - nx * half, by - ny * half);
+        ctx.lineTo(bx + nx * half, by + ny * half);
+        ctx.stroke();
+      }
+      // —— 尖锐角尖（纯黑三角） ——
+      ctx.fillStyle = '#0a0606';
       ctx.beginPath();
-      ctx.moveTo(-12, 5);
-      ctx.quadraticCurveTo(2, -11, 17, -8);
-      ctx.stroke();
-      ctx.strokeStyle = '#ff5a4a'; ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(0, -4); ctx.lineTo(8, -10);
-      ctx.stroke();
+      ctx.moveTo(tx - 3.5, ty + 2); ctx.lineTo(tx + 3.5, ty + 2); ctx.lineTo(px, py);
+      ctx.closePath(); ctx.fill();
+      // —— 角尖红光（P3 更亮） ——
+      ctx.strokeStyle = p3 ? 'rgba(255,70,50,1)' : 'rgba(255,90,74,0.55)';
+      ctx.lineWidth = p3 ? 5 : 4;
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(px, py); ctx.stroke();
+      // 角尖黄芯高光
       ctx.fillStyle = '#ffd23b';
-      ctx.beginPath(); ctx.arc(17, -8, 3, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(px - 2, py + 2, 2.6, 0, TAU); ctx.fill();
       ctx.restore();
     }
   }

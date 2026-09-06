@@ -1137,7 +1137,7 @@
         return;
       }
       if (k === 'magicHorn') {
-        // 牛魔追踪魔角：大型弯角 + 暗红光晕脉动 + 亮红裂纹，尖角朝飞行方向
+        // 牛魔追踪魔角（变大 + 角尖更尖锐）：大型弯角 + 暗红光晕脉动 + 亮红裂纹，单点收束尖角朝飞行方向
         const r = this.r;
         const f = 1 + Math.sin(this.t * 6) * 0.1;
         const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
@@ -1146,23 +1146,24 @@
         ctx.beginPath(); ctx.arc(0, 0, r * 1.55, 0, TAU); ctx.fill();
         const hornPath = () => {
           ctx.beginPath();
-          ctx.moveTo(r * 1.1, -r * 0.14);
-          ctx.quadraticCurveTo(r * 0.25, -r * 1.0, -r * 0.9, -r * 0.66);
-          ctx.quadraticCurveTo(-r * 0.42, -r * 0.12, r * 1.1, r * 0.24);
+          ctx.moveTo(r * 1.55, r * 0.05);                              // 尖锐角尖（单点收束）
+          ctx.quadraticCurveTo(r * 0.3, -r * 1.05, -r * 0.9, -r * 0.66);   // 外缘向后弯
+          ctx.quadraticCurveTo(-r * 0.42, -r * 0.12, r * 1.55, r * 0.05);  // 内缘回尖
           ctx.closePath();
         };
         ctx.fillStyle = '#101018'; hornPath(); ctx.fill();
         ctx.fillStyle = '#7a1622';
         ctx.beginPath();
-        ctx.moveTo(r * 0.94, -r * 0.1);
-        ctx.quadraticCurveTo(r * 0.2, -r * 0.78, -r * 0.66, -r * 0.5);
-        ctx.quadraticCurveTo(-r * 0.3, -r * 0.08, r * 0.94, r * 0.16);
+        ctx.moveTo(r * 1.4, r * 0.03);
+        ctx.quadraticCurveTo(r * 0.2, -r * 0.82, -r * 0.66, -r * 0.5);
+        ctx.quadraticCurveTo(-r * 0.3, -r * 0.08, r * 1.4, r * 0.03);
         ctx.closePath(); ctx.fill();
         // 裂纹亮线
         ctx.strokeStyle = '#ff5a4a'; ctx.lineWidth = Math.max(1.4, r * 0.12); ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(r * 0.6, 0); ctx.lineTo(r * 0.1, -r * 0.34); ctx.lineTo(-r * 0.3, -r * 0.3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(r * 0.85, 0); ctx.lineTo(r * 0.1, -r * 0.34); ctx.lineTo(-r * 0.3, -r * 0.3); ctx.stroke();
+        // 角尖高光
         ctx.fillStyle = '#ffd23b';
-        ctx.beginPath(); ctx.arc(r * 0.78, 0, r * 0.16, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(r * 1.1, 0, r * 0.16, 0, TAU); ctx.fill();
         ctx.restore();
         return;
       }
