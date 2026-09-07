@@ -364,12 +364,21 @@
         this.angle = Math.atan2(this.vy, this.vx);
         if (this.y > CFG.GROUND_Y - 4) { this.dead = true; burst(g, this.x, CFG.GROUND_Y - 6, 4, ['#8a5a2b', '#6b4a2a'], 90, 3, 0.3); }
       }
-      // 龙系刺弹（草龙龙鳞刺 / 沙晶锥刺 / 黑炎龙鳞 / 熔岩龙牙 / 骨刺 / 齿轮弹 / 深海水晶刺）：高速直线，触地（海）即消
+      // 龙系刺弹（草龙龙鳞刺 / 沙晶锥刺 / 黑炎龙鳞 / 熔岩龙牙 / 骨刺 / 齿轮弹 / 深海水晶刺）：高速直线，触地（海）即消；被山石障碍阻挡
       if (SPIKE_KINDS[this.kind] && !this.dead) {
         const gy = g.groundYAt ? g.groundYAt(this.x) : CFG.GROUND_Y;
         if (this.y > gy - 4) {
           this.dead = true;
           burst(g, this.x, gy - 4, 4, SPIKE_FX[this.kind] || SPIKE_FX.spike, 100, 3, 0.3);
+        } else {
+          for (const r of g.rocks) {
+            if (r.dead) continue;
+            if (r.contains(this.x, this.y, this.r + 2)) {
+              this.dead = true;
+              burst(g, this.x, this.y, 4, SPIKE_FX[this.kind] || SPIKE_FX.spike, 100, 3, 0.3);
+              break;
+            }
+          }
         }
       }
       // 炮弹：触地 / 触山石即引爆

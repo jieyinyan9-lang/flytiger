@@ -808,7 +808,7 @@
       this.patrolMax = CFG.W - 95;
       this.dir = -1;
       this.shotT = 1.3;
-      this.scatterT = 5.6;
+      this.scatterT = 7.5;
       this.missileT = 3.6;
       this.flameBreathT = 8.0;   // 喷火攻击计时器
       this.flameDur = 0;          // 喷火持续时间（>0 时正在喷火）
@@ -853,13 +853,13 @@
       // 偶尔散射（6 向扇形）
       this.scatterT -= dt;
       if (this.scatterT <= 0) {
-        this.scatterT = rand(5.5, 7.5);
+        this.scatterT = rand(7.5, 9.5);
         const base = Math.atan2(p.y - this.y, p.x - this.x);
         for (let i = -2; i <= 3; i++) {
           const a = base + i * 0.19;
           g.bullets.push(new Bullet(this.x - 72, this.y - 12,
-            Math.cos(a) * 290, Math.sin(a) * 290,
-            { kind: 'orb', r: 21, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 5, color: '#ff9d2e', rockBreak: true, fireTrail: true }));
+            Math.cos(a) * 215, Math.sin(a) * 215,
+            { kind: 'orb', r: 15, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#ff9d2e', rockBreak: true, fireTrail: true }));
         }
         SFX.enemyShoot();
       }
