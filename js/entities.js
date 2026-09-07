@@ -764,12 +764,11 @@
         if (this.gmax && this.len > 0) {
           ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
           const L = this.len, Wd = this.r * 1.7 * pulse;
-          ctx.fillStyle = 'rgba(53,224,255,0.14)';
-          ctx.fillRect(-10, -Wd * 0.9, L + 20, Wd * 1.8);                     // 外光晕
-          ctx.fillStyle = 'rgba(53,224,255,0.35)'; ctx.fillRect(-6, -Wd * 0.62, L + 12, Wd * 1.24);
-          ctx.fillStyle = '#35e0ff'; ctx.fillRect(0, -Wd * 0.4, L, Wd * 0.8);
-          ctx.fillStyle = '#a5f3fc'; ctx.fillRect(0, -Wd * 0.2, L, Wd * 0.4);
-          ctx.fillStyle = '#fff'; ctx.fillRect(L - 12, -Wd * 0.1, 12, Wd * 0.2);
+          ctx.fillStyle = 'rgba(53,224,255,0.08)'; ctx.fillRect(-10, -Wd * 0.7, L + 20, Wd * 1.4);   // 外光晕（更细更透，多弹道叠加不糊）
+          ctx.fillStyle = 'rgba(53,224,255,0.20)'; ctx.fillRect(-6, -Wd * 0.48, L + 12, Wd * 0.96);
+          ctx.fillStyle = '#35e0ff'; ctx.fillRect(0, -Wd * 0.3, L, Wd * 0.6);
+          ctx.fillStyle = '#a5f3fc'; ctx.fillRect(0, -Wd * 0.16, L, Wd * 0.32);
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, -Wd * 0.08, L, Wd * 0.16);                          // 中心实白芯贯通整条激光
           ctx.restore();
           return;
         }
