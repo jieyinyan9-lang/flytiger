@@ -3541,7 +3541,8 @@
         }
         case 'bigbat': {
           const spr = Math.floor(t * 9) % 2 === 0 ? Sprites.bigbatA : Sprites.bigbatB;
-          drawSprite(ctx, spr, this.x, this.y + Math.sin(t * 3) * 4, 3.4, 3.4, Math.sin(t * 1.8) * 0.06, this.flash);
+          // dabianfu_A/B.png 为 352×240（旧 44×30 精灵的 8 倍），缩放 0.425 = 3.4/8，保持与旧版一致的显示尺寸
+          drawSprite(ctx, spr, this.x, this.y + Math.sin(t * 3) * 4, 0.425, 0.425, Math.sin(t * 1.8) * 0.06, this.flash);
           break;
         }
       }

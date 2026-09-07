@@ -1009,6 +1009,42 @@
     return cv;
   }
 
+  /** 大型蝙蝠帧 A（双翼上扬）：加载 assets/xiaoguai/dabianfu_A.png（352×240，
+   *  为旧 44×30 像素精灵的 8 倍重绘，正面朝向、左右对称，无需翻转）。 */
+  function buildBigBatA() {
+    const W = 352, H = 240;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] dabianfu_A.png 加载失败');
+    img.src = 'assets/xiaoguai/dabianfu_A.png';
+    return cv;
+  }
+
+  /** 大型蝙蝠帧 B（双翼下压）：加载 assets/xiaoguai/dabianfu_B.png（352×240，
+   *  为旧 44×30 像素精灵的 8 倍重绘，正面朝向、左右对称，无需翻转）。 */
+  function buildBigBatB() {
+    const W = 352, H = 240;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] dabianfu_B.png 加载失败');
+    img.src = 'assets/xiaoguai/dabianfu_B.png';
+    return cv;
+  }
+
   const Sprites = {
     cat: null,   // 白猫主角：assets/cat.png 原图（异步加载）
     eagleA: buildEagle(0, EAGLE_PAL),
@@ -1039,8 +1075,8 @@
     stranger: buildGuaike(),
     frog: buildFrog(),
     crane: buildCrane(),
-    bigbatA: buildBigBat(0),
-    bigbatB: buildBigBat(1),
+    bigbatA: buildBigBatA(),
+    bigbatB: buildBigBatB(),
   };
 
   // 敌人统一朝向：翻转成朝左
