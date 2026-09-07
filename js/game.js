@@ -101,10 +101,11 @@
       this.syncStandbyName();
       this.buildCharGrid();
 
-      // 测试模式：URL 参数 ?boss=niumo 强制指定 Boss 反复出现（仅测试用，便于调试专属 Boss）
+      // 测试模式：URL 参数 ?boss=NiuMo 强制指定 Boss 反复出现（仅测试用，便于调试专属 Boss）
       try {
         const p = new URLSearchParams(location.search).get('boss');
-        this.testBoss = (p && p.toLowerCase() === 'niumo') ? 'NiuMo' : null;
+        if (p && (window.BOSS_LIST || []).find(e => e.cls.name === p)) this.testBoss = p;
+        else this.testBoss = null;
       } catch (e) { this.testBoss = null; }
 
       this.reset();
@@ -286,6 +287,8 @@
       this.sphinxSpawned = false;         // 狮身人面像每局至多出现一次（沙漠专属）
       this.niuMoSpawned = false;          // 牛魔特殊期每局至多出场一次（草原专属）
       this.niuMoGeneric = false;          // 12 只通用 Boss 全部轮完后，牛魔转入普通池
+      this.boneDragonSpawned = false;     // 骨龙王特殊期每局至多出场一次（荒地专属）
+      this.boneDragonGeneric = false;     // 通用 Boss 全部轮完后，骨龙王转入普通池
       this.diffMul = 1;
       this.clouds = [];
       for (let i = 0; i < 7; i++) {
@@ -976,17 +979,20 @@
       // 狮身人面像：沙漠限定、每局一次、minOrd/maxOrd/forceChance
       // 牛魔：特殊期（!niuMoGeneric）草原限定、每局一次、第2-4轮强制概率；通用期一切限制旁路
       const ord = this.bossSpawned + 1;
-      // ordOk：显式声明 minOrd/maxOrd 的 Boss（狮身人面像/牛魔特殊期）受限；牛魔通用期旁路
+      // ordOk：显式声明 minOrd/maxOrd 的 Boss（狮身人面像/牛魔特殊期/骨龙王特殊期）受限；通用期旁路
       const ordOk = b => {
         if (b.cls.name === 'NiuMo' && this.niuMoGeneric) return true;
+        if (b.cls.name === 'BoneDragonKing' && this.boneDragonGeneric) return true;
         return (b.minOrd === undefined || b.minOrd <= ord) &&
                (b.maxOrd === undefined || ord <= b.maxOrd);
       };
       // map：狮身人面像仅沙漠且每局一次；牛魔特殊期仅草原且每局一次（通用期任意地图）；
+      // 骨龙王特殊期仅荒地且每局一次（通用期任意地图）；
       // 大海不出现地面移动型 Boss（蛙哥/野鸡王）
       const mapOk = b => {
         if (b.cls.name === 'Sphinx') return b.map === this.mapId && !this.sphinxSpawned;
         if (b.cls.name === 'NiuMo') return this.niuMoGeneric || (b.map === this.mapId && !this.niuMoSpawned);
+        if (b.cls.name === 'BoneDragonKing') return this.boneDragonGeneric || (b.map === this.mapId && !this.boneDragonSpawned);
         return (b.map === undefined || b.map === this.mapId) &&
                !(b.ground && this.mapId === 'ocean');
       };
@@ -994,7 +1000,8 @@
       if (!pool.length) {
         // 兜底1：放宽大海地面限制等通用地图限制（专属 Boss 的地图/单次限制不可放宽，防止空池卡死）
         pool = window.BOSS_LIST.filter(b => ordOk(b) &&
-          b.cls.name !== 'Sphinx' && !(b.cls.name === 'NiuMo' && !this.niuMoGeneric));
+          b.cls.name !== 'Sphinx' && !(b.cls.name === 'NiuMo' && !this.niuMoGeneric) &&
+          !(b.cls.name === 'BoneDragonKing' && !this.boneDragonGeneric));
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
       // 不连续两轮出现同一个 Boss：从最终候选池剔除上一只（池中有其他选择时才剔除）
@@ -1003,9 +1010,10 @@
         if (withoutLast.length) pool = withoutLast;
       }
       // forceChance：专属 Boss 在指定出场序号有独立的直接出场概率；未命中则不参与本轮随机池
-      // 牛魔通用期不再走强制掷骰，作为普通等权成员进入随机池
+      // 牛魔/骨龙王通用期不再走强制掷骰，作为普通等权成员进入随机池
       const forceable = b => (b.forceChance && b.forceChance[ord] !== undefined) &&
-                             !(b.cls.name === 'NiuMo' && this.niuMoGeneric);
+                             !(b.cls.name === 'NiuMo' && this.niuMoGeneric) &&
+                             !(b.cls.name === 'BoneDragonKing' && this.boneDragonGeneric);
       let pick = null;
       const forceList = pool.filter(forceable);
       for (const b of forceList) {
@@ -1040,20 +1048,23 @@
       this.bossSpawned++;
       this.lastBossName = cls.name;   // 记录上一只：下一轮抽取时剔除，禁止连续重复
       this.bossSeen.add(cls.name);   // 登记出场：后续抽取权重减半
-      // 所有非专属 Boss（狮身人面像、牛魔特殊期除外）均已轮过一遍 → 清空记录，概率恢复正常；
-      // 同时牛魔结束特殊期、转入普通池（任意地图等权出场）
+      // 所有非专属 Boss（狮身人面像、牛魔特殊期、骨龙王特殊期除外）均已轮过一遍 → 清空记录，概率恢复正常；
+      // 同时牛魔/骨龙王结束特殊期、转入普通池（任意地图等权出场）
       const cyclable = (window.BOSS_LIST || []).filter(e =>
-        e.cls.name !== 'Sphinx' && e.cls.name !== 'NiuMo');
+        e.cls.name !== 'Sphinx' && e.cls.name !== 'NiuMo' && e.cls.name !== 'BoneDragonKing');
       if (cyclable.length && cyclable.every(e => this.bossSeen.has(e.cls.name))) {
         this.bossSeen.clear();
         this.niuMoGeneric = true;
         this.niuMoSpawned = false;
+        this.boneDragonGeneric = true;
+        this.boneDragonSpawned = false;
       }
       if (this.testBoss) {
         // 测试模式：不登记单次出场、不转入通用池，保证指定 Boss 每轮必出且可重复
       } else {
         if (cls.name === 'Sphinx') this.sphinxSpawned = true;   // 狮身人面像每局至多一次
         if (cls.name === 'NiuMo' && !this.niuMoGeneric) this.niuMoSpawned = true;   // 牛魔特殊期每局至多一次
+        if (cls.name === 'BoneDragonKing' && !this.boneDragonGeneric) this.boneDragonSpawned = true;   // 骨龙王特殊期每局至多一次
       }
       this.el.bossName.textContent = `${b.bossName}`;
       this.el.bossHud.classList.remove('hidden');
@@ -1660,6 +1671,19 @@
         if (b.friendly || b.dead || b.neutralized) continue;
         const rr = b.r + p.radius * 0.8;
         if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < rr * rr) {
+          // 狂战士血怒铠甲：命中的子弹转化为血色尖刺（长菱形），朝最近敌人反弹
+          if (p.bloodArmorT > 0) {
+            b.dead = true;
+            const tgt = p.nearestEnemy(this);
+            const a = tgt ? Math.atan2(tgt.y - p.y, tgt.x - p.x) : rand(0, TAU);
+            this.bullets.push(new Bullet(p.x, p.y, Math.cos(a) * 540, Math.sin(a) * 540,
+              { kind: 'bloodSpike', friendly: true, dmg: Math.round(p.dmg * 1.6), r: 9, life: 1.3,
+                color: '#ff2a0a',
+                trailCols: ['#7a0a0a', '#ff2a0a', '#ff6a1a', '#ffd23b'], trailLite: false }));
+            burst(this, b.x, b.y, 6, ['#ff2a0a', '#ff5a1a', '#fff'], 170, 4, 0.28);
+            SFX.melee();
+            continue;
+          }
           if (b.kind === 'fireball') {
             b.dead = true;
             this.explodeFireball(b.x, b.y, 12, b.dmg * 0.75, 90);
@@ -1759,11 +1783,19 @@
       if (this.el.livesText) {
         this.el.livesText.textContent = '❤'.repeat(this.player.lives) + '·'.repeat(3 - this.player.lives);
       }
-      // 近战冷却
+      // 近战冷却（按角色显示对应默认技能图标）
       const cdTotal = CFG.player.meleeCooldown;
       const cdRatio = p.isMeleeing ? 0 : clamp(p.cdT / cdTotal, 0, 1);
       this.el.meleeCd.style.height = cdRatio * 100 + '%';
       this.el.meleeIcon.style.color = p.meleeReady ? '#ffd166' : '#8a7a55';
+      const SKILL_ICON = { xiaobai: '爪', xiake: '突', mofashi: '盾', buliang: '摔', jiaodoushi: '甲', chaoren: '激' };
+      const SKILL_NAME = {
+        xiaobai: '爪击', xiake: '疾风突刺', mofashi: '彩虹护盾',
+        buliang: '过肩摔', jiaodoushi: '血怒铠甲', chaoren: '巨型激光'
+      };
+      this.el.meleeIcon.textContent = SKILL_ICON[p.charId] || '爪';
+      const meleeBox = document.getElementById('melee-box');
+      if (meleeBox) meleeBox.title = `${SKILL_NAME[p.charId] || '爪击'}（接触敌人触发，3 秒冷却）`;
       // Boss 血条
       if (this.bosses.length) {
         const b = this.bosses[0];

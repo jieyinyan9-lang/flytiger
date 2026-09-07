@@ -229,6 +229,7 @@
       this.onHitEnemy = opts.onHitEnemy || null;    // 命中敌人回调（反弹逻辑）
       this.target = opts.target || null;       // 追踪目标（超级小子激光串）
       this.trailLite = !!opts.trailLite;       // 轻量化拖尾（角色最终形态：少而小的粒子，避免遮挡战场）
+      this.whiteStar = !!opts.whiteStar;       // 法师护盾碎星：纯白色五角星
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -666,9 +667,16 @@
           ctx.lineTo(Math.cos(a2) * r * 0.45, Math.sin(a2) * r * 0.45);
         }
         ctx.closePath();
-        ctx.fillStyle = '#fff9c4';                          // 边缘：高明度发白的柠檬黄
-        ctx.lineWidth = 3; ctx.strokeStyle = '#fff9c4'; ctx.stroke(); ctx.fill();
-        ctx.fillStyle = this.gmax ? '#ffe066' : '#ffd93b';
+        if (this.whiteStar) {
+          // 纯白色五角星（法师护盾碎星）
+          ctx.fillStyle = '#ffffff';
+          ctx.lineWidth = 3; ctx.strokeStyle = '#e8f0ff'; ctx.stroke(); ctx.fill();
+          ctx.fillStyle = '#f0f6ff';
+        } else {
+          ctx.fillStyle = '#fff9c4';                          // 边缘：高明度发白的柠檬黄
+          ctx.lineWidth = 3; ctx.strokeStyle = '#fff9c4'; ctx.stroke(); ctx.fill();
+          ctx.fillStyle = this.gmax ? '#ffe066' : '#ffd93b';
+        }
         ctx.beginPath();
         for (let i = 0; i < 5; i++) {
           const a1 = -Math.PI / 2 + (TAU / 5) * i, a2 = a1 + TAU / 10;
@@ -805,6 +813,45 @@
         ctx.fillRect(-st.len / 2, -st.r * 0.45, st.len, st.r * 0.9);
         ctx.fillStyle = '#fff';
         ctx.fillRect(st.len / 2 - 4, -st.r * 0.25, 4, st.r * 0.5);
+        ctx.restore();
+        return;
+      }
+      if (k === 'bloodSpike') {
+        // 狂战士血怒铠甲反弹尖刺：长菱形（沿飞行方向拉长），血色；拖尾由 trailCols 提供
+        const r = this.r;
+        const ang = Math.atan2(this.vy, this.vx);
+        const len = r * 2.6;    // 长半轴（沿飞行方向）
+        const wid = r * 0.85;   // 短半轴（垂直方向）
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(ang);
+        // 外层暗红光晕
+        ctx.fillStyle = 'rgba(122,10,10,0.55)';
+        ctx.beginPath();
+        ctx.moveTo(len * 1.25, 0);
+        ctx.lineTo(0, wid * 1.3);
+        ctx.lineTo(-len * 0.6, 0);
+        ctx.lineTo(0, -wid * 1.3);
+        ctx.closePath();
+        ctx.fill();
+        // 主体血红
+        ctx.fillStyle = '#ff2a0a';
+        ctx.beginPath();
+        ctx.moveTo(len, 0);
+        ctx.lineTo(0, wid);
+        ctx.lineTo(-len * 0.5, 0);
+        ctx.lineTo(0, -wid);
+        ctx.closePath();
+        ctx.fill();
+        // 高光橙黄
+        ctx.fillStyle = '#ffd23b';
+        ctx.beginPath();
+        ctx.moveTo(len * 0.55, 0);
+        ctx.lineTo(0, wid * 0.4);
+        ctx.lineTo(-len * 0.1, 0);
+        ctx.lineTo(0, -wid * 0.4);
+        ctx.closePath();
+        ctx.fill();
         ctx.restore();
         return;
       }
@@ -998,6 +1045,26 @@
         ctx.fillRect(this.x - this.r * 0.66 * f, this.y - this.r * 0.66 * f, this.r * 1.32 * f, this.r * 1.32 * f);
         ctx.fillStyle = '#ffd23b';
         ctx.fillRect(this.x - 2, this.y - 2, 4, 4);
+        return;
+      }
+      if (k === 'greenfire') {
+        // 骨龙王绿火拖尾弹：深绿外晕 → 亮绿主体 → 白芯，跳动膨胀 + 拖尾
+        const f = 1 + Math.sin(this.t * 18) * 0.2;
+        const r = this.r * f;
+        // 拖尾（沿反速度方向）
+        const sp = Math.hypot(this.vx, this.vy) || 1;
+        const tx = this.x - (this.vx / sp) * r * 1.6;
+        const ty = this.y - (this.vy / sp) * r * 1.6;
+        ctx.fillStyle = 'rgba(74,222,128,0.25)';
+        ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(tx - r*0.6, ty); ctx.lineTo(tx + r*0.6, ty); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(22,101,52,0.55)';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 1.35, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#166534';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#4ade80';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.66, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#bbf7d0';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.3, 0, TAU); ctx.fill();
         return;
       }
       if (k === 'fireball') {
@@ -1852,6 +1919,17 @@
       this.moveSpdLv = 0;
       // 受伤闪红
       this.hurtFlash = 0;
+
+      // 角色自动技能状态（触发条件/冷却与小白爪击一致：接触敌人触发、3 秒冷却）
+      this.autoSkill = null;          // 'dash'|'shield'|'throw'|'armor'|'laser'|null
+      this.dashVx = 0;                // 侠客突刺水平速度
+      this.dashPrevX = this.x; this.dashPrevY = this.y;
+      this.rainbowShieldT = 0;        // 法师彩虹护盾剩余时间
+      this.thrown = null;             // 不良少年：被摔投的敌人 { e, vx, vy, bounces }
+      this.bloodArmorT = 0;           // 狂战士血铠剩余时间
+      this.laserT = 0;                // 超级小子激光剩余时间
+      this.laserTarget = null;        // 激光锁定的目标敌人
+      this._laserCd = new Map();      // 激光对单体伤害节流（敌人 → 下次可命中时间）
     }
 
     /** 刀刃长度倍率（剑刃延展：1/2/3 倍） */
@@ -1972,6 +2050,125 @@
       });
     }
 
+    /** 屏幕内最近的敌人（Boss 入场/转场期跳过） */
+    nearestEnemy(g) {
+      let best = null, bestD = Infinity;
+      for (const e of g.targets()) {
+        if (e.dead) continue;
+        if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) continue;
+        const px = e.x, py = e.y;
+        const d = (px - this.x) ** 2 + (py - this.y) ** 2;
+        if (d < bestD) { bestD = d; best = e; }
+      }
+      return best;
+    }
+
+    /** 自动技能分发：按出战角色触发对应默认技能（触发/冷却与小白爪击一致） */
+    startAutoSkill(g, enemy) {
+      const id = this.charId;
+      if (id === 'xiake') return this.startDashThrust(g);
+      if (id === 'mofashi') return this.startRainbowShield(g);
+      if (id === 'buliang') return this.startThrowEnemy(g, enemy);
+      if (id === 'jiaodoushi') return this.startBloodArmor(g);
+      if (id === 'chaoren') return this.startTeleportLaser(g, enemy);
+      return this.startMelee(g);
+    }
+
+    /* ===== 侠客：疾风突刺 ===== */
+    startDashThrust(g) {
+      this.autoSkill = 'dash';
+      this.meleeT = 0.35;                          // 突刺持续；结束后才进 3s 冷却
+      this.invT = Math.max(this.invT, 0.55);        // 突刺全程无敌
+      this.meleeHit = new Set();
+      this.dashVx = 700;                            // 突刺水平速度（原1450→1050→700，下调）
+      this.dashPrevX = this.x; this.dashPrevY = this.y;
+      SFX.melee();
+      g.shake(5);
+      g.toast('🗡️ 疾风突刺！', 1.1);
+    }
+
+    /* ===== 魔法师：彩虹护盾 ===== */
+    startRainbowShield(g) {
+      this.autoSkill = 'shield';
+      this.meleeT = 2.0;                            // 护盾 2s；碎掉后才进冷却
+      this.invT = Math.max(this.invT, 2.0);
+      this.rainbowShieldT = 2.0;
+      SFX.melee();
+      g.shake(4);
+      g.toast('✨ 彩虹护盾展开！', 1.1);
+    }
+
+    /* ===== 不良少年：过肩摔 ===== */
+    startThrowEnemy(g, enemy) {
+      this.autoSkill = 'throw';
+      this.meleeT = 0.5;                            // 摔投动作持续；结束后进冷却
+      this.invT = Math.max(this.invT, 0.45);
+      if (enemy && !enemy.dead && !enemy.isBoss && !enemy.segments) {
+        const a = rand(-0.45, 0.45);
+        this.thrown = {
+          e: enemy,
+          vx: Math.cos(a) * 920,
+          vy: Math.sin(a) * 920 - 240,
+          bounces: 0
+        };
+        enemy.throwByPlayer = true;
+        enemy.spawnInvuln = 0;
+      }
+      SFX.melee();
+      g.shake(6);
+      g.toast('💥 过肩摔！', 1.1);
+    }
+
+    /* ===== 狂战士：血怒铠甲 ===== */
+    startBloodArmor(g) {
+      this.autoSkill = 'armor';
+      this.meleeT = 4.0;                            // 铠甲 4s；结束后才进冷却
+      this.bloodArmorT = 4.0;
+      // 不设 invT：子弹命中可被铠甲转化为红色剑气反弹
+      SFX.melee();
+      SFX.bossEnrage();
+      g.shake(6);
+      g.toast('🛡️ 血怒铠甲！', 1.1);
+    }
+
+    /* ===== 超级小子：瞬移巨型激光 ===== */
+    startTeleportLaser(g, enemy) {
+      this.autoSkill = 'laser';
+      this.meleeT = 5.0;                            // 激光 5s；结束后才进冷却
+      this.invT = Math.max(this.invT, 5.0);
+      this.laserT = 5.0;
+      this.laserTarget = enemy || null;
+      // 瞬移到接触敌人的斜上方（自动找空位）
+      if (enemy && !enemy.dead) {
+        const spots = [
+          { x: enemy.x - 130, y: enemy.y - 110 },
+          { x: enemy.x - 100, y: enemy.y - 140 },
+          { x: enemy.x - 150, y: enemy.y - 80 },
+          { x: enemy.x - 90, y: enemy.y - 120 }
+        ];
+        for (const s of spots) {
+          let ok = s.x >= 60 && s.x <= CFG.W - 60 && s.y > CFG.TOP_Y + 10 && s.y < CFG.GROUND_Y - 50;
+          for (const r of g.rocks) { if (r.contains(s.x, s.y, 28)) { ok = false; break; } }
+          if (ok) {
+            // 残影
+            for (let i = 0; i < 6; i++) {
+              g.particles.push(new Particle(this.x + rand(-16, 16), this.y + rand(-16, 16),
+                rand(-40, 40), rand(-40, 40), rand(0.18, 0.32), rand(5, 9), '#35e0ff'));
+            }
+            this.x = s.x; this.y = s.y;
+            for (let i = 0; i < 6; i++) {
+              g.particles.push(new Particle(this.x + rand(-16, 16), this.y + rand(-16, 16),
+                rand(-40, 40), rand(-40, 40), rand(0.18, 0.32), rand(5, 9), '#a5f3fc'));
+            }
+            break;
+          }
+        }
+      }
+      SFX.melee();
+      g.shake(8);
+      g.toast('🦸 巨型红色激光！', 1.1);
+    }
+
     /** 受伤：魔法护盾直接免疫；血怒期间照常受创但不会死亡（转化为弹幕增伤）。
      *  防护罩概率减免，伤害取整；死亡时消耗生命条数。返回 false=无敌帧未命中 */
     hurt(amount, g) {
@@ -2075,6 +2272,176 @@
       this.y = clamp(this.y, CFG.TOP_Y, gy - this.radius * 0.5);
       this.faceTilt += (clamp(this.vy / 900, -0.25, 0.25) - this.faceTilt) * Math.min(1, dt * 10);
 
+      /* ===== 角色自动技能持续效果 ===== */
+      // 侠客疾风突刺：高速前冲 + 飞叶拖尾 + 路径刀光/伤害/破障
+      if (this.autoSkill === 'dash' && this.meleeT > 0) {
+        this.dashPrevX = this.x; this.dashPrevY = this.y;
+        this.x += this.dashVx * dt;
+        // 冲出屏幕边缘 → 瞬移到屏幕左侧中间
+        if (this.x > CFG.W - 50 || this.x < 30) {
+          this.x = 90; this.y = CFG.H / 2;
+          burst(g, this.x, this.y, 20, ['#2fb37c', '#7ed46d', '#d8ffe8', '#fff'], 260, 5, 0.32);
+        }
+        // 飞叶拖尾
+        for (let i = 0; i < 2; i++) {
+          g.particles.push(new Particle(this.x - 18, this.y + rand(-12, 12),
+            rand(-70, -20), rand(-40, 40), rand(0.22, 0.4), rand(2, 4),
+            ['#2fb37c', '#7ed46d', '#a8e6a3', '#d8ffe8'][randi(0, 3)]));
+        }
+        // 路径上的敌人：造成伤害 + 随机横/竖/斜斩击特效
+        const dmg = CFG.player.meleeDmg + this.dmg * 0.5;
+        g.targets().forEach(e => {
+          if (e.dead || this.meleeHit.has(e)) return;
+          let px = e.x, py = e.y;
+          if (e.segments) { const ne = e.nearestExposed(this.x, this.y); if (!ne) return; px = ne.x; py = ne.y; }
+          if (Math.abs(py - this.y) < 70 + e.radius && px > this.x - 70 && px < this.x + 70) {
+            this.meleeHit.add(e);
+            if (e.segments) e.damageAt(px, py, dmg, g);
+            else e.takeDamage(dmg, g, { x: 460, y: rand(-120, 120) });
+            // 随机斩击特效（0 横 / 1 竖 / 2 斜）
+            const st = randi(0, 2);
+            for (let k = 0; k < 5; k++) {
+              const t = k / 4;
+              let sx, sy;
+              if (st === 0) { sx = px - 36 + t * 72; sy = py; }
+              else if (st === 1) { sx = px; sy = py - 36 + t * 72; }
+              else { sx = px - 30 + t * 60; sy = py - 30 + t * 60; }
+              g.particles.push(new Particle(sx, sy, 0, 0, rand(0.18, 0.32), rand(3, 6),
+                ['#ffffff', '#d8ffe8', '#7ed46d'][randi(0, 2)]));
+            }
+            burst(g, px, py, 8, ['#fff', '#7ed46d', '#2fb37c'], 200, 4, 0.3);
+          }
+        });
+        // 路径上的障碍物：直接摧毁
+        g.rocks.forEach(r => {
+          if (r.dead) return;
+          if (this.x > r.left - 30 && this.x < r.left + r.w + 30 &&
+              this.y > r.top - 40 && this.y < r.baseY + 20) {
+            r.destroy(g, true);
+          }
+        });
+      }
+
+      // 魔法师彩虹护盾：持续无敌，结束时碎裂喷出 4 颗白色星星（带彩虹拖尾）
+      if (this.rainbowShieldT > 0) {
+        this.rainbowShieldT = Math.max(0, this.rainbowShieldT - dt);
+        if (this.rainbowShieldT <= 0) {
+          const cols = ['#ff5252', '#ffd93b', '#35e0ff', '#a78bfa', '#4ade80'];
+          for (let i = 0; i < 4; i++) {
+            const a = rand(0, TAU);
+            g.bullets.push(new Bullet(this.x, this.y,
+              Math.cos(a) * rand(200, 380), Math.sin(a) * rand(200, 380),
+              { kind: 'star', friendly: true, dmg: Math.round(this.dmg * 1.3), r: 7, life: 1.6,
+                spinRate: 14, whiteStar: true,
+                trailCols: cols, trailLite: false }));
+          }
+          burst(g, this.x, this.y, 26, cols.concat('#fff'), 340, 6, 0.5);
+          SFX.explode(false);
+          g.shake(6);
+        }
+      }
+
+      // 狂战士血怒铠甲：倒计时
+      if (this.bloodArmorT > 0) this.bloodArmorT = Math.max(0, this.bloodArmorT - dt);
+
+      // 不良少年过肩摔：被抛出的敌人高速旋转飞行 + 反弹
+      if (this.thrown) {
+        const t = this.thrown;
+        if (t.e.dead) { this.thrown = null; }
+        else {
+          t.vy += 620 * dt;
+          t.e.x += t.vx * dt;
+          t.e.y += t.vy * dt;
+          t.e.throwSpin = (t.e.throwSpin || 0) + dt * 22;
+          // 高速旋转视觉：围绕敌人的旋转粒子环
+          for (let i = 0; i < 3; i++) {
+            const sa = t.e.throwSpin + (i * TAU / 3);
+            const sr = t.e.radius + 6;
+            g.particles.push(new Particle(
+              t.e.x + Math.cos(sa) * sr, t.e.y + Math.sin(sa) * sr,
+              Math.cos(sa) * 60, Math.sin(sa) * 60,
+              0.25, 3, ['#ff7b2e', '#ffd23b', '#fff'][i % 3]));
+          }
+          let bounced = false;
+          const eY = g.groundYAt ? g.groundYAt(t.e.x) : CFG.GROUND_Y;
+          if (t.e.x > CFG.W - t.e.radius && t.vx > 0) { t.vx = -Math.abs(t.vx) * 0.82; t.e.x = CFG.W - t.e.radius; bounced = true; }
+          if (t.e.x < t.e.radius && t.vx < 0) { t.vx = Math.abs(t.vx) * 0.82; t.e.x = t.e.radius; bounced = true; }
+          if (t.e.y > eY - t.e.radius && t.vy > 0) { t.vy = -Math.abs(t.vy) * 0.72; t.e.y = eY - t.e.radius; bounced = true; }
+          if (t.e.y < CFG.TOP_Y + t.e.radius && t.vy < 0) { t.vy = Math.abs(t.vy) * 0.82; bounced = true; }
+          if (!bounced) {
+            for (const r of g.rocks) {
+              if (r.dead) continue;
+              if (r.contains(t.e.x, t.e.y, t.e.radius * 0.5)) {
+                const cx = clamp(t.e.x, r.left, r.left + r.w);
+                const cy = clamp(t.e.y, r.top, r.baseY);
+                const nx = t.e.x - cx, ny = t.e.y - cy;
+                const nl = Math.hypot(nx, ny) || 1;
+                const dn = (t.vx * nx + t.vy * ny) / (nl * nl);
+                t.vx -= 2 * dn * nx; t.vy -= 2 * dn * ny;
+                t.vx *= 0.72; t.vy *= 0.72;
+                r.destroy(g);
+                bounced = true;
+                break;
+              }
+            }
+          }
+          if (!bounced) {
+            for (const e2 of g.targets()) {
+              if (e2 === t.e || e2.dead) continue;
+              if (e2.isBoss && (e2.state === 'enter' || e2.state === 'trans')) continue;
+              if (dist(t.e, e2) < t.e.radius + e2.radius) {
+                const a = Math.atan2(t.e.y - e2.y, t.e.x - e2.x);
+                const sp = Math.hypot(t.vx, t.vy);
+                t.vx = Math.cos(a) * sp * 0.72; t.vy = Math.sin(a) * sp * 0.72;
+                e2.takeDamage(Math.round(this.dmg * 1.4), g, { x: Math.cos(a) * 220, y: Math.sin(a) * 220 });
+                bounced = true;
+                break;
+              }
+            }
+          }
+          if (bounced) {
+            t.bounces++;
+            t.e.takeDamage(Math.round(this.dmg * 0.9), g);
+            burst(g, t.e.x, t.e.y, 9, ['#ff7b2e', '#ffd23b', '#fff'], 200, 4, 0.32);
+            SFX.hit();
+            if (t.bounces >= 4) {
+              t.e.takeDamage(99999, g);
+              t.e.throwByPlayer = false;
+              this.thrown = null;
+            }
+          }
+          if (this.thrown && (t.e.x < -120 || t.e.x > CFG.W + 120 || t.e.y > CFG.H + 120)) {
+            t.e.takeDamage(99999, g);
+            t.e.throwByPlayer = false;
+            this.thrown = null;
+          }
+        }
+      }
+
+      // 超级小子巨型红色激光：向右贯穿，驱赶 + 少量伤害
+      if (this.laserT > 0) {
+        this.laserT = Math.max(0, this.laserT - dt);
+        const now = g.time;
+        const laserW = 34;
+        const lx = this.x, ly = this.y;
+        g.targets().forEach(e => {
+          if (e.dead) return;
+          if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) return;
+          let px = e.x, py = e.y;
+          if (e.segments) { const ne = e.nearestExposed(lx, ly); if (!ne) return; px = ne.x; py = ne.y; }
+          if (px > lx - 10 && Math.abs(py - ly) < laserW + e.radius) {
+            const nextHit = this._laserCd.get(e) || 0;
+            if (now >= nextHit) {
+              this._laserCd.set(e, now + 0.18);
+              const dmg = Math.max(3, Math.round(this.dmg * 0.35));
+              if (e.segments) e.damageAt(px, py, dmg, g);
+              else e.takeDamage(dmg, g, { x: 460, y: -560 });   // 向右上方强力驱赶
+              burst(g, px, py, 3, ['#ff2a0a', '#ffd23b', '#fff'], 120, 2, 0.18);
+            }
+          }
+        });
+      }
+
       // 地面/海面危险区：贴地持续受伤（走统一受伤通道：取整 + 防护罩判定）；海水掉血量很少
       this.groundTick = (this.groundTick || 0) + dt;
       if (this.y + this.radius * 0.72 >= gy - 4) {
@@ -2121,7 +2488,7 @@
         else touch = dist(this, e) < this.radius + e.radius * 0.85;
         if (touch) {
           if (this.meleeReady) {
-            this.startMelee(g);
+            this.startAutoSkill(g, e);
           } else if (!this.isMeleeing && this.invT <= 0) {
             this.hurt(e.contactDmg * g.atkScale, g);
             const a = Math.atan2(this.y - e.y, this.x - e.x);
@@ -2348,8 +2715,106 @@
         ctx.globalAlpha = 1;
       }
 
-      // 近战爪痕：三道爪印自上而下列过前方
-      if (this.isMeleeing) {
+      /* ===== 角色自动技能特效渲染 ===== */
+      // 侠客突刺：路径刀光（白→翠绿渐变拖尾光带）
+      if (this.autoSkill === 'dash' && this.meleeT > 0) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        // 外层翠绿光晕
+        ctx.strokeStyle = 'rgba(126,212,109,0.55)';
+        ctx.lineWidth = 16;
+        ctx.beginPath(); ctx.moveTo(this.dashPrevX, this.dashPrevY); ctx.lineTo(this.x, this.y); ctx.stroke();
+        // 中层白光
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(this.dashPrevX, this.dashPrevY); ctx.lineTo(this.x, this.y); ctx.stroke();
+        ctx.restore();
+      }
+
+      // 魔法师彩虹护盾：旋转彩虹光环
+      if (this.rainbowShieldT > 0) {
+        const r = this.radius * (1.8 + Math.sin(this.wingT * 6) * 0.1);
+        const segs = 24;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.wingT * 2.2);
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
+        for (let i = 0; i < segs; i++) {
+          const a0 = (i / segs) * TAU, a1 = ((i + 1) / segs) * TAU;
+          const hue = (i / segs) * 360;
+          ctx.strokeStyle = `hsla(${hue},90%,62%,0.9)`;
+          ctx.beginPath(); ctx.arc(0, 0, r, a0, a1); ctx.stroke();
+        }
+        // 内层柔光
+        ctx.globalAlpha = 0.18;
+        const grd = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r);
+        grd.addColorStop(0, '#ffffff');
+        grd.addColorStop(1, 'rgba(167,139,250,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+
+      // 狂战士血怒铠甲：暗红倒刺铠甲虚影
+      if (this.bloodArmorT > 0) {
+        const r = this.radius * (1.55 + Math.sin(this.wingT * 9) * 0.06);
+        const p = clamp(this.bloodArmorT / 4, 0, 1);
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        // 暗红色铠甲底圈
+        ctx.globalAlpha = 0.28 + 0.2 * p;
+        ctx.fillStyle = '#5a0d0d';
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = '#a01818';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+        // 倒刺
+        const spikes = 14;
+        ctx.fillStyle = '#c41e1e';
+        ctx.globalAlpha = 0.85;
+        for (let i = 0; i < spikes; i++) {
+          const a = (i / spikes) * TAU + this.wingT * 0.8;
+          const r1 = r, r2 = r + 10 + Math.sin(this.wingT * 4 + i) * 2;
+          ctx.save();
+          ctx.rotate(a);
+          ctx.beginPath();
+          ctx.moveTo(-3, r1); ctx.lineTo(0, r2); ctx.lineTo(3, r1);
+          ctx.closePath(); ctx.fill();
+          ctx.restore();
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+
+      // 超级小子巨型红色激光：向右贯穿的粗激光束
+      if (this.laserT > 0) {
+        const lx = this.x, ly = this.y;
+        const L = CFG.W - lx + 20;
+        const pulse = 1 + Math.sin(this.wingT * 30) * 0.12;
+        const Wd = 30 * pulse;
+        ctx.save();
+        ctx.translate(lx, ly);
+        // 外红光晕
+        ctx.fillStyle = 'rgba(255,42,10,0.16)';
+        ctx.fillRect(0, -Wd * 0.9, L, Wd * 1.8);
+        // 红激光主体
+        ctx.fillStyle = 'rgba(255,42,10,0.5)';
+        ctx.fillRect(0, -Wd * 0.55, L, Wd * 1.1);
+        ctx.fillStyle = '#ff2a0a';
+        ctx.fillRect(0, -Wd * 0.32, L, Wd * 0.64);
+        // 亮橙黄芯
+        ctx.fillStyle = '#ffd23b';
+        ctx.fillRect(0, -Wd * 0.16, L, Wd * 0.32);
+        ctx.fillStyle = '#fff5d0';
+        ctx.fillRect(0, -Wd * 0.07, L, Wd * 0.14);
+        ctx.restore();
+      }
+
+      // 近战爪痕：三道爪印自上而下列过前方（仅小白爪击）
+      if (this.isMeleeing && !this.autoSkill) {
         const p = 1 - this.meleeT / CFG.player.meleeDuration;
         const range = CFG.player.meleeRange * (0.9 + this.sizeMul * 0.35);
         ctx.save();
@@ -2598,6 +3063,8 @@
     }
 
     update(dt, g) {
+      // 被不良少年摔投中：由玩家更新位置/旋转，跳过常规 AI
+      if (this.throwByPlayer) { return; }
       this.t += dt;
       this.animT += dt;
       this.stateT += dt;
@@ -5195,5 +5662,139 @@
     return s.dead ? null : s;
   }
 
-  window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, GrassDragon, DRAGON_THEMES, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, dist };
+  /**
+   * 骨龙王分裂小段（单节脱离）：detach → float → approach → attack → reposition
+   * 空中缓慢漂浮接近玩家，达安全距离停驻，连射 2 发绿火，随后横移/后退重寻距离。
+   */
+  class BoneDragonMini {
+    constructor(g, x, y) {
+      this.type = 'bonedragonmini';
+      this.isBoss = false;
+      this.dead = false;
+      this.groundUnit = false;
+      this.spawnInvuln = 0.6;
+      this.flash = 0; this.hurtT = 0;
+      this.t = rand(0, 10); this.animT = rand(0, TAU);
+      this.dotT = 0; this.dotDps = 0; this.dotType = '';
+      this.freezeT = 0;
+      const hpMul = 1 + (g.round - 1) * 0.16 + g.time * 0.0025;
+      this.maxHp = Math.round(40 * hpMul);
+      this.hp = this.maxHp;
+      this.radius = 16;
+      this.contactDmg = 12;
+      this.bulletDmg = 10;
+      this.xpValue = 2;
+      this.x = x; this.y = y;
+      this.vx = rand(-30, 30); this.vy = rand(-20, 20);
+      this.state = 'float';
+      this.stateT = 0;
+      this.safeDist = rand(180, 260);
+      this.atkT = 0;
+      this.volleys = 0;
+    }
+    update(dt, g) {
+      this.t += dt; this.animT += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.hurtT = Math.max(0, this.hurtT - dt);
+      this.spawnInvuln = Math.max(0, this.spawnInvuln - dt);
+      // 元素 DoT
+      if (this.dotT > 0) {
+        this.dotT -= dt;
+        if (this.spawnInvuln <= 0 && this.dotDps > 0) {
+          this.hp -= this.dotDps * dt; this.flash = 0.1; this.hurtT = 0.12;
+          if (this.hp <= 0) { this.die(g); return; }
+        }
+      }
+      if (this.freezeT > 0) { this.freezeT -= dt; return; }
+      const p = g.player;
+      const dx = p.x - this.x, dy = p.y - this.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const nx = dx / d, ny = dy / d;
+      if (this.state === 'float' || this.state === 'approach') {
+        // 缓慢接近至安全距离
+        const spd = 70;
+        if (d > this.safeDist) {
+          this.x += nx * spd * dt; this.y += ny * spd * dt;
+          this.state = 'approach';
+        } else {
+          this.state = 'attack'; this.stateT = 0; this.atkT = 0.3; this.volleys = 0;
+        }
+      } else if (this.state === 'attack') {
+        // 悬停微调，连射 2 发绿火
+        this.x += Math.sin(this.t * 3) * 18 * dt;
+        this.y += Math.cos(this.t * 2.4) * 14 * dt;
+        this.atkT -= dt;
+        if (this.atkT <= 0 && this.volleys < 2) {
+          this.volleys++;
+          const base = Math.atan2(dy, dx);
+          for (let i = -1; i <= 1; i++) {
+            const a = base + i * 0.18;
+            g.bullets.push(new Bullet(this.x, this.y,
+              Math.cos(a) * 320, Math.sin(a) * 320,
+              { kind: 'greenfire', r: 7, dmg: this.bulletDmg * g.atkScale, life: 4 }));
+          }
+          SFX.enemyShoot();
+          this.atkT = 0.45;
+        }
+        if (this.volleys >= 2) { this.state = 'reposition'; this.stateT = 0; }
+      } else if (this.state === 'reposition') {
+        // 横移后退，重寻攻击距离
+        const perp = Math.atan2(ny, -nx);
+        const dir = Math.sin(this.t * 2) > 0 ? 1 : -1;
+        const rx = Math.cos(perp) * dir, ry = Math.sin(perp) * dir;
+        this.x += (rx - nx * 0.4) * 110 * dt;
+        this.y += (ry - ny * 0.4) * 110 * dt;
+        if (this.stateT > 1.2) { this.state = 'approach'; this.stateT = 0; }
+      }
+      // 边界钳制
+      this.x = clamp(this.x, 30, CFG.W - 30);
+      this.y = clamp(this.y, 60, CFG.GROUND_Y - 40);
+    }
+    takeDamage(dmg, g, kb) {
+      if (this.dead || this.spawnInvuln > 0) return;
+      this.hp -= dmg; this.flash = 0.1; this.hurtT = 0.12;
+      if (kb) { this.x += kb.x * 0.02; this.y += kb.y * 0.02; }
+      burst(g, this.x, this.y, 2, ['#fff', '#4ade80'], 120, 3, 0.18);
+      SFX.hit();
+      if (this.hp <= 0) this.die(g);
+    }
+    die(g) {
+      if (this.dead) return;
+      this.dead = true;
+      g.kills++; g.score += 15;
+      g.addRage(CFG.ultimate.rageNormal);
+      burst(g, this.x, this.y, 14, ['#d8d3c2', '#4ade80', '#e8e4d8', '#fff'], 220, 5, 0.5);
+      SFX.explode(false); g.shake(2);
+      if (Math.random() < 0.5) g.gems.push(new Gem(this.x, this.y, 2));
+    }
+    render(ctx) {
+      const r = this.radius;
+      // 骨节：边→椎骨→髓腔+肋骨
+      ctx.fillStyle = '#8f8a78';
+      ctx.beginPath(); ctx.arc(this.x, this.y, r + 1.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#d8d3c2';
+      ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#b5ae9a';
+      ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#b5ae9a'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(this.x - r * 0.28, this.y - r * 0.15); ctx.lineTo(this.x - r * 0.9, this.y + r * 0.5);
+      ctx.moveTo(this.x + r * 0.28, this.y - r * 0.15); ctx.lineTo(this.x + r * 0.9, this.y + r * 0.5);
+      ctx.stroke();
+      // 脊刺
+      ctx.fillStyle = '#c8c2ae';
+      ctx.beginPath();
+      ctx.moveTo(this.x - 3, this.y - r * 0.72); ctx.lineTo(this.x + 3, this.y - r * 0.72); ctx.lineTo(this.x, this.y - r - 6);
+      ctx.closePath(); ctx.fill();
+      // 受击红染
+      if (this.hurtT > 0) {
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = `rgba(255,40,40,${clamp(this.hurtT / 0.12, 0, 1) * 0.5})`;
+        ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+  }
+
+  window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, GrassDragon, BoneDragonMini, DRAGON_THEMES, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, dist };
 })();
