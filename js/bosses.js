@@ -58,7 +58,7 @@
         this.enraged = true;
         SFX.bossEnrage();
         g.shake(10);
-        g.toast(`${this.bossName} 狂暴了！`, 1.8);
+        g.toast(`${this.bossName} 狂暴了！`, 1.8, 'lt');
         burst(g, this.x, this.y, 24, ['#ff3b3b', '#ffd23b', '#fff'], 280, 6, 0.6, 130);
       }
       if (this.hp <= 0) { this.hp = 0; this.die(g); }
@@ -146,7 +146,7 @@
         this.flameBreathT -= dt;
         if (this.flameBreathT <= 0) {
           this.flameDur = 2.4;
-          g.toast('🔥 火猪王喷火！', 1.5); g.shake(5);
+          g.toast('🔥 火猪王喷火！', 1.5, 'lt'); g.shake(5);
         }
       }
     }
@@ -675,7 +675,7 @@
         g.shake(14);
         g.flashT = 0.3; g.flashColor = '#fff';
         SFX.phaseRise();   // 阶段转换：电流上行 + 爆点
-        g.toast('飞天狗王解体了！', 1.8);
+        g.toast('飞天狗王解体了！', 1.8, 'lt');
         burst(g, this.x, this.y, 30, ['#8d96a3', '#e8eef7', '#fff'], 300, 6, 0.7, 100);
       }
       // 悬停
@@ -922,7 +922,7 @@
         this.flameBreathT -= dt;
         if (this.flameBreathT <= 0) {
           this.flameDur = 2.8;   // 持续喷火 2.8 秒
-          g.toast('🔥 野鸡王喷火！', 1.5);
+          g.toast('🔥 野鸡王喷火！', 1.5, 'lt');
           g.shake(5);
         }
       }
@@ -994,12 +994,12 @@
             this.rotA = Math.atan2(p.y - this.y, p.x - this.x);
             this.spinFire = 0.25;
             SFX.phaseRise();   // 危险招式提示：旋转扫射蓄力
-            g.toast(`祖国人开始旋转扫射！（${this.spinUsed}/3）`, 1.8);
+            g.toast(`祖国人开始旋转扫射！（${this.spinUsed}/3）`, 1.8, 'lt');
           } else if (roll < 0.42) {
             // 瞬移激光：原地闪烁后瞬移至玩家下方，朝上释放垂直激光
             this.state = 'teleOut'; this.stateT = 0;
             SFX.bossCharge();
-            g.toast('祖国人瞬移了！', 1.4);
+            g.toast('祖国人瞬移了！', 1.4, 'lt');
           } else if (roll < 0.66) {
             // 落地冲刺
             this.state = 'land'; this.stateT = 0;
@@ -1071,7 +1071,7 @@
           burst(g, this.x, this.y, 18, ['#ff3b3b', '#ffd23b', '#fff'], 260, 5, 0.5, 120);
           g.shake(6);
           SFX.phaseRise();
-          g.toast('小心头顶！', 1.2);
+          g.toast('小心头顶！', 1.2, 'lt');
         }
       }
       else if (this.state === 'teleAim') {
@@ -1179,7 +1179,7 @@
         this.hands.forEach(h => { h.state = 'idle'; h.t = 0; });
         g.shake(16); g.flashT = 0.4; g.flashColor = '#fff';
         SFX.bossDarkTransform();   // 黑暗变身：痛苦嘶吼悲号 + 次声震动 + 能量爆裂（3秒）
-        g.toast('大王的身体碎裂了！', 2.2);
+        g.toast('大王的身体碎裂了！', 2.2, 'lt');
         burst(g, this.x, this.y, 44, ['#8d96a3', '#2b2f3a', '#fff', '#ffd23b'], 320, 7, 0.9, 150);
       }
 
@@ -1213,7 +1213,7 @@
             for (let i = 0; i < 5; i++) {
               setTimeout(() => { if (g.state === 'playing') g.spawnEnemy(i % 2 ? 'archer' : 'cannoneer'); }, 400 + i * 350);
             }
-            g.toast('大王召唤了部下！', 2);
+            g.toast('大王召唤了部下！', 2, 'lt');
           }
           this.actT -= dt;
           if (this.actT <= 0) {
@@ -1337,7 +1337,7 @@
       const wasZero = this.invulnT <= 0;
       this.invulnT = Math.min(this.invulnT + 1, 8);
       if (wasZero) {
-        g.toast('大王吸收了斧击，进入无敌状态！', 1.2);
+        g.toast('大王吸收了斧击，进入无敌状态！', 1.2, 'lt');
         SFX.phaseRise();
         burst(g, this.x, this.y, 20, ['#9fe8ff', '#fff', '#7fd0ff'], 260, 6, 0.55, -60);
       }
@@ -1458,7 +1458,7 @@
             for (let i = 0; i < 3; i++) {
               setTimeout(() => { if (g.state === 'playing') g.spawnEnemy('leigong'); }, 300 + i * 320);
             }
-            g.toast('怪客召唤了雷公小怪！', 2);
+            g.toast('怪客召唤了雷公小怪！', 2, 'lt');
             this.actT = rand(2.8, 3.6);
           }
         }
@@ -1516,7 +1516,7 @@
                 this.crossHealed = true;
                 const heal = Math.round(this.maxHp * 0.2);
                 this.hp = Math.min(this.maxHp, this.hp + heal);
-                gg.toast(`十字弹命中！怪客回复 ${heal} 点生命（20%）！`, 2);
+                gg.toast(`十字弹命中！怪客回复 ${heal} 点生命（20%）！`, 2, 'lt');
                 burst(gg, this.x, this.y, 18, ['#7CFC00', '#c8f98a', '#ffffff'], 220, 5, 0.6);
                 SFX.levelup();
               } }));
@@ -1653,7 +1653,7 @@
           if (!tg.grabbed && Lightning.distSeg(p.x, p.y, mouthX, mouthY, tipX, tipY) < 72) {
             tg.grabbed = true; tg.phase = 'back'; tg.t = 0;
             p.hurt(Math.round(8 * g.atkScale), g);
-            g.toast('被蛙哥卷住了！', 1.2);
+            g.toast('被蛙哥卷住了！', 1.2, 'lt');
             SFX.grab();
           }
           if (tg.len >= tg.max) { tg.phase = 'hold'; tg.t = 0; }
@@ -1686,7 +1686,7 @@
           this.vx = dx / d * 660; this.vy = dy / d * 660;
           this.contactDmg = Math.round(28 * g.atkScale);   // 蓄力冲撞高额伤害
           g.shake(6); SFX.charge();
-          g.toast('蛙哥猛冲！', 1.2);
+          g.toast('蛙哥猛冲！', 1.2, 'lt');
         }
       }
       else if (this.state === 'chargeAir') {
@@ -1825,10 +1825,10 @@
           }
           this.skillT = rand(3.6, 4.6);
           this.state = next;
-          if (next === 'cry') { this.waveIdx = 0; this.waveT = 0.7; g.toast('鹤鸣震荡！', 1.2); SFX.sweep(); }
+          if (next === 'cry') { this.waveIdx = 0; this.waveT = 0.7; g.toast('鹤鸣震荡！', 1.2, 'lt'); SFX.sweep(); }
           if (next === 'needles') { this.needleN = 0; this.needleT = 0.1; }
-          if (next === 'dive') { g.toast('鹤仙入天！', 1.2); }
-          if (next === 'whirl') { this.spawnWhirl(g); g.toast('旋羽领域！', 1.2); }
+          if (next === 'dive') { g.toast('鹤仙入天！', 1.2, 'lt'); }
+          if (next === 'whirl') { this.spawnWhirl(g); g.toast('旋羽领域！', 1.2, 'lt'); }
         }
       }
       else if (this.state === 'needles') {
@@ -1917,7 +1917,7 @@
         if (this.stateT > 1.1 && this.y < -10) {
           this.state = 'burial'; this.stateT = 0;
           this.fallRound = 0; this.fallT = 0.2;
-          g.toast('万羽天葬！', 1.6); SFX.sweep(); g.shake(5);
+          g.toast('万羽天葬！', 1.6, 'lt'); SFX.sweep(); g.shake(5);
         }
       }
       else if (this.state === 'burial') {
@@ -2106,11 +2106,11 @@
         this.act = 'slam';
         this.clawSeq = 0; this.clawTimer = 1.0;
         this.anchor = this.anchorFor('p1');
-        g.toast('双爪拍击！', 1.6);
+        g.toast('双爪拍击！', 1.6, 'lt');
       } else if (this.phase === 'p2') {
         this.act = 'sweepL';
         this.anchor = this.anchorFor('p2');
-        g.toast('神眼扫射！', 1.6);
+        g.toast('神眼扫射！', 1.6, 'lt');
         SFX.phaseRise();
       } else {
         this.act = 'charge'; this.wpIdx = 0;
@@ -2123,7 +2123,7 @@
         for (let i = 0; i < 8; i++) {
           this.debris.push({ ang: rand(0, TAU), rad: rand(100, 150), spd: rand(0.5, 1.1) * (i % 2 ? 1 : -1), sz: rand(5, 11) });
         }
-        g.toast(`狮王狂怒！（第 ${this.cycle} 循环）`, 2.2);
+        g.toast(`狮王狂怒！（第 ${this.cycle} 循环）`, 2.2, 'lt');
         SFX.phaseRise(); g.shake(10);
       }
     }
@@ -2158,7 +2158,7 @@
           this.hazards.length = 0;
           this.phase = 'p1'; this.state = 'trans'; this.stateT = 0;
           this.contactDmg = 26;
-          g.toast(`狮身人面像恢复了！（第 ${this.cycle} 循环）`, 2.6);
+          g.toast(`狮身人面像恢复了！（第 ${this.cycle} 循环）`, 2.6, 'lt');
           SFX.phaseRise(); g.shake(10);
           burst(g, this.x, this.y, 30, this.deathCols, 300, 7, 0.8, 130);
           for (let i = 0; i < 14; i++) {
@@ -2963,7 +2963,7 @@
       if (!this.enraged && this.hp > 0 && this.hp <= this.maxHp * 0.3) {
         this.enraged = true;
         SFX.bossEnrage(); g.shake(10);
-        g.toast(`${this.bossName} 狂暴了！`, 1.8);
+        g.toast(`${this.bossName} 狂暴了！`, 1.8, 'lt');
         burst(g, this.x, this.y, 24, ['#ff3b3b', '#ffd23b', '#fff'], 280, 6, 0.6, 130);
       }
       // 生命剩余10%：3s 锁血（仅一次），锁定在10%线
@@ -2971,7 +2971,7 @@
         this.lockHp = true; this.lockHpT = 3;
         this.hp = Math.ceil(this.maxHp * 0.1);
         SFX.bossEnrage(); g.shake(12);
-        g.toast('牛魔进入锁血状态！', 2);
+        g.toast('牛魔进入锁血状态！', 2, 'lt');
         burst(g, this.x, this.y, 28, ['#ff3b3b', '#ffd23b', '#fff'], 300, 6, 0.65, 140);
       }
       if (this.hp <= 0) { this.hp = 0; this.die(g); }
@@ -2986,12 +2986,12 @@
       this._f = {};
       this.contactDmg = 26;
       if (this.phase === 'p1') {
-        g.toast('牛角围攻！', 1.6);
+        g.toast('牛角围攻！', 1.6, 'lt');
       } else if (this.phase === 'p2') {
-        g.toast('魔牛追杀！', 1.8);
+        g.toast('魔牛追杀！', 1.8, 'lt');
         SFX.phaseRise(); g.shake(6);
       } else {
-        g.toast('魔王爆发！', 2.0);
+        g.toast('魔王爆发！', 2.0, 'lt');
         SFX.phaseRise(); g.shake(8);
         burst(g, this.x, this.y, 26, ['#ff3b3b', '#ff7b2e', '#ffd23b'], 300, 7, 0.7, 120);
       }

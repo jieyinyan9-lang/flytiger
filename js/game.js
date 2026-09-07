@@ -55,11 +55,13 @@
         menuMapBtn: document.getElementById('menu-map-btn'),
         charSel: document.getElementById('charsel'),
         charGrid: document.getElementById('char-grid'),
-        charSelTitle: document.getElementById('charsel-title')
+        charSelTitle: document.getElementById('charsel-title'),
+        standbyName: document.getElementById('standby-name')
       };
       // 按钮统一走 onClick 安全绑定：元素缺失（如浏览器缓存了旧版 HTML）时仅跳过并告警，
       // 绝不能让构造函数中断——否则 reset()/主循环不启动，背景音乐与音效会全部静默
-      this.onClick('start-btn', () => this.openCharSelect());
+      this.onClick('start-btn', () => this.start());
+      this.onClick('select-btn', () => this.openCharSelect());
       this.onClick('restart-btn', () => this.start());
       this.onClick('pause-restart-btn', () => this.start());
       this.onClick('pause-select-btn', () => this.openCharSelect(true));
@@ -81,11 +83,22 @@
         this.mapChoice = (saved === 'random' || (saved && CFG.maps.some(m => m.id === saved))) ? saved : 'random';
       } catch (e) { this.mapChoice = 'random'; }
 
-      // 出战角色：从 localStorage 恢复（默认小白）
+      // 出战角色：从 localStorage 恢复；无偏好则随机备战
       try {
         const sc = localStorage.getItem('flytiger_char');
-        this.charId = (sc && window.CHARS && window.CHARS.has(sc)) ? sc : 'xiaobai';
-      } catch (e) { this.charId = 'xiaobai'; }
+        this.charId = (sc && window.CHARS && window.CHARS.has(sc)) ? sc : null;
+      } catch (e) { this.charId = null; }
+      if (!this.charId) {
+        const order = (window.CHARS && window.CHARS.ORDER) || ['xiaobai'];
+        this.charId = order[Math.floor(Math.random() * order.length)];
+        try { localStorage.setItem('flytiger_char', this.charId); } catch (e) {}
+      }
+      // 角色状态表（id → 空闲/备战/角斗/探索大陆/执行任务）；默认仅备战角色为 ready
+      this.charStatus = {};
+      if (window.CHARS) window.CHARS.ORDER.forEach(id => { this.charStatus[id] = (id === this.charId) ? 'ready' : 'idle'; });
+      this.moodT = 0;                 // 心情刷新计时（局外每 10s 刷新一次）
+      this.ultBubble = null;          // 大招气泡 { text, t }
+      this.syncStandbyName();
       this.buildCharGrid();
 
       // 测试模式：URL 参数 ?boss=niumo 强制指定 Boss 反复出现（仅测试用，便于调试专属 Boss）
@@ -232,6 +245,9 @@
       this.fxRings = [];       // 冲击波环（障碍碎裂爆炸等）{ x,y,r,vr,t,life,col }
       this.rocks = [];
       this.toasts = [];
+      this.toastQueue = [];   // 待显示的 toast 队列（避免多条同时出现）
+      this.activeToast = null; // 当前正在显示的 toast
+      this.bossMaskAlpha = 0; // Boss 战黑红蒙版透明度（0~1）
       this.ctrlMode = this.ctrlMode || 'keyboard';   // 操作模式：'keyboard' | 'mouse'（菜单选择）
       this.loopErr = null;      // 主循环异常捕获（首帧错误堆栈）
 
@@ -262,6 +278,7 @@
       this.ultWave = null;    // 大招光波特效
       this.slashFx = null;    // 侠客大招斩击特效 { x, y, t }
       this.soundwaveT = 0;    // 不良少年声波禁锢剩余时间（敌人子弹冻结）
+      this.ultBubble = null;  // 大招口头禅气泡 { text, t }
       this.round = 1;
       this.wayPicksThisRound = 0;   // 每轮弹道类成长选择次数（上限 3）
       this.elemPicksThisRound = 0;  // 每轮元素弹道成长选择次数（上限 2）
@@ -371,36 +388,170 @@
     }
 
     /* ---------------- 角色选择 ---------------- */
-    /** 构建 30 槽位角色选择界面（前 6 个可用，其余问号预留） */
+    /** 状态轮转顺序：空闲 → 备战 → 角斗 → 探索大陆 → 执行任务 → 空闲 */
+    static CHAR_CYCLE = ['idle', 'ready', 'duel', 'explore', 'mission'];
+    statusLabel(s) {
+      return { idle: '空闲', ready: '备战', duel: '角斗', explore: '探索大陆', mission: '执行任务' }[s] || '空闲';
+    }
+    /** 大招名称 */
+    ultName(ult) {
+      return { wave: '强光波', slash: '前方大斩击', shield: '魔法护盾', soundwave: '禁锢声波', bloodrage: '血怒', lasers: '五重激光串' }[ult] || ult;
+    }
+    /** 角色参数可读串 */
+    charParams(c) {
+      // 速度：>1 更快为「+」；射速(fireMul 为射击间隔倍率)：>1 更慢为「-」
+      const spdPct = (m) => m === 1 ? '标准' : (m > 1 ? `+${Math.round((m - 1) * 100)}%` : `-${Math.round((1 - m) * 100)}%`);
+      const firePct = (m) => m === 1 ? '标准' : (m > 1 ? `-${Math.round((m - 1) * 100)}%` : `+${Math.round((1 - m) * 100)}%`);
+      let s = `速度 ${spdPct(c.speedMul)} · 伤害 ${c.dmg} · 射速 ${firePct(c.fireMul || 1)}`;
+      if (c.bounceBase) s += ` · 反弹 ${c.bounceBase}`;
+      return s + ` ｜ 大招：${this.ultName(c.ult)}`;
+    }
+    /** 构建竖排横长条角色列表（前 6 个可用，其余「尚未发现此猫咪」） */
     buildCharGrid() {
       if (!this.el.charGrid || !window.CHARS) return;
       const CH = window.CHARS;
       const grid = this.el.charGrid;
       grid.innerHTML = '';
+      this._statusBadges = {};   // id → 状态徽章 DOM
+      this._moodEls = {};         // id → 心情条 DOM
       for (let i = 0; i < CH.SLOTS; i++) {
         const id = CH.ORDER[i];
-        const card = document.createElement('div');
+        const bar = document.createElement('div');
         if (id) {
           const c = CH.get(id);
-          card.className = 'char-card' + (id === this.charId ? ' picked' : '');
-          card.innerHTML =
-            `<div class="char-thumb">${c.icon}</div>` +
-            `<div class="char-name">${c.name}</div>` +
-            `<div class="char-tag">${c.tag}</div>` +
-            `<div class="char-trait">${c.trait}</div>` +
-            `<div class="char-desc">${c.desc}</div>` +
-            `<div class="char-ult">大招：${this.ultName(c.ult)}</div>`;
-          card.addEventListener('click', () => this.chooseChar(id));
+          const st = this.charStatus[id] || 'idle';
+          bar.className = 'char-bar' + (id === this.charId ? ' picked' : '');
+          bar.dataset.id = id;
+          const avatar = document.createElement('div');
+          avatar.className = 'char-bar-avatar';
+          const im = new Image();
+          // 优先用 assets/Role/ 头像；回退到 art 主图
+          im.src = c.face || c.art;
+          im.alt = c.name;
+          // 若 CHARS.face 已预加载完成，直接用其（保证立即有图）
+          const fm = CH.face(id);
+          if (fm && fm.complete && fm.naturalWidth) { im.src = fm.src; }
+          avatar.appendChild(im);
+          const info = document.createElement('div');
+          info.className = 'char-bar-info';
+          info.innerHTML =
+            `<div class="char-bar-name">${c.name}<span class="char-bar-tag">${c.tag}</span></div>` +
+            `<div class="char-bar-intro">${c.intro || c.desc}</div>` +
+            `<div class="char-bar-params">${this.charParams(c)}</div>`;
+          const badge = document.createElement('div');
+          badge.className = 'char-status ' + st;
+          badge.textContent = this.statusLabel(st);
+          badge.title = '点击查看其它状态';
+          badge.addEventListener('click', (e) => { e.stopPropagation(); this.openStatusMenu(id, badge); });
+          const mood = document.createElement('div');
+          mood.className = 'char-mood';
+          mood.textContent = CH.randMood(id);
+          bar.appendChild(avatar);
+          bar.appendChild(info);
+          bar.appendChild(badge);
+          bar.appendChild(mood);
+          // 点框体任意位置 = 设为备战
+          bar.addEventListener('click', () => this.setStandby(id));
+          this._statusBadges[id] = badge;
+          this._moodEls[id] = mood;
         } else {
-          card.className = 'char-card locked';
-          card.innerHTML = `<div class="char-q">?</div><div class="char-name">敬请期待</div>`;
+          bar.className = 'char-bar locked char-bar-empty';
+          bar.innerHTML = `<div class="char-empty-note">尚未发现此猫咪</div>`;
         }
-        grid.appendChild(card);
+        grid.appendChild(bar);
       }
     }
-    /** 大招名称 */
-    ultName(ult) {
-      return { wave: '强光波', slash: '前方大斩击', shield: '魔法护盾', soundwave: '禁锢声波', bloodrage: '血怒', lasers: '五重激光串' }[ult] || ult;
+    /** 点击状态徽章：弹出选项菜单（角斗/探索大陆/执行任务 均提示未实装） */
+    openStatusMenu(id, anchor) {
+      // 单一实例：先关旧菜单
+      this.closeStatusMenu();
+      const menu = document.createElement('div');
+      menu.id = 'char-status-menu';
+      menu.className = 'char-status-menu';
+      const opts = [
+        { key: 'ready', label: '备战', enabled: true },
+        { key: 'duel', label: '角斗', enabled: false },
+        { key: 'explore', label: '探索大陆', enabled: false },
+        { key: 'mission', label: '执行任务', enabled: false }
+      ];
+      opts.forEach(o => {
+        const it = document.createElement('div');
+        it.className = 'char-status-item' + (o.enabled ? '' : ' disabled');
+        it.textContent = o.label;
+        it.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.closeStatusMenu();
+          if (o.key === 'ready') this.setStandby(id);
+          else this.toast('功能尚未完成，敬请期待', 2.2);
+        });
+        menu.appendChild(it);
+      });
+      // fixed 定位附加到 body，避免被 overflow 裁剪
+      const rect = anchor.getBoundingClientRect();
+      const MENU_W = 140, MENU_H = opts.length * 30 + 6;
+      // 菜单右边缘对齐徽章右边缘，向左展开
+      let left = rect.right - MENU_W;
+      if (left < 6) left = 6;
+      if (left + MENU_W > window.innerWidth - 6) left = window.innerWidth - MENU_W - 6;
+      // 下方优先，不够则上方
+      let top = rect.bottom + 4;
+      if (top + MENU_H > window.innerHeight - 6) top = rect.top - MENU_H - 4;
+      if (top < 6) top = 6;
+      menu.style.position = 'fixed';
+      menu.style.left = left + 'px';
+      menu.style.top = top + 'px';
+      document.body.appendChild(menu);
+      this._statusMenu = menu;
+      // 点外部关闭
+      setTimeout(() => {
+        const onDoc = (ev) => {
+          if (!menu.contains(ev.target)) { this.closeStatusMenu(); document.removeEventListener('click', onDoc, true); }
+        };
+        document.addEventListener('click', onDoc, true);
+      }, 0);
+    }
+    /** 关闭状态选项菜单 */
+    closeStatusMenu() {
+      if (this._statusMenu) { this._statusMenu.remove(); this._statusMenu = null; }
+    }
+    /** @deprecated 旧轮转接口，保留兼容 */
+    cycleCharStatus(id) { this.openStatusMenu(id, this._statusBadges && this._statusBadges[id]); }
+    /** 设为备战角色：叮一声 + 边框发光，其余清回空闲 */
+    setStandby(id) {
+      const CH = window.CHARS;
+      if (!CH || !CH.has(id)) return;
+      this.charId = id;
+      CH.ORDER.forEach(oid => { this.charStatus[oid] = (oid === id) ? 'ready' : 'idle'; });
+      try { localStorage.setItem('flytiger_char', id); } catch (e) {}
+      // 刷新所有徽章与选中态
+      CH.ORDER.forEach(oid => {
+        this.refreshStatusBadge(oid);
+        const bar = this.el.charGrid.querySelector(`.char-bar[data-id="${oid}"]`);
+        if (bar) bar.classList.toggle('picked', oid === id);
+      });
+      this.syncStandbyName();
+      SFX.levelup();   // 叮
+    }
+    /** 刷新单个角色状态徽章 */
+    refreshStatusBadge(id) {
+      const b = this._statusBadges && this._statusBadges[id];
+      if (!b) return;
+      const st = this.charStatus[id] || 'idle';
+      b.className = 'char-status ' + st;
+      b.textContent = this.statusLabel(st);
+    }
+    /** 同步主菜单备战角色名 */
+    syncStandbyName() {
+      const c = window.CHARS && window.CHARS.get(this.charId);
+      if (this.el.standbyName && c) this.el.standbyName.textContent = `${c.icon} ${c.name}`;
+    }
+    /** 局外每 10s 随机刷新各角色心情语录 */
+    refreshMoods() {
+      if (!window.CHARS || !this._moodEls) return;
+      window.CHARS.ORDER.forEach(id => {
+        const el = this._moodEls[id];
+        if (el) el.textContent = window.CHARS.randMood(id);
+      });
     }
     /** 打开角色选择界面（fromPause=true 表示从局内暂停返回局外） */
     openCharSelect(fromPause) {
@@ -414,6 +565,7 @@
         this.state = 'menu';
       }
       this.buildCharGrid();
+      this.moodT = 10;   // 进入选角即开始 10s 倒计时
       if (this.el.charSelTitle) {
         this.el.charSelTitle.textContent = fromPause ? '重新选择出战角色' : '选择出战角色';
       }
@@ -423,19 +575,10 @@
     /** 关闭角色选择界面（返回菜单） */
     closeCharSelect() {
       if (this.el.charSel) this.el.charSel.classList.add('hidden');
+      this.syncStandbyName();
       // 从局内暂停进入（state 已是 menu、主菜单被隐藏）时：恢复主菜单显示
       if (this.state === 'menu' && this.el.menu) this.el.menu.classList.remove('hidden');
       SFX.hit();
-    }
-    /** 点选角色：保存偏好并以该角色开局 */
-    chooseChar(id) {
-      this.charId = id;
-      try { localStorage.setItem('flytiger_char', id); } catch (e) {}
-      if (this.el.charSel) this.el.charSel.classList.add('hidden');
-      const c = window.CHARS && window.CHARS.get(id);
-      SFX.levelup();
-      this.start();
-      if (c) this.toast(`${c.icon} ${c.name} 参战！${c.trait}`, 3);
     }
 
     start() {
@@ -455,6 +598,8 @@
       this.el.bossHud.classList.add('hidden');
       this.syncBgmBtn();     // HUD 首次显示：音乐按钮文案与实际开关状态对齐
       this.toast(`${this.map.icon} ${this.map.name} · 第 1 轮战斗开始！`, 2.8);
+      const c = window.CHARS && window.CHARS.get(this.charId);
+      if (c) this.toast(`${c.icon} ${c.name} 参战！`, 2.6);
       if (this.testBoss) this.toast(`🧪 测试模式：强制 ${this.testBoss} 反复出场（B 键立即召唤）`, 3.2);
     }
 
@@ -502,7 +647,9 @@
     }
 
     shake(m) { this.shakeMag = Math.max(this.shakeMag, m); }
-    toast(text, dur) { this.toasts.push({ text, t: dur || 2, max: dur || 2 }); }
+    toast(text, dur, slot) {
+      this.toastQueue.push({ text, t: dur || 2, max: dur || 2, slot: slot || 'center' });
+    }
 
     /** 击杀积累怒气 */
     addRage(v) {
@@ -513,6 +660,9 @@
     /** 大招分发：按出战角色释放对应大招 */
     castUltimate() {
       if (this.state !== 'playing') return;
+      // 口头禅气泡：角色旁弹出，显示 3 秒
+      const cp = this.player.char && this.player.char.catchphrase;
+      if (cp) this.ultBubble = { text: cp, t: 3 };
       const ult = this.player.char ? this.player.char.ult : 'wave';
       if (ult === 'slash') return this.ultSlash();
       if (ult === 'shield') return this.ultMagicShield();
@@ -790,13 +940,13 @@
       } else {
         burst(this, this.player.x, this.player.y, 24, ['#ffd93b', '#fff', '#74e0ff'], 240, 5, 0.6);
       }
-      // 首次获得新能力时弹出提示
-      if (isNew) this.toast(u.id === 'chain' ? '⚡ 闪电子弹解锁！' : '† 防护刀刃解锁！');
-      // 元素弹道选择提示
+      // 首次获得新能力时弹出提示（右下角）
+      if (isNew) this.toast(u.id === 'chain' ? '⚡ 闪电子弹解锁！' : '† 防护刀刃解锁！', 2, 'rb');
+      // 元素弹道选择提示（右下角）
       if (['flame', 'poison', 'ice'].includes(u.id)) {
         const names = { flame: '🔥火焰', poison: '☠毒液', ice: '❄寒冰' };
         const cnt = this.player.elementWay.filter(x => x === u.id).length;
-        this.toast(`${names[u.id]}弹道 ${cnt}/3`, 1.5);
+        this.toast(`${names[u.id]}弹道 ${cnt}/3`, 1.5, 'rb');
       }
       this.state = 'playing';
       // 无冷却锁：若剩余能量仍满足门槛，下一帧会连续弹出下一次成长选择
@@ -905,9 +1055,9 @@
         if (cls.name === 'Sphinx') this.sphinxSpawned = true;   // 狮身人面像每局至多一次
         if (cls.name === 'NiuMo' && !this.niuMoGeneric) this.niuMoSpawned = true;   // 牛魔特殊期每局至多一次
       }
-      this.el.bossName.textContent = `${b.bossName}（${b.title}）`;
+      this.el.bossName.textContent = `${b.bossName}`;
       this.el.bossHud.classList.remove('hidden');
-      this.toast(`${b.bossName} 出现！`, 2);
+      this.toast(`${b.bossName} 出现！`, 2, 'lt');
       if (b.musicTheme === 'imperial') SFX.bossArmy();   // 大王登场：万军齐吼"好！好！好！" + 战鼓号角
       else SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
       this.shake(6);
@@ -931,15 +1081,13 @@
       const unlocked = Object.keys(CFG.enemies)
         .filter(t => (CFG.enemies[t].minBossKills || 0) === this.bossCount)
         .map(t => CFG.enemies[t].name);
-      let msg = `击败 ${boss.bossName}！通过第 ${this.bossCount} 轮，回复 ${heal} 生命！`;
-      if (unlocked.length) msg += `　新敌人解锁：${unlocked.join('、')}！`;
       // 怪物潮：每击败 3 个 Boss（通过第 3/6/9… 轮）触发一次，持续 30 秒，小怪数量 ×3
       const tide = this.bossCount % 3 === 0;
       if (tide) {
         this.tideT = 30;
-        msg += '　⚠ 怪物潮来袭：小怪数量 ×3！';
+        this.toast(`⚠ 怪物潮来袭：小怪数量 ×3！`, 3.6);
       }
-      this.toast(msg, (unlocked.length || tide) ? 3.6 : 2.8);
+      void unlocked;   // 解锁信息静默处理，不再弹 tips
       burst(this, this.player.x, this.player.y, 20, ['#7CFC00', '#fff', '#ffd93b'], 200, 5, 0.7);
       // 连续爆炸
       for (let i = 0; i < 6; i++) {
@@ -1211,6 +1359,11 @@
           this.updateFx(dt);   // 死亡爆炸特效继续播放
         }
         this.updateMusic();    // 场景→曲目路由（菜单/小怪/怪物潮/各类Boss）
+        // 局外选角界面：每 10s 随机刷新角色心情语录
+        if (this.state === 'menu' && this.el.charSel && !this.el.charSel.classList.contains('hidden')) {
+          this.moodT -= dt;
+          if (this.moodT <= 0) { this.moodT = 10; this.refreshMoods(); }
+        }
         this.render();
       } catch (err) {
         // 单帧异常不得冻结整个游戏：记录首个错误堆栈，后续帧照常调度
@@ -1311,9 +1464,32 @@
       // 能量满足门槛即触发选择（可连续触发，无冷却锁）
       this.tryLevelUp();
 
-      // Toast
-      this.toasts.forEach(t => t.t -= dt);
-      this.toasts = this.toasts.filter(t => t.t > 0);
+      // Toast 队列：同一时间只显示一条，结束后再显示下一条
+      if (!this.activeToast && this.toastQueue.length) {
+        this.activeToast = this.toastQueue.shift();
+      }
+      if (this.activeToast) {
+        this.activeToast.t -= dt;
+        if (this.activeToast.t <= 0) this.activeToast = null;
+      }
+      // activeToast 供渲染使用
+      this.toasts = this.activeToast ? [this.activeToast] : [];
+
+      // Boss 战黑红蒙版：Boss 正式入场后渐入（1.2s），结束后淡出（1.5s）
+      {
+        const target = this.bosses.length > 0 ? 1 : 0;
+        if (target > 0) {
+          this.bossMaskAlpha = Math.min(1, this.bossMaskAlpha + dt / 1.2);
+        } else {
+          this.bossMaskAlpha = Math.max(0, this.bossMaskAlpha - dt / 1.5);
+        }
+      }
+
+      // 大招口头禅气泡倒计时
+      if (this.ultBubble) {
+        this.ultBubble.t -= dt;
+        if (this.ultBubble.t <= 0) this.ultBubble = null;
+      }
 
       this.updateHud();
     }
@@ -2038,6 +2214,35 @@
       // 火焰山：火山口场景装饰（无碰撞）
       if (this.crater) this.renderCrater(ctx);
 
+      // Boss 战黑红蒙版：覆盖背景（障碍物/UI/小怪/tips 之上不覆盖）
+      if (this.bossMaskAlpha > 0.01) {
+        const t = performance.now() / 1000;
+        // 边缘抖动：用不规则边缘 noise 模拟"围绕抖动"
+        ctx.save();
+        ctx.globalAlpha = this.bossMaskAlpha;
+        // 主体半透明黑红蒙版
+        ctx.fillStyle = 'rgba(40, 0, 0, 0.55)';   // 淡淡的黑红色
+        ctx.fillRect(0, 0, CFG.W, CFG.H);
+        // 边缘抖动：在四边绘制噪声扰动的暗红色条带
+        ctx.fillStyle = 'rgba(120, 10, 10, 0.6)';
+        const edgeW = 24;
+        // 上下边
+        for (let x = 0; x < CFG.W; x += 8) {
+          const jT = Math.sin(t * 8 + x * 0.05) * 6 + Math.sin(t * 13 + x * 0.1) * 4;
+          const jB = Math.sin(t * 9 + x * 0.07 + 1) * 6 + Math.sin(t * 11 + x * 0.13) * 4;
+          ctx.fillRect(x, 0, 8, edgeW + jT);
+          ctx.fillRect(x, CFG.H - edgeW - jB, 8, edgeW + jB);
+        }
+        // 左右边
+        for (let y = 0; y < CFG.H; y += 8) {
+          const jL = Math.sin(t * 7 + y * 0.06) * 6 + Math.sin(t * 12 + y * 0.11) * 4;
+          const jR = Math.sin(t * 8 + y * 0.08 + 2) * 6 + Math.sin(t * 14 + y * 0.09) * 4;
+          ctx.fillRect(0, y, edgeW + jL, 8);
+          ctx.fillRect(CFG.W - edgeW - jR, y, edgeW + jR, 8);
+        }
+        ctx.restore();
+      }
+
       if (this.state !== 'menu') {
         // 山石障碍（地面层）
         this.rocks.forEach(r => r.render(ctx));
@@ -2107,19 +2312,73 @@
           ctx.restore();
           ctx.globalAlpha = 1;
         }
-        // Toast
+        // Toast（按 slot 分位置渲染）
         this.toasts.forEach(t => {
           const a = clamp(t.t / 0.5, 0, 1);
           ctx.globalAlpha = a;
           ctx.font = 'bold 26px "Microsoft YaHei", sans-serif';
-          ctx.textAlign = 'center';
+          let x, y, align;
+          if (t.slot === 'lt') {        // 左上：第 X 轮下方
+            align = 'left'; x = 14; y = 80;
+          } else if (t.slot === 'rb') { // 右下角
+            align = 'right'; x = CFG.W - 14; y = CFG.H - 18;
+          } else {                      // 中上（默认）
+            align = 'center'; x = CFG.W / 2; y = 120;
+          }
+          ctx.textAlign = align;
           ctx.fillStyle = '#000';
-          ctx.fillText(t.text, CFG.W / 2 + 2, 122);
+          ctx.fillText(t.text, x + 2, y + 2);
           ctx.fillStyle = '#ffe08a';
-          ctx.fillText(t.text, CFG.W / 2, 120);
+          ctx.fillText(t.text, x, y);
           ctx.globalAlpha = 1;
           ctx.textAlign = 'left';
         });
+        // 大招口头禅气泡（角色右侧，显示 3 秒，首末 0.3s 淡入淡出）
+        if (this.ultBubble && this.player) {
+          const ub = this.ultBubble;
+          ctx.save();
+          ctx.font = 'bold 18px "Microsoft YaHei", sans-serif';
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          const tw = ctx.measureText(ub.text).width;
+          const padX = 14, padY = 9, bh = 18 + padY * 2;
+          const bw = tw + padX * 2;
+          let a = 1;
+          if (ub.t > 2.7) a = (3 - ub.t) / 0.3;
+          else if (ub.t < 0.3) a = ub.t / 0.3;
+          ctx.globalAlpha = clamp(a, 0, 1);
+          const px = this.player.x;
+          const py = this.player.y;
+          // 气泡在角色右侧；空间不够则翻到左侧
+          let bx = px + this.player.radius + 12;
+          if (bx + bw > CFG.W - 6) bx = px - this.player.radius - 12 - bw;
+          if (bx < 6) bx = 6;
+          const by = Math.max(6, Math.min(CFG.H - bh - 6, py - bh / 2));
+          const r = 10;
+          ctx.beginPath();
+          ctx.moveTo(bx + r, by);
+          ctx.arcTo(bx + bw, by, bx + bw, by + bh, r);
+          ctx.arcTo(bx + bw, by + bh, bx, by + bh, r);
+          ctx.arcTo(bx, by + bh, bx, by, r);
+          ctx.arcTo(bx, by, bx + bw, by, r);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255,255,255,.97)';
+          ctx.fill();
+          ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+          ctx.stroke();
+          // 小尾巴指向角色（气泡左侧中点）
+          ctx.beginPath();
+          const tailY = Math.max(by + 12, Math.min(by + bh - 12, py));
+          ctx.moveTo(bx, tailY - 7);
+          ctx.lineTo(bx, tailY + 7);
+          ctx.lineTo(bx - 9, tailY);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255,255,255,.97)';
+          ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#222';
+          ctx.textAlign = 'center';
+          ctx.fillText(ub.text, bx + bw / 2, by + bh / 2 + 1);
+          ctx.restore();
+        }
       } else {
         // 菜单展示出战角色（右下角浮空，直接绘制原图）
         const cat = (Sprites.charArt && Sprites.charArt[this.charId]) || Sprites.cat;
@@ -2141,6 +2400,35 @@
           ctx.textAlign = 'center';
           ctx.fillText('未找到 assets/cat.png，请放入白猫图片', CFG.W - 260, CFG.H - 120);
           ctx.restore();
+        }
+        // 菜单左上角：备战角色头像（assets/Role/）
+        const faceImg = (Sprites.charFace && Sprites.charFace[this.charId]) || null;
+        if (faceImg && faceImg.complete && faceImg.naturalWidth) {
+          const bob2 = Math.sin(performance.now() / 420) * 4;
+          const sz = 96;
+          ctx.save();
+          ctx.imageSmoothingEnabled = true;
+          // 圆形头像底
+          ctx.beginPath(); ctx.arc(70, 70 + bob2, sz / 2 + 6, 0, TAU);
+          ctx.fillStyle = 'rgba(10,16,36,.85)'; ctx.fill();
+          ctx.lineWidth = 4; ctx.strokeStyle = '#ffd166'; ctx.stroke();
+          // 圆形剪裁绘制
+          ctx.beginPath(); ctx.arc(70, 70 + bob2, sz / 2, 0, TAU); ctx.clip();
+          const fw = faceImg.naturalWidth, fh = faceImg.naturalHeight;
+          const r = Math.max(sz / fw, sz / fh);
+          const dw = fw * r, dh = fh * r;
+          ctx.drawImage(faceImg, 70 - dw / 2, 70 - dh / 2 + bob2, dw, dh);
+          ctx.restore();
+          // 名称
+          const c = window.CHARS && window.CHARS.get(this.charId);
+          if (c) {
+            ctx.save();
+            ctx.font = 'bold 16px "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            ctx.fillStyle = '#000'; ctx.fillText(c.name, 71, 128 + bob2);
+            ctx.fillStyle = '#ffe08a'; ctx.fillText(c.name, 70, 126 + bob2);
+            ctx.restore();
+          }
         }
       }
 

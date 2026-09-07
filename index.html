@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>飞虎的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260906r60">
+<link rel="stylesheet" href="css/style.css?v=20260907r65">
 </head>
 <body>
 <div id="game-wrap">
@@ -95,7 +95,14 @@
       <div><b>轮次</b>　每击败 1 个 Boss 通过 1 轮，怪物潮与新敌人随轮次降临</div>
       <div><b>其他</b>　<kbd>P</kbd> 暂停　<kbd>M</kbd> 音效　<kbd>N</kbd> 音乐</div>
     </div>
-    <button id="start-btn" class="big-btn" type="button">▶ 开始战斗</button>
+    <div class="standby-row">
+      <span class="standby-label">🐱 备战角色</span>
+      <span id="standby-name">小白</span>
+    </div>
+    <div class="menu-btns">
+      <button id="select-btn" class="mid-btn" type="button">🐱 选择角色</button>
+      <button id="start-btn" class="big-btn" type="button">▶ 开始游戏</button>
+    </div>
   </div>
 
   <!-- 暂停 -->
@@ -123,12 +130,12 @@
 </div>
 
 <script src="js/sprites.js?v=20260907r36"></script>
-<script src="js/characters.js?v=20260907r64"></script>
+<script src="js/characters.js?v=20260907r65"></script>
 <script src="js/config.js?v=20260906r60"></script>
 <script src="js/audio.js?v=20260906r30"></script>
 <script src="js/music.js?v=20260906r53"></script>
 <script src="js/entities.js?v=20260907r70"></script>
-<script src="js/bosses.js?v=20260907r72"></script>
-<script src="js/game.js?v=20260907r71"></script>
+<script src="js/bosses.js?v=20260907r73"></script>
+<script src="js/game.js?v=20260907r79"></script>
 </body>
 </html>
