@@ -8,7 +8,7 @@
 
   const list = {
     xiaobai: {
-      id: 'xiaobai', name: '小白', art: 'assets/cat.png', icon: '🐱',
+      id: 'xiaobai', name: '小白', art: 'assets/cat.png?v=20260907', icon: '🐱',
       speedMul: 1, dmg: 10, fireMul: 1,
       kind: 'bolt', ult: 'wave',
       tag: '飞虎',

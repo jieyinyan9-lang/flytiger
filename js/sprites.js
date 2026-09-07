@@ -1074,7 +1074,7 @@
     const im = new Image();
     im.onload = () => { Sprites.cat = im; resolve(im); };
     im.onerror = () => { console.warn('[Sprites] 未找到 assets/cat.png，白猫素材缺失'); resolve(null); };
-    im.src = 'assets/cat.png';
+    im.src = 'assets/cat.png?v=20260907';
   });
 
   window.Sprites = Sprites;
