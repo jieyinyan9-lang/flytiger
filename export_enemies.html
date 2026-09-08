@@ -21,12 +21,24 @@
 <script>
   const SCALE = 8;   // 导出放大倍数（保持像素清晰）
 
-  // 需要导出的精灵：名称 -> sprite canvas
+  // 需要导出的精灵：名称 -> sprite canvas（均取游戏中实际使用的朝左版本）
   const targets = [
-    { name: '蝙蝠怪_帧A(翼上扬)', sprite: Sprites.batA },
-    { name: '蝙蝠怪_帧B(翼下压)', sprite: Sprites.batB },
-    { name: '小弓箭手', sprite: Sprites.archer },
-    { name: '炮师', sprite: Sprites.cannoneer },
+    // ── 常规小怪 ──
+    { name: '蝙蝠怪_帧A(翼上扬)', sprite: Sprites.batAL },
+    { name: '蝙蝠怪_帧B(翼下压)', sprite: Sprites.batBL },
+    { name: '咬剑鹰_帧A', sprite: Sprites.eagleAL },
+    { name: '咬剑鹰_帧B', sprite: Sprites.eagleBL },
+    { name: '恶魔_帧A', sprite: Sprites.demonAL },
+    { name: '恶魔_帧B', sprite: Sprites.demonBL },
+    { name: '雷公小怪', sprite: Sprites.leigongSmallL },
+    { name: '飞天猪', sprite: Sprites.pigL },
+    { name: '小弓箭手', sprite: Sprites.archerL },
+    { name: '炮师', sprite: Sprites.cannoneerL },
+    { name: '自爆黑骷髅', sprite: Sprites.blackSkelL },
+    { name: '超级小子', sprite: Sprites.superboyL },
+    { name: '大蝙蝠_帧A(原图)', src: 'assets/xiaoguai/dabianfu_A.png' },
+    { name: '大蝙蝠_帧B(原图)', src: 'assets/xiaoguai/dabianfu_B.png' },
+    { name: '亡灵骷髅头(骨王弹)', sprite: Sprites.skullhead },
     // ── 飞行弹幕小怪（朝左，游戏中实际使用方向）──
     { name: '刺羽鸟_帧A', sprite: Sprites.spikebirdAL },
     { name: '刺羽鸟_帧B', sprite: Sprites.spikebirdBL },
@@ -47,34 +59,48 @@
   const cards = document.getElementById('cards');
 
   targets.forEach(t => {
-    const src = t.sprite;
-    const w = src.width * SCALE, h = src.height * SCALE;
-
     const card = document.createElement('div');
     card.className = 'card';
 
     const cv = document.createElement('canvas');
-    cv.width = w; cv.height = h;
-    const ctx = cv.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(src, 0, 0, w, h);
-    card.appendChild(cv);
-
     const label = document.createElement('div');
-    label.innerHTML = `<h3>${t.name}</h3><small>${src.width}×${src.height} px → ${w}×${h}</small>`;
-    card.appendChild(label);
-
     const btn = document.createElement('button');
     btn.textContent = '下载 PNG';
+    btn.disabled = true;
     btn.onclick = () => {
       const a = document.createElement('a');
       a.download = `${t.name}.png`;
       a.href = cv.toDataURL('image/png');
       a.click();
     };
-    card.appendChild(btn);
 
+    // 将源（canvas 或 image）按倍数绘制到卡片 canvas
+    const paint = (source, scale) => {
+      const w = source.width * scale, h = source.height * scale;
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(source, 0, 0, w, h);
+      label.innerHTML = `<h3>${t.name}</h3><small>${source.width}×${source.height} px → ${w}×${h}</small>`;
+      btn.disabled = false;
+    };
+
+    card.appendChild(cv);
+    card.appendChild(label);
+    card.appendChild(btn);
     cards.appendChild(card);
+
+    if (t.src) {
+      // 外部图片资源（如大蝙蝠高清原图）：异步加载后按原尺寸绘制，不再放大
+      label.innerHTML = `<h3>${t.name}</h3><small>加载中…</small>`;
+      const img = new Image();
+      img.onload = () => paint(img, 1);
+      img.onerror = () => { label.innerHTML = `<h3>${t.name}</h3><small style="color:#f88">图片加载失败</small>`; };
+      img.src = t.src;
+    } else {
+      // 程序化像素精灵（离屏 canvas）：同步放大 SCALE 倍
+      paint(t.sprite, SCALE);
+    }
   });
 </script>
 </body>

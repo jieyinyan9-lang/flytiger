@@ -2641,8 +2641,8 @@
       // 接触检测 → 自动近战 / 受伤（草龙按露出地面的龙身节逐节判定）
       g.targets().forEach(e => {
         let touch;
-        if (e.segments) touch = e.touchesPoint(this.x, this.y, this.radius);
-        else touch = dist(this, e) < this.radius + e.radius * 0.85;
+        if (e.segments && e.touchesPoint) touch = e.touchesPoint(this.x, this.y, this.radius);
+        else touch = dist(this, e) < this.radius + (e.radius || 16) * 0.85;
         if (touch) {
           if (this.meleeReady) {
             this.startAutoSkill(g, e);
@@ -6287,23 +6287,27 @@
    * 空中缓慢漂浮接近玩家，达安全距离停驻，连射 2 发绿火，随后横移/后退重寻距离。
    */
   class BoneDragonMini {
-    constructor(g, x, y) {
+    constructor(g, x, y, opts) {
+      opts = opts || {};
       this.type = 'bonedragonmini';
       this.isBoss = false;
       this.dead = false;
       this.groundUnit = false;
+      this.pack = !!opts.pack;              // 骨龙组：3 节合体的强化小段
       this.spawnInvuln = 0.6;
       this.flash = 0; this.hurtT = 0;
       this.t = rand(0, 10); this.animT = rand(0, TAU);
       this.dotT = 0; this.dotDps = 0; this.dotType = '';
       this.freezeT = 0;
       const hpMul = 1 + (g.round - 1) * 0.16 + g.time * 0.0025;
-      this.maxHp = Math.round(40 * hpMul);
+      const baseHp = Math.round(40 * hpMul);
+      this.maxHp = opts.hp || baseHp;       // 骨龙组血量 = 3 节血量之和
       this.hp = this.maxHp;
-      this.radius = 16;
-      this.contactDmg = 12;
-      this.bulletDmg = 10;
-      this.xpValue = 2;
+      const sc = opts.scale || 1;
+      this.radius = Math.round(16 * sc);    // 骨龙组体型更大
+      this.contactDmg = this.pack ? 16 : 12;
+      this.bulletDmg = this.pack ? 12 : 10;
+      this.xpValue = this.pack ? 5 : 2;
       this.x = x; this.y = y;
       this.vx = rand(-30, 30); this.vy = rand(-20, 20);
       this.state = 'float';
@@ -6380,11 +6384,12 @@
     die(g) {
       if (this.dead) return;
       this.dead = true;
-      g.kills++; g.score += 15;
+      g.kills++; g.score += this.pack ? 40 : 15;
       g.addRage(CFG.ultimate.rageNormal);
-      burst(g, this.x, this.y, 14, ['#d8d3c2', '#4ade80', '#e8e4d8', '#fff'], 220, 5, 0.5);
-      SFX.explode(false); g.shake(2);
-      if (Math.random() < 0.5) g.gems.push(new Gem(this.x, this.y, 2));
+      burst(g, this.x, this.y, this.pack ? 22 : 14, ['#d8d3c2', '#4ade80', '#e8e4d8', '#fff'], 220, 5, 0.5);
+      SFX.explode(false); g.shake(this.pack ? 4 : 2);
+      const gemN = this.pack ? 3 : (Math.random() < 0.5 ? 1 : 0);
+      for (let i = 0; i < gemN; i++) g.gems.push(new Gem(this.x + rand(-24, 24), this.y + rand(-24, 24), 2));
     }
     render(ctx) {
       const r = this.radius;

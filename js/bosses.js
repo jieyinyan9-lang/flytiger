@@ -2032,6 +2032,7 @@
       this.bossName = '狮身人面像';
       this.title = '沙漠远古守护神';
       // 单循环血条：目标 40s 交战（整场 3 循环），按玩家 DPS 动态缩放
+      // 注意：40 为独立于 CFG.boss.fightTime 的史诗战常量（仅 ord 1-2 沙漠限定出场），调整全局曲线时无需跟随
       this.maxHp = Math.round(g.playerDps() * 40 * g.bossHpMul());
       this.hp = this.maxHp;
       this.cycle = 1;            // 循环 1-3
@@ -2157,11 +2158,11 @@
       this.pendingSlam = null;
       if (this.phase === 'p1') {
         this.phase = 'p2'; this.state = 'trans'; this.stateT = 0;
-        if (skipped) this.hp = this.maxHp;
+        if (skipped) this.hp = this.maxHp * 0.6;
         SFX.phaseRise(); g.shake(6);
       } else if (this.phase === 'p2') {
         this.phase = 'p3'; this.state = 'trans'; this.stateT = 0;
-        if (skipped) this.hp = this.maxHp;
+        if (skipped) this.hp = this.maxHp * 0.6;
         SFX.phaseRise(); g.shake(8);
       } else {
         // P3 结束
@@ -2904,8 +2905,8 @@
       super(g, 26, 78);
       this.bossName = '牛魔';
       this.title = '草原魔王';
-      // 血量：当前轮数普通 Boss 的 2 倍
-      this.maxHp = Math.round(g.playerDps() * CFG.boss.fightTime(g.bossSpawned + 1) * g.bossHpMul() * 2);
+      // 血量：当前轮数普通 Boss 的 2 倍，有效交战时长封顶 80s（通用期后期不再失控）
+      this.maxHp = Math.round(g.playerDps() * Math.min(CFG.boss.fightTime(g.bossSpawned + 1) * 2, 80) * g.bossHpMul());
       this.hp = this.maxHp;
       this.phase = 'p1';
       this.act = null;          // move / chargeWind / chargeAir / c4 / finale
@@ -3930,21 +3931,18 @@
           g.score += 5;
           this.booms.push({ x: bs.x, y: bs.y, t: 0.05 + k * 0.012 });
         }
-        // 分裂瞬间立即召唤 2 条小骨龙（在头部碎裂位置出现，保证玩家可见；
-        // 同时从龙身链最末端移除同数量的节，使血条总和与脱离数一致）
-        const aliveMini = g.enemies.filter(e => e.type === 'bonedragonmini' && !e.dead).length;
-        let spawned = 0;
-        for (let m = 0; m < 2; m++) {
-          if (aliveMini + spawned >= this.maxMini) break;
-          const mx = s.x + (m === 0 ? -36 : 36), my = s.y + 28;
-          g.enemies.push(new BoneDragonMini(g, mx, my));
-          burst(g, mx, my, 8, this.deathCols, 160, 4, 0.3, 90);
-          spawned++;
+        // 剩余存活节：每 3 节合为 1 个「骨龙组」（血量合并为 1 只强化小段），分批出场
+        this.packs = [];
+        for (let k = explodeCount; k < alive.length; k += 3) {
+          let hp = 0;
+          for (let m = k; m < Math.min(k + 3, alive.length); m++) {
+            const bs = this.segments[alive[m]];
+            hp += Math.max(1, bs.hp);
+            bs.dead = true;   // 转化为骨龙组，从龙身链移除
+          }
+          this.packs.push({ hp, maxHp: hp, state: 'pending', enemy: null });
         }
-        for (let k = alive.length - 1; k >= explodeCount && spawned > 0; k--) {
-          this.segments[alive[k]].dead = true;
-          spawned--;
-        }
+        this.packSpawnCd = 0.4;   // 首批骨龙组稍迟涌出
         g.shake(8);
         this.recalcHp(g);
       } else {
@@ -3961,18 +3959,52 @@
         // 完全体：血条显示头部血量（第一条血）
         this.maxHp = this.headMaxHp;
         this.hp = Math.max(0, this.segments[0].hp);
-      } else {
-        // 崩解态：血条显示所有存活骨龙段血量总和
+      } else if (this.packs) {
+        // 崩解态：血条 = 所有骨龙组（含未出场）血量总和
         let hp = 0, max = 0;
-        for (let i = 1; i < this.segments.length; i++) {
-          const s = this.segments[i];
-          if (s.dead) continue;
-          hp += Math.max(0, s.hp); max += s.maxHp;
+        for (const pk of this.packs) {
+          max += pk.maxHp;
+          if (pk.state === 'active' && pk.enemy) hp += Math.max(0, pk.enemy.hp);
+          else if (pk.state === 'pending') hp += pk.hp;
         }
         this.maxHp = max || 1;
         this.hp = hp;
         if (hp <= 0 && !this.dead) this.die(g);
+      } else {
+        this.maxHp = 1; this.hp = 0;
+        if (!this.dead) this.die(g);
       }
+    }
+
+    /** 崩解态：骨龙组分批出场（场上同时最多 4 组，死一组补一组），全灭 Boss 才死亡 */
+    updatePacks(dt, g) {
+      this.packSpawnCd = Math.max(0, (this.packSpawnCd || 0) - dt);
+      // 同步在场骨龙组状态
+      let active = 0;
+      for (const pk of this.packs) {
+        if (pk.state === 'active') {
+          if (!pk.enemy || pk.enemy.dead) pk.state = 'dead';
+          else active++;
+        }
+      }
+      // 场上不足 4 组时，从碎裂点涌出补充（有短暂间隔，避免同帧刷屏）
+      const MAXC = 4;
+      if (this.packSpawnCd <= 0) {
+        let spawned = 0;
+        for (const pk of this.packs) {
+          if (active >= MAXC) break;
+          if (pk.state !== 'pending') continue;
+          const sx = clamp(this.x + rand(-80, 80), 70, CFG.W - 70);
+          const sy = clamp(this.y + rand(-50, 40), 90, CFG.GROUND_Y - 50);
+          const mini = new BoneDragonMini(g, sx, sy, { hp: pk.hp, scale: 1.3, pack: true });
+          g.enemies.push(mini);
+          pk.enemy = mini; pk.state = 'active';
+          burst(g, sx, sy, 10, this.deathCols, 180, 5, 0.4, 110);
+          active++; spawned++;
+        }
+        if (spawned > 0) this.packSpawnCd = 0.8;
+      }
+      this.recalcHp(g);
     }
 
     /* ---------- AI ---------- */
@@ -4011,7 +4043,7 @@
       if (this.freezeT > 0) { this.freezeT -= dt; this.advanceTrail(); this.updateSegments(); return; }
       const prevY = this.y;
       if (this.headAlive) this.updateMain(dt, g);
-      else this.updateBody(dt, g);
+      else this.updatePacks(dt, g);
       // 钻地 / 出土跨界特效
       if ((prevY >= CFG.GROUND_Y) !== (this.y >= CFG.GROUND_Y)) {
         if (this.y >= CFG.GROUND_Y) { burst(g, this.x, CFG.GROUND_Y, 14, this.deathCols, 220, 5, 0.5, 120); g.shake(2); }
@@ -4141,31 +4173,6 @@
         }
       }
       this.hx = Math.cos(this.ha); this.hy = Math.sin(this.ha);
-    }
-    /** 头部碎裂后：身体链缓慢向玩家移动（首节为领队），供玩家逐节击破 */
-    updateBody(dt, g) {
-      // 找第一个存活节作为领队
-      let lead = -1;
-      for (let i = 0; i < this.segments.length; i++) if (!this.segments[i].dead) { lead = i; break; }
-      if (lead < 0) { this.die(g); return; }
-      const p = g.player;
-      const dx = p.x - this.x, dy = p.y - this.y;
-      const d = Math.hypot(dx, dy) || 1;
-      // 缓慢朝玩家移动，保持龙身在屏幕内
-      const sp = 110;
-      this.x += (dx / d) * sp * dt;
-      this.y += (dy / d) * sp * dt;
-      // 到玩家附近时侧向漂移，避免重叠
-      if (d < 120) {
-        const perp = Math.atan2(dy, -dx);
-        this.x += Math.cos(perp + Math.sin(this.t * 2) * 0.5) * 40 * dt;
-        this.y += Math.sin(perp + Math.sin(this.t * 2) * 0.5) * 40 * dt;
-      }
-      if (this.x < this.xL + 40) this.x = this.xL + 40;
-      if (this.x > this.xR - 40) this.x = this.xR - 40;
-      if (this.y < 80) this.y = 80;
-      if (this.y > CFG.GROUND_Y - 40) this.y = CFG.GROUND_Y - 40;
-      this.hx = dx / d; this.hy = dy / d;
     }
 
     /* ---------- 渲染 ---------- */
