@@ -69,6 +69,8 @@
   }
 
   function burst(g, x, y, n, colors, speed, size, life, grav) {
+    // 全局粒子兜底：场景粒子过多时削减本次数量，防止特效爆炸帧卡顿
+    if (g.particles.length > 500) n = Math.max(1, Math.floor(n * 0.3));
     for (let i = 0; i < n; i++) {
       const a = rand(0, TAU), sp = rand(speed * 0.3, speed);
       g.particles.push(new Particle(
@@ -208,13 +210,14 @@
       this.bscale = opts.bscale || 1;          // 弹体缩放（大型导弹等）
       this.invuln = opts.invuln || 0;          // 发射后无敌时间（期间我方子弹/旋转剑无法命中）
       this.element = opts.element || '';       // 元素属性：'flame'/'poison'/'ice'（友方弹专用）
+      this.color = opts.color || '';           // 自定义弹体颜色（敌方 orb 等）
       this.sineWave = opts.sine || null;       // S 形弹道：{ amp, freq, phase }（飞刀线性 S 走向）
       this.fireTrail = !!opts.fireTrail;       // 火焰弹：飞行时喷射火焰粒子拖尾 + 火焰分层渲染
       this.trailCols = opts.trailCols || null; // 自定义拖尾粒子配色（紫焰苹果等），设置后即启用拖尾
       /* —— 角色专属弹种扩展 —— */
       this.glv = opts.glv || 0;                // 角色子弹样式阶段（0-3）
       this.gmax = !!opts.gmax;                 // 最终形态
-      this.dropX = opts.dropX || 0;            // 飞抵该 x 后开始受重力下落（侠客飞刀/狂战士盾牌）
+      this.dropX = opts.dropX || 0;            // 飞抵该 x 后开始受重力下落（侠客飞刀/战狂盾牌）
       this.dropGrav = opts.dropGrav || 0;
       this.bouncesLeft = opts.bouncesLeft || 0;   // 剩余反弹次数（烟头/锯齿盾/最终激光）
       this.noDieOnHit = !!opts.noDieOnHit;     // 命中敌人后不消失（反弹类）
@@ -222,14 +225,18 @@
       this.burnOnHit = !!opts.burnOnHit;       // 命中点燃（持续燃烧）
       this.groundSlam = !!opts.groundSlam;     // 触地震伤地下龙类
       this.splitN = opts.splitN || 0;          // 死亡分裂数量（法师星星）
-      this.edgeBounce = !!opts.edgeBounce;     // 屏幕边缘反弹（超级小子最终激光）
+      this.edgeBounce = !!opts.edgeBounce;     // 屏幕边缘反弹（超猫最终激光）
       this.len = opts.len || 0;                // 矩形激光块长度（最终形态长至屏右）
       this.bossDmgRatio = opts.bossDmgRatio || 0;   // 对 Boss 按最大生命百分比造成伤害
       this.ultraKill = !!opts.ultraKill;       // 秒杀小怪（含地下龙类）
       this.onHitEnemy = opts.onHitEnemy || null;    // 命中敌人回调（反弹逻辑）
-      this.target = opts.target || null;       // 追踪目标（超级小子激光串）
+      this.target = opts.target || null;       // 追踪目标（超猫激光串）
       this.trailLite = !!opts.trailLite;       // 轻量化拖尾（角色最终形态：少而小的粒子，避免遮挡战场）
       this.whiteStar = !!opts.whiteStar;       // 法师护盾碎星：纯白色五角星
+      /* —— 飞行弹幕小怪能量弹（纯亮矢量样式 + 能量光带拖尾） —— */
+      this.eb = opts.eb || '';                 // 能量弹样式：leaf/eyeball/flame/spikeball/whiteorb/diamond/cone
+      this.ebTrail = opts.ebTrail || 0;        // 拖尾强度：0 无（弱）/ 1 微弱（中）/ 2 清晰（强）
+      this.ebPts = null;                       // 拖尾轨迹点（{x,y}[]）
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -274,7 +281,7 @@
       this.splitDone = true;
       for (let i = 0; i < this.splitN; i++) {
         const a = -Math.PI + (Math.PI / Math.max(1, this.splitN - 1)) * i + rand(-0.12, 0.12);
-        const sp = 300;
+        const sp = 100;   // 分裂小星速度（随基础弹速同步降低 3 倍，原 300）
         g.bullets.push(new Bullet(this.x, this.y,
           Math.cos(a) * sp, Math.sin(a) * sp - 60, {
             kind: 'star', friendly: true,
@@ -311,7 +318,7 @@
         this.orbit = null;
       }
       if (this.grav) { this.vy += this.grav * dt; }
-      // 角色弹种（侠客飞刀/狂战士盾牌）：飞抵屏幕右侧 90%（dropX）后开始受重力下落
+      // 角色弹种（侠客飞刀/战狂盾牌）：飞抵屏幕右侧 90%（dropX）后开始受重力下落
       if (this.dropGrav && this.x >= this.dropX) {
         this.vy += this.dropGrav * dt;
         this.angle = Math.atan2(this.vy, this.vx);
@@ -325,7 +332,7 @@
         this.vx = Math.cos(a) * spd; this.vy = Math.sin(a) * spd;
         this.angle = a;
       }
-      // 追踪导弹 / 漂浮弹 / 超级小子激光串：按转向速率缓慢修正朝向目标（默认玩家）
+      // 追踪导弹 / 漂浮弹 / 超猫激光串：按转向速率缓慢修正朝向目标（默认玩家）
       if (this.homing && !this.neutralized) {
         let p = this.target ? (this.target.dead ? this.pickRetarget(g) : this.target) : g.player;
         if (p) {
@@ -543,6 +550,13 @@
         }
       }
       this.x += this.vx * dt; this.y += this.vy * dt;
+      // 飞行弹幕小怪能量弹：记录拖尾轨迹点（中强微弱/高强清晰），含 S 形弹道实际轨迹
+      if (this.eb && this.ebTrail > 0 && !this.neutralized) {
+        if (!this.ebPts) this.ebPts = [];
+        this.ebPts.push({ x: this.x, y: this.y });
+        const maxPts = this.ebTrail >= 2 ? 12 : 7;
+        if (this.ebPts.length > maxPts) this.ebPts.shift();
+      }
       // 怪客红苹果：受重力下坠，触地向上弹起一段距离，二次触地碎裂
       if (this.kind === 'apple' && !this.neutralized && !this.dead) {
         const gy = CFG.GROUND_Y - this.r * 0.7;
@@ -562,7 +576,7 @@
       // —— 角色专属弹种行为（友方） ——
       if (this.friendly && !this.dead && !this.neutralized) {
         const gy = g.groundYAt ? g.groundYAt(this.x) : CFG.GROUND_Y;
-        // 超级小子最终激光：屏幕上缘 / 地面反弹（每次反弹速度减半，且反射角大幅偏折）
+        // 超猫最终激光：屏幕上缘 / 地面反弹（每次反弹速度减半，且反射角大幅偏折）
         if (this.edgeBounce && this.bouncesLeft > 0) {
           const deflect = () => {
             // 反射后速度减半、伤害减半，并随机偏转 ±0.9 rad（≈±51°），反弹角度更夸张
@@ -622,8 +636,151 @@
         this._renderBody(ctx);
       }
     }
+    /** 飞行弹幕小怪能量弹：纯亮矢量弹体 + 按强度分层的能量光带拖尾 */
+    renderEnergy(ctx) {
+      const r = this.r, x = this.x, y = this.y, t = this.t;
+      const baseAlpha = ctx.globalAlpha;
+      const ang = Math.atan2(this.vy, this.vx);
+      const TRAIL_COL = { flame: '#ff9a3c', spikeball: '#e6eeff', whiteorb: '#ffffff', diamond: '#c078ff', cone: '#ffd84d' };
+
+      // ── 能量拖尾：沿飞行轨迹的渐细渐隐光带（中强微弱 / 高强清晰）──
+      const pts = this.ebPts;
+      if (pts && pts.length > 1 && this.ebTrail > 0) {
+        const strong = this.ebTrail >= 2;
+        const maxW = strong ? r * 1.7 : r * 0.85;
+        const maxA = strong ? 0.6 : 0.22;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.strokeStyle = TRAIL_COL[this.eb] || '#ffffff';
+        for (let i = 1; i < pts.length; i++) {
+          const f = i / pts.length;          // 0=尾端 1=弹体端
+          ctx.globalAlpha = baseAlpha * maxA * f;
+          ctx.lineWidth = Math.max(0.6, maxW * f);
+          ctx.beginPath();
+          ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
+          ctx.lineTo(pts[i].x, pts[i].y);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = baseAlpha;
+      }
+
+      switch (this.eb) {
+        /* 刺羽鸟：叶片形状绿色（沿飞行方向尖叶 + 亮叶轴） */
+        case 'leaf': {
+          ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+          ctx.shadowColor = 'rgba(64,255,96,0.9)'; ctx.shadowBlur = 9;
+          ctx.fillStyle = '#1f9e3a';
+          ctx.beginPath(); ctx.moveTo(-r * 1.25, 0);
+          ctx.quadraticCurveTo(0, -r * 1.15, r * 1.55, 0);
+          ctx.quadraticCurveTo(0, r * 1.15, -r * 1.25, 0); ctx.fill();
+          ctx.fillStyle = '#46e067';
+          ctx.beginPath(); ctx.moveTo(-r * 0.95, 0);
+          ctx.quadraticCurveTo(0, -r * 0.85, r * 1.3, 0);
+          ctx.quadraticCurveTo(0, r * 0.85, -r * 0.95, 0); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = '#eaffef'; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.moveTo(-r * 0.8, 0); ctx.lineTo(r * 1.15, 0); ctx.stroke();
+          ctx.restore();
+          break;
+        }
+        /* 魔眼飞虫：圆形红色眼珠（红虹膜 + 黑瞳孔 + 高光） */
+        case 'eyeball': {
+          ctx.shadowColor = 'rgba(255,40,40,0.95)'; ctx.shadowBlur = 11;
+          ctx.fillStyle = '#7a0d0d';
+          ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#ff2424';
+          ctx.beginPath(); ctx.arc(x, y, r * 0.8, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#ff5a5a';
+          ctx.beginPath(); ctx.arc(x, y, r * 0.56, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#160000';
+          ctx.beginPath(); ctx.arc(x, y, r * 0.34, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(x - r * 0.22, y - r * 0.24, r * 0.17, 0, TAU); ctx.fill();
+          break;
+        }
+        /* 魔石甲虫：火焰圆形（红→橙→金→白芯，跳动膨胀） */
+        case 'flame': {
+          const f = 1 + Math.sin(t * 16) * 0.12;
+          const rr = r * f;
+          ctx.shadowColor = 'rgba(255,90,20,0.95)'; ctx.shadowBlur = 12;
+          ctx.fillStyle = '#ff3b1e'; ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#ff7b2e'; ctx.beginPath(); ctx.arc(x, y, rr * 0.78, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#ffb43b'; ctx.beginPath(); ctx.arc(x, y, rr * 0.52, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#ffd23b'; ctx.beginPath(); ctx.arc(x, y, rr * 0.34, 0, TAU); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#fff7da'; ctx.beginPath(); ctx.arc(x, y, rr * 0.16, 0, TAU); ctx.fill();
+          break;
+        }
+        /* 浮空魔花：高亮尖刺圆（旋转白色尖刺 + 白亮核心） */
+        case 'spikeball': {
+          ctx.save(); ctx.translate(x, y);
+          ctx.shadowColor = 'rgba(235,242,255,0.95)'; ctx.shadowBlur = 12;
+          ctx.fillStyle = '#ffffff';
+          ctx.save(); ctx.rotate(this.spin * 0.5);
+          for (let i = 0; i < 10; i++) {
+            const a0 = (TAU / 10) * i;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(a0 - 0.13) * r * 0.92, Math.sin(a0 - 0.13) * r * 0.92);
+            ctx.lineTo(Math.cos(a0) * r * 1.7, Math.sin(a0) * r * 1.7);
+            ctx.lineTo(Math.cos(a0 + 0.13) * r * 0.92, Math.sin(a0 + 0.13) * r * 0.92);
+            ctx.closePath(); ctx.fill();
+          }
+          ctx.restore();
+          ctx.fillStyle = '#dce7ff'; ctx.beginPath(); ctx.arc(0, 0, r * 0.98, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, TAU); ctx.fill();
+          ctx.restore();
+          break;
+        }
+        /* 风暴飞鱼：高亮白色圆形（冰蓝外晕 → 纯白核心） */
+        case 'whiteorb': {
+          ctx.shadowColor = 'rgba(190,222,255,0.95)'; ctx.shadowBlur = 15;
+          ctx.fillStyle = '#bcd4ff'; ctx.beginPath(); ctx.arc(x, y, r * 1.02, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#eef4ff'; ctx.beginPath(); ctx.arc(x, y, r * 0.76, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, TAU); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, y, r * 0.22, 0, TAU); ctx.fill();
+          break;
+        }
+        /* 双头飞蛇：高亮紫色菱形（旋转棱面宝石 + 高光面） */
+        case 'diamond': {
+          ctx.save(); ctx.translate(x, y); ctx.rotate(this.spin);
+          ctx.shadowColor = 'rgba(176,102,255,0.95)'; ctx.shadowBlur = 12;
+          ctx.fillStyle = '#5b179e';
+          ctx.beginPath(); ctx.moveTo(0, -r * 1.4); ctx.lineTo(r * 1.1, 0); ctx.lineTo(0, r * 1.4); ctx.lineTo(-r * 1.1, 0); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#a855f7';
+          ctx.beginPath(); ctx.moveTo(0, -r * 1.08); ctx.lineTo(r * 0.84, 0); ctx.lineTo(0, r * 1.08); ctx.lineTo(-r * 0.84, 0); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#c98bff';
+          ctx.beginPath(); ctx.moveTo(0, -r * 1.08); ctx.lineTo(r * 0.84, 0); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#8e3fd6';
+          ctx.beginPath(); ctx.moveTo(0, r * 1.08); ctx.lineTo(r * 0.84, 0); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#f2e6ff';
+          ctx.beginPath(); ctx.moveTo(0, -r * 1.0); ctx.lineTo(r * 0.3, -r * 0.25); ctx.lineTo(0, -r * 0.12); ctx.lineTo(-r * 0.3, -r * 0.25); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          break;
+        }
+        /* 预言猫头鹰：亮黄色锥形（沿飞行方向飞镖锥 + 亮锥尖） */
+        case 'cone': {
+          ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+          ctx.shadowColor = 'rgba(255,200,30,0.95)'; ctx.shadowBlur = 10;
+          ctx.fillStyle = '#a97600';
+          ctx.beginPath(); ctx.moveTo(r * 1.55, 0); ctx.lineTo(-r * 1.05, -r * 0.98); ctx.lineTo(-r * 0.5, 0); ctx.lineTo(-r * 1.05, r * 0.98); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#ffd23b';
+          ctx.beginPath(); ctx.moveTo(r * 1.38, 0); ctx.lineTo(-r * 0.88, -r * 0.8); ctx.lineTo(-r * 0.42, 0); ctx.lineTo(-r * 0.88, r * 0.8); ctx.closePath(); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#fff4c2';
+          ctx.beginPath(); ctx.moveTo(r * 1.38, 0); ctx.lineTo(r * 0.28, -r * 0.3); ctx.lineTo(r * 0.28, r * 0.3); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          break;
+        }
+      }
+      ctx.globalAlpha = baseAlpha;
+    }
     _renderBody(ctx) {
       const k = this.kind;
+      /* —— 飞行弹幕小怪能量弹（纯亮矢量弹体 + 能量光带拖尾） —— */
+      if (this.eb) { this.renderEnergy(ctx); return; }
       /* —— 角色专属弹种渲染 —— */
       if (k === 'knife' && this.friendly) {
         // 侠客飞刀：4 阶成长（小刀→匕首→宽刃→翠绿大剑），剑尖朝飞行方向
@@ -690,7 +847,7 @@
         return;
       }
       if (k === 'butt') {
-        // 不良少年烟头：白身橙红燃头；最终形态烈焰火把（木柄 + 大火苗）
+        // 浪客烟头：白身橙红燃头；最终形态烈焰火把（木柄 + 大火苗）
         const a = Math.atan2(this.vy, this.vx);
         const big = 1 + this.glv * 0.22;
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
@@ -722,7 +879,7 @@
         return;
       }
       if (k === 'shieldSaw') {
-        // 狂战士锯齿盾牌：灰甲圆盾锯齿旋转；最终形态巨大战斧（双刃斧头旋转劈飞）
+        // 战狂锯齿盾牌：灰甲圆盾锯齿旋转；最终形态巨大战斧（双刃斧头旋转劈飞）
         const big = 1 + this.glv * 0.2;
         if (this.gmax) {
           ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.spin);
@@ -766,7 +923,7 @@
         return;
       }
       if (k === 'lblock') {
-        // 超级小子矩形激光块：青蓝发光矩形沿飞行方向；最终形态长至屏右的粗激光束
+        // 超猫矩形激光块：青蓝发光矩形沿飞行方向；最终形态长至屏右的粗激光束
         const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
         const pulse = 1 + Math.sin(this.t * 30) * 0.14;
         if (this.gmax && this.len > 0) {
@@ -790,7 +947,7 @@
         return;
       }
       if (k === 'ultlaser') {
-        // 超级小子大招激光串：亮青白粗光束 + 强光晕 + 前端亮头
+        // 超猫大招激光串：亮青白粗光束 + 强光晕 + 前端亮头
         const a = Math.atan2(this.vy, this.vx);
         const pulse = 1 + Math.sin(this.t * 26) * 0.16;
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
@@ -817,7 +974,7 @@
         return;
       }
       if (k === 'bloodSpike') {
-        // 狂战士血怒铠甲反弹尖刺：长菱形（沿飞行方向拉长），血色；拖尾由 trailCols 提供
+        // 战狂血怒铠甲反弹尖刺：长菱形（沿飞行方向拉长），血色；拖尾由 trailCols 提供
         const r = this.r;
         const ang = Math.atan2(this.vy, this.vx);
         const len = r * 2.6;    // 长半轴（沿飞行方向）
@@ -1872,7 +2029,7 @@
       this.charBulletLv = 0;                          // 角色子弹成长（0-3，第 4 阶为最终形态）
       this.bounceMax = cdef.bounceBase || 0;          // 反弹类弹种的基础反弹次数
       this.magicShieldT = 0;                          // 法师魔法护盾剩余时间
-      this.bloodRageT = 0;                            // 狂战士血怒剩余时间
+      this.bloodRageT = 0;                            // 战狂血怒剩余时间
       this.rageBoost = 0;                             // 血怒期间累计受到的伤害（转化为弹幕增伤）
       this.bulletCount = 1;
       this.bulletSpeedMul = 1;
@@ -1925,9 +2082,9 @@
       this.dashVx = 0;                // 侠客突刺水平速度
       this.dashPrevX = this.x; this.dashPrevY = this.y;
       this.rainbowShieldT = 0;        // 法师彩虹护盾剩余时间
-      this.thrown = null;             // 不良少年：被摔投的敌人 { e, vx, vy, bounces }
-      this.bloodArmorT = 0;           // 狂战士血铠剩余时间
-      this.laserT = 0;                // 超级小子激光剩余时间
+      this.thrown = null;             // 浪客：被摔投的敌人 { e, vx, vy, bounces }
+      this.bloodArmorT = 0;           // 战狂血铠剩余时间
+      this.laserT = 0;                // 超猫激光剩余时间
       this.laserTarget = null;        // 激光锁定的目标敌人
       this._laserCd = new Map();      // 激光对单体伤害节流（敌人 → 下次可命中时间）
     }
@@ -2098,7 +2255,7 @@
       g.toast('✨ 彩虹护盾展开！', 1.1);
     }
 
-    /* ===== 不良少年：过肩摔 ===== */
+    /* ===== 浪客：过肩摔 ===== */
     startThrowEnemy(g, enemy) {
       this.autoSkill = 'throw';
       this.meleeT = 0.5;                            // 摔投动作持续；结束后进冷却
@@ -2119,7 +2276,7 @@
       g.toast('💥 过肩摔！', 1.1);
     }
 
-    /* ===== 狂战士：血怒铠甲 ===== */
+    /* ===== 战狂：血怒铠甲 ===== */
     startBloodArmor(g) {
       this.autoSkill = 'armor';
       this.meleeT = 4.0;                            // 铠甲 4s；结束后才进冷却
@@ -2131,7 +2288,7 @@
       g.toast('🛡️ 血怒铠甲！', 1.1);
     }
 
-    /* ===== 超级小子：瞬移巨型激光 ===== */
+    /* ===== 超猫：瞬移巨型激光 ===== */
     startTeleportLaser(g, enemy) {
       this.autoSkill = 'laser';
       this.meleeT = 5.0;                            // 激光 5s；结束后才进冷却
@@ -2341,10 +2498,10 @@
         }
       }
 
-      // 狂战士血怒铠甲：倒计时
+      // 战狂血怒铠甲：倒计时
       if (this.bloodArmorT > 0) this.bloodArmorT = Math.max(0, this.bloodArmorT - dt);
 
-      // 不良少年过肩摔：被抛出的敌人高速旋转飞行 + 反弹
+      // 浪客过肩摔：被抛出的敌人高速旋转飞行 + 反弹
       if (this.thrown) {
         const t = this.thrown;
         if (t.e.dead) { this.thrown = null; }
@@ -2418,7 +2575,7 @@
         }
       }
 
-      // 超级小子巨型红色激光：向右贯穿，驱赶 + 少量伤害
+      // 超猫巨型红色激光：向右贯穿，驱赶 + 少量伤害
       if (this.laserT > 0) {
         this.laserT = Math.max(0, this.laserT - dt);
         const now = g.time;
@@ -2490,7 +2647,8 @@
           if (this.meleeReady) {
             this.startAutoSkill(g, e);
           } else if (!this.isMeleeing && this.invT <= 0) {
-            this.hurt(e.contactDmg * g.atkScale, g);
+            const dmg = (e.contactDamageAt ? e.contactDamageAt(this.x, this.y) : e.contactDmg);
+            this.hurt(dmg * g.atkScale, g);
             const a = Math.atan2(this.y - e.y, this.x - e.x);
             this.x += Math.cos(a) * 22; this.y += Math.sin(a) * 22;
           }
@@ -2540,7 +2698,7 @@
         });
       }
       if (kind === 'butt') {
-        // 不良少年烟头：直射，命中敌人/障碍随机方向反弹（燃点持续燃烧），触地震伤地下龙
+        // 浪客烟头：直射，命中敌人/障碍随机方向反弹（燃点持续燃烧），触地震伤地下龙
         return new Bullet(x, y, vx, vy, {
           kind: 'butt', friendly: true, dmg,
           r: (5 + slv * 2) * bscale, glv, gmax,
@@ -2553,7 +2711,7 @@
         });
       }
       if (kind === 'shieldSaw') {
-        // 狂战士锯齿盾牌：抛射线（初射角上抬，越过屏幕 40% 后下落），命中敌人/障碍反弹
+        // 战狂锯齿盾牌：抛射线（初射角上抬，越过屏幕 40% 后下落），命中敌人/障碍反弹
         return new Bullet(x, y, vx, vy, {
           kind: 'shieldSaw', friendly: true, dmg,
           r: (7 + slv * 2.4) * bscale, glv, gmax,
@@ -2566,7 +2724,7 @@
         });
       }
       if (kind === 'lblock') {
-        // 超级小子矩形激光块：直射；最高形态长至屏右的粗激光（不间断贯穿，直贯屏右飞出，不反弹）
+        // 超猫矩形激光块：直射；最高形态长至屏右的粗激光（不间断贯穿，直贯屏右飞出，不反弹）
         const opts = {
           kind: 'lblock', friendly: true, dmg,
           r: (5 + slv * 2) * bscale, glv, gmax,
@@ -2700,7 +2858,7 @@
         ctx.restore();
         ctx.globalAlpha = 1;
       }
-      // 狂战士血怒：红色脉动光环（增伤幅度越大越亮）
+      // 战狂血怒：红色脉动光环（增伤幅度越大越亮）
       if (this.bloodRageT > 0) {
         const p = clamp(this.rageBoost / (this.maxHp * 0.5), 0, 1);
         const r = this.radius * (1.5 + Math.sin(this.wingT * 11) * 0.14);
@@ -2757,7 +2915,7 @@
         ctx.globalAlpha = 1;
       }
 
-      // 狂战士血怒铠甲：暗红倒刺铠甲虚影
+      // 战狂血怒铠甲：暗红倒刺铠甲虚影
       if (this.bloodArmorT > 0) {
         const r = this.radius * (1.55 + Math.sin(this.wingT * 9) * 0.06);
         const p = clamp(this.bloodArmorT / 4, 0, 1);
@@ -2789,7 +2947,7 @@
         ctx.globalAlpha = 1;
       }
 
-      // 超级小子巨型红色激光：向右贯穿的粗激光束
+      // 超猫巨型红色激光：向右贯穿的粗激光束
       if (this.laserT > 0) {
         const lx = this.x, ly = this.y;
         const L = CFG.W - lx + 20;
@@ -2984,6 +3142,56 @@
         this.invCycleT = 4;        // 阶段倒计时（每 4s 切换）
         this.spawnInvuln = 4;      // 首个无敌期 4s
       }
+
+      // 刺羽鸟：悬停抖动散射羽毛
+      if (type === 'spikebird') {
+        this.state = 'hover';
+        this.atkT = rand(2.0, 3.2);
+        this.spawnInvuln = 1.5;
+      }
+      // 魔眼飞虫：锁定玩家位置后发射魔法弹
+      if (type === 'eyefly') {
+        this.state = 'hover';
+        this.atkT = rand(1.6, 2.6);
+        this.lockT = 0;       // 锁定倒计时（>0 时正在锁定）
+        this.lockX = 0; this.lockY = 0;
+        this.spawnInvuln = 1.5;
+      }
+      // 魔石甲虫：蓄力后发射高速魔法矛
+      if (type === 'stonebeetle') {
+        this.state = 'hover';
+        this.atkT = rand(2.8, 4.0);
+        this.chargeT = 0;     // 蓄力倒计时
+        this.spawnInvuln = 2;
+      }
+      // 浮空魔花：花瓣打开后释放环形火球弹幕
+      if (type === 'floatflower') {
+        this.state = 'hover';
+        this.atkT = rand(3.0, 4.2);
+        this.openT = 0;       // 花瓣张开倒计时
+        this.spawnInvuln = 2;
+      }
+      // 风暴飞鱼：吐出沿 S 形路线飞行的风暴弹
+      if (type === 'stormfish') {
+        this.state = 'hover';
+        this.atkT = rand(2.4, 3.4);
+        this.spawnInvuln = 1.8;
+      }
+      // 双头飞蛇：两个蛇头向不同方向连续射击形成交叉弹幕
+      if (type === 'twinsnake') {
+        this.state = 'hover';
+        this.atkT = rand(2.2, 3.0);
+        this.headT = 0;        // 连射节奏计时
+        this.spawnInvuln = 2.5;
+      }
+      // 预言猫头鹰：逐次发射魔法羽毛（连续自机狙）
+      if (type === 'owl') {
+        this.state = 'hover';
+        this.atkT = rand(1.6, 2.4);
+        this.featherCd = 0;    // 每发羽毛间隔
+        this.featherSeq = 0;   // 连射剩余发数
+        this.spawnInvuln = 2.5;
+      }
     }
 
     /** 自爆骷髅：接触玩家引爆（无能量掉落，纯爆炸伤害） */
@@ -3043,7 +3251,14 @@
         skull: ['#e8eef7', '#9aa7bb', '#7fe7ff', '#ff3b5c'],
         cannoneer: ['#5a6678', '#2c3545', '#ffd23b', '#fff'],
         superboy: ['#2f6fd0', '#e0453a', '#ffd23b', '#fff'],
-        bigbat: ['#4a3566', '#2b1f3d', '#ff5d73', '#fff']
+        bigbat: ['#4a3566', '#2b1f3d', '#ff5d73', '#fff'],
+        spikebird: ['#8aa94f', '#5a6e3a', '#ffd23b', '#fff'],
+        eyefly: ['#6b3fa0', '#b574ff', '#ffe066', '#fff'],
+        stonebeetle: ['#5a5a6e', '#35e0ff', '#7ff5ff', '#fff'],
+        floatflower: ['#c83a6a', '#ffd23b', '#ff5d8f', '#fff'],
+        stormfish: ['#2f8fc9', '#7fd4ff', '#ffd23b', '#fff'],
+        twinsnake: ['#5a8a3a', '#8ac85a', '#e0453a', '#ffd23b'],
+        owl: ['#a0784a', '#d4a86a', '#b0e8ff', '#ffd23b']
       }[this.type] || ['#fff', '#aaa'];
     }
 
@@ -3063,7 +3278,7 @@
     }
 
     update(dt, g) {
-      // 被不良少年摔投中：由玩家更新位置/旋转，跳过常规 AI
+      // 被浪客摔投中：由玩家更新位置/旋转，跳过常规 AI
       if (this.throwByPlayer) { return; }
       this.t += dt;
       this.animT += dt;
@@ -3107,7 +3322,8 @@
         return;
       }
 
-      // 击退衰减
+      // 击退衰减（悬停类敌人将垂直击退转移到 baseY，避免被 this.y=baseY+osc 覆盖）
+      if (this.baseY !== undefined) this.baseY += this.kbY * dt;
       this.x += this.kbX * dt; this.y += this.kbY * dt;
       this.kbX *= 0.86; this.kbY *= 0.86;
 
@@ -3124,6 +3340,13 @@
         case 'skeleton': this.aiSkeleton(dt, g, p); break;
         case 'superboy': this.aiSuperboy(dt, g, p); break;
         case 'bigbat': this.aiBigBat(dt, g, p); break;
+        case 'spikebird': this.aiSpikeBird(dt, g, p); break;
+        case 'eyefly': this.aiEyeFly(dt, g, p); break;
+        case 'stonebeetle': this.aiStoneBeetle(dt, g, p); break;
+        case 'floatflower': this.aiFloatFlower(dt, g, p); break;
+        case 'stormfish': this.aiStormFish(dt, g, p); break;
+        case 'twinsnake': this.aiTwinSnake(dt, g, p); break;
+        case 'owl': this.aiOwl(dt, g, p); break;
       }
       // 飞离屏幕清理
       if (this.x < -80 || this.y > CFG.H + 100 || this.y < -160) this.dead = true;
@@ -3465,6 +3688,211 @@
       SFX.enemyShoot();
     }
 
+    /* 刺羽鸟：保持中距悬停，周期抖动身体向周围散射羽毛弹 */
+    aiSpikeBird(dt, g, p) {
+      const sp = this.speedMul * 115;
+      const wantX = p.x + 260;
+      if (this.x > wantX + 30) this.x -= sp * dt;
+      else if (this.x < wantX - 60) this.x += sp * 0.5 * dt;
+      this.baseY += (clamp(p.y - 10, CFG.TOP_Y + 40, CFG.GROUND_Y - 100) - this.baseY) * dt * 0.8;
+      this.y = this.baseY + Math.sin(this.t * 4) * 22;
+      this.atkT -= dt;
+      if (this.atkT <= 0 && this.x < CFG.W - 30) {
+        this.atkT = rand(2.6, 3.6);
+        const n = 10;
+        const dmg = this.bulletDmg * g.atkScale;
+        for (let i = 0; i < n; i++) {
+          const a = (TAU / n) * i + rand(-0.08, 0.08);
+          g.bullets.push(new Bullet(this.x, this.y,
+            Math.cos(a) * 170, Math.sin(a) * 170,
+            { kind: 'orb', r: 6, dmg, dmgScale: g.atkScale, life: 5, eb: 'leaf' }));
+        }
+        SFX.flyerShoot('leaf');
+      }
+    }
+
+    /* 魔眼飞虫：悬停游弋，短暂锁定玩家位置后朝锁定点发射魔法弹 */
+    aiEyeFly(dt, g, p) {
+      const sp = this.speedMul * 135;
+      const wantX = p.x + 280;
+      if (this.x > wantX + 30) this.x -= sp * dt;
+      else if (this.x < wantX - 60) this.x += sp * 0.5 * dt;
+      this.baseY += (clamp(p.y - 20, CFG.TOP_Y + 40, CFG.GROUND_Y - 100) - this.baseY) * dt * 0.9;
+      this.y = this.baseY + Math.sin(this.t * 5) * 16;
+      if (this.x > CFG.W - 30) return;
+      if (this.lockT > 0) {
+        // 锁定中：记录玩家位置，不发射
+        this.lockT -= dt;
+        this.lockX = p.x; this.lockY = p.y;
+        if (this.lockT <= 0) {
+          const a = Math.atan2(this.lockY - this.y, this.lockX - this.x);
+          const dmg = this.bulletDmg * g.atkScale;
+          g.bullets.push(new Bullet(this.x - 8, this.y,
+            Math.cos(a) * 280, Math.sin(a) * 280,
+            { kind: 'orb', r: 7, dmg, dmgScale: g.atkScale, life: 5, eb: 'eyeball' }));
+          SFX.flyerShoot('eyeball');
+        }
+      } else {
+        this.atkT -= dt;
+        if (this.atkT <= 0) {
+          this.atkT = rand(2.2, 3.0);
+          this.lockT = 0.6;   // 锁定 0.6s 后发射
+        }
+      }
+    }
+
+    /* 魔石甲虫：保持距离，蓄力（水晶发光）后发射高速魔法矛 */
+    aiStoneBeetle(dt, g, p) {
+      const sp = this.speedMul * 95;
+      const wantX = p.x + 340;
+      if (this.x > wantX + 30) this.x -= sp * dt;
+      else if (this.x < wantX - 60) this.x += sp * 0.5 * dt;
+      this.baseY += (clamp(p.y - 30, CFG.TOP_Y + 50, CFG.GROUND_Y - 120) - this.baseY) * dt * 0.7;
+      this.y = this.baseY + Math.sin(this.t * 2.2) * 18;
+      if (this.x > CFG.W - 40) return;
+      if (this.chargeT > 0) {
+        this.chargeT -= dt;
+        if (this.chargeT <= 0) {
+          const a = Math.atan2(p.y - this.y, p.x - this.x);
+          const dmg = this.bulletDmg * g.atkScale;
+          // 高速魔法矛：弹速极快
+          g.bullets.push(new Bullet(this.x - 14, this.y,
+            Math.cos(a) * 560, Math.sin(a) * 560,
+            { kind: 'orb', r: 7, dmg, dmgScale: g.atkScale, life: 4, eb: 'flame', ebTrail: 1 }));
+          SFX.flyerShoot('flame');
+        }
+      } else {
+        this.atkT -= dt;
+        if (this.atkT <= 0) {
+          this.atkT = rand(3.2, 4.4);
+          this.chargeT = 0.9;    // 蓄力 0.9s
+        }
+      }
+    }
+
+    /* 浮空魔花：悬停，花瓣张开蓄力后向四周释放环形火球弹幕 */
+    aiFloatFlower(dt, g, p) {
+      const sp = this.speedMul * 70;
+      const wantX = p.x + 300;
+      if (this.x > wantX + 30) this.x -= sp * dt;
+      else if (this.x < wantX - 60) this.x += sp * 0.5 * dt;
+      this.baseY += (clamp(p.y - 40, CFG.TOP_Y + 60, CFG.GROUND_Y - 140) - this.baseY) * dt * 0.6;
+      this.y = this.baseY + Math.sin(this.t * 1.8) * 14;
+      if (this.x > CFG.W - 40) return;
+      if (this.openT > 0) {
+        this.openT -= dt;
+        if (this.openT <= 0) {
+          const n = 12;
+          const dmg = this.bulletDmg * g.atkScale;
+          for (let i = 0; i < n; i++) {
+            const a = (TAU / n) * i;
+            g.bullets.push(new Bullet(this.x, this.y,
+              Math.cos(a) * 150, Math.sin(a) * 150,
+              { kind: 'orb', r: 6, dmg, dmgScale: g.atkScale, life: 5, eb: 'spikeball', ebTrail: 1 }));
+          }
+          SFX.flyerShoot('spikeball');
+        }
+      } else {
+        this.atkT -= dt;
+        if (this.atkT <= 0) {
+          this.atkT = rand(3.4, 4.6);
+          this.openT = 0.8;     // 花瓣张开 0.8s
+        }
+      }
+    }
+
+    /* 风暴飞鱼：悬停，吐出沿 S 形/波浪路线飞行的风暴弹 */
+    aiStormFish(dt, g, p) {
+      const sp = this.speedMul * 105;
+      const wantX = p.x + 290;
+      if (this.x > wantX + 30) this.x -= sp * dt;
+      else if (this.x < wantX - 60) this.x += sp * 0.5 * dt;
+      this.baseY += (clamp(p.y - 20, CFG.TOP_Y + 50, CFG.GROUND_Y - 110) - this.baseY) * dt * 0.8;
+      this.y = this.baseY + Math.sin(this.t * 3) * 16;
+      this.atkT -= dt;
+      if (this.atkT <= 0 && this.x < CFG.W - 30) {
+        this.atkT = rand(2.6, 3.6);
+        const base = Math.atan2(p.y - this.y, p.x - this.x);
+        const dmg = this.bulletDmg * g.atkScale;
+        // 3 发波浪风暴弹，带 S 形轨迹
+        for (let i = -1; i <= 1; i++) {
+          const a = base + i * 0.22;
+          g.bullets.push(new Bullet(this.x - 10, this.y,
+            Math.cos(a) * 260, Math.sin(a) * 260,
+            { kind: 'orb', r: 6, dmg, dmgScale: g.atkScale, life: 5, eb: 'whiteorb', ebTrail: 1,
+              sine: { amp: 0.45, freq: 8, phase: i * 1.2 } }));
+        }
+        SFX.flyerShoot('whiteorb');
+      }
+    }
+
+    /* 双头飞蛇：悬停，两端蛇头交替向不同方向连续射击，形成交叉弹幕 */
+    aiTwinSnake(dt, g, p) {
+      const sp = this.speedMul * 82;
+      const wantX = p.x + 320;
+      if (this.x > wantX + 30) this.x -= sp * dt;
+      else if (this.x < wantX - 60) this.x += sp * 0.5 * dt;
+      this.baseY += (clamp(p.y - 30, CFG.TOP_Y + 60, CFG.GROUND_Y - 130) - this.baseY) * dt * 0.7;
+      this.y = this.baseY + Math.sin(this.t * 2) * 18;
+      if (this.x > CFG.W - 40) return;
+      this.atkT -= dt;
+      if (this.atkT <= 0) {
+        this.atkT = rand(2.4, 3.2);
+        this.headT = 0;        // 开始一轮连射
+        this.headBurst = 4;    // 每轮连射 4 对
+      }
+      if (this.headBurst > 0) {
+        this.headT -= dt;
+        if (this.headT <= 0) {
+          this.headT = 0.22;
+          this.headBurst--;
+          const dmg = this.bulletDmg * g.atkScale;
+          // 左头：朝左上方偏玩家方向
+          const aL = Math.atan2(p.y - this.y - 10, p.x - this.x - 20);
+          // 右头：朝右下方偏玩家方向
+          const aR = Math.atan2(p.y - this.y + 10, p.x - this.x + 20);
+          g.bullets.push(new Bullet(this.x - 20, this.y,
+            Math.cos(aL) * 240, Math.sin(aL) * 240,
+            { kind: 'orb', r: 6, dmg, dmgScale: g.atkScale, life: 5, eb: 'diamond', ebTrail: 2 }));
+          g.bullets.push(new Bullet(this.x + 20, this.y,
+            Math.cos(aR) * 240, Math.sin(aR) * 240,
+            { kind: 'orb', r: 6, dmg, dmgScale: g.atkScale, life: 5, eb: 'diamond', ebTrail: 2 }));
+          SFX.flyerShoot('diamond');
+        }
+      }
+    }
+
+    /* 预言猫头鹰：悬停，连续观察玩家位置并逐次发射魔法羽毛（连续自机狙） */
+    aiOwl(dt, g, p) {
+      const sp = this.speedMul * 78;
+      const wantX = p.x + 300;
+      if (this.x > wantX + 30) this.x -= sp * dt;
+      else if (this.x < wantX - 60) this.x += sp * 0.5 * dt;
+      this.baseY += (clamp(p.y - 40, CFG.TOP_Y + 60, CFG.GROUND_Y - 140) - this.baseY) * dt * 0.7;
+      this.y = this.baseY + Math.sin(this.t * 1.6) * 12;
+      if (this.x > CFG.W - 40) return;
+      if (this.featherSeq > 0) {
+        this.featherCd -= dt;
+        if (this.featherCd <= 0) {
+          this.featherCd = 0.32;     // 每发间隔 0.32s
+          this.featherSeq--;
+          const a = Math.atan2(p.y - this.y, p.x - this.x);
+          const dmg = this.bulletDmg * g.atkScale;
+          g.bullets.push(new Bullet(this.x - 12, this.y,
+            Math.cos(a) * 320, Math.sin(a) * 320,
+            { kind: 'orb', r: 6, dmg, dmgScale: g.atkScale, life: 4.5, eb: 'cone', ebTrail: 2 }));
+          SFX.flyerShoot('cone');
+        }
+      } else {
+        this.atkT -= dt;
+        if (this.atkT <= 0) {
+          this.atkT = rand(2.6, 3.6);
+          this.featherSeq = 5;      // 一轮连射 5 发
+          this.featherCd = 0;
+        }
+      }
+    }
+
     /* 渲染 */
     render(ctx) {
       const flip = this.flash > 0;
@@ -3497,8 +3925,8 @@
           break;
         }
         case 'leigong':
-          // leigong.png 152×160 与 Boss 共用，缩放 0.275 → 显示约 42×44（与旧像素精灵 2.2 倍尺寸一致）
-          drawSprite(ctx, Sprites.leigongL, this.x, this.y + Math.sin(t * 2) * 3, 0.275, 0.275, 0, this.flash);
+          // 雷公小怪：还原旧版 19×20 像素点阵，缩放 2.2 → 显示约 42×44（Boss 雷公巨兽仍用 leigong.png 重绘图）
+          drawSprite(ctx, Sprites.leigongSmallL, this.x, this.y + Math.sin(t * 2) * 3, 2.2, 2.2, 0, this.flash);
           break;
         case 'pig':
           // 火猪血量与体积 ×3（缩放 2.1 → 3.2）
@@ -3543,6 +3971,61 @@
           const spr = Math.floor(t * 9) % 2 === 0 ? Sprites.bigbatA : Sprites.bigbatB;
           // dabianfu_A/B.png 为 352×240（旧 44×30 精灵的 8 倍），缩放 0.425 = 3.4/8，保持与旧版一致的显示尺寸
           drawSprite(ctx, spr, this.x, this.y + Math.sin(t * 3) * 4, 0.425, 0.425, Math.sin(t * 1.8) * 0.06, this.flash);
+          break;
+        }
+        case 'spikebird': {
+          const shake = (this.atkT < 0.6) ? Math.sin(t * 40) * 2 : 0;
+          const spr = Math.floor(t * 10) % 2 === 0 ? Sprites.spikebirdAL : Sprites.spikebirdBL;
+          drawSprite(ctx, spr, this.x + shake, this.y, 2.4, 2.4, Math.sin(t * 2) * 0.06, this.flash);
+          break;
+        }
+        case 'eyefly': {
+          const spr = Math.floor(t * 14) % 2 === 0 ? Sprites.eyeflyAL : Sprites.eyeflyBL;
+          drawSprite(ctx, spr, this.x, this.y, 2.4, 2.4, 0, this.flash);
+          // 锁定中：眼睛变红 + 锁定标记
+          if (this.lockT > 0) {
+            ctx.strokeStyle = `rgba(255,60,60,${0.5 + Math.sin(t * 20) * 0.3})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(this.lockX, this.lockY, 14, 0, TAU); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(this.lockX - 20, this.lockY); ctx.lineTo(this.lockX - 8, this.lockY); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(this.lockX + 8, this.lockY); ctx.lineTo(this.lockX + 20, this.lockY); ctx.stroke();
+          }
+          break;
+        }
+        case 'stonebeetle': {
+          const spr = Math.floor(t * 6) % 2 === 0 ? Sprites.stonebeetleAL : Sprites.stonebeetleBL;
+          drawSprite(ctx, spr, this.x, this.y, 2.6, 2.6, Math.sin(t * 1.5) * 0.04, this.flash);
+          // 蓄力中：胸口水晶发光
+          if (this.chargeT > 0) {
+            const k = 1 - this.chargeT / 0.9;
+            ctx.fillStyle = `rgba(53,224,255,${0.3 + k * 0.5})`;
+            ctx.beginPath(); ctx.arc(this.x, this.y - 2, 8 + k * 6, 0, TAU); ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(this.x, this.y - 2, 3 + k * 2, 0, TAU); ctx.fill();
+          }
+          break;
+        }
+        case 'floatflower': {
+          // 花瓣张开阶段用开瓣帧
+          const opening = this.openT > 0;
+          const spr = opening ? Sprites.floatflowerBL : Sprites.floatflowerAL;
+          const pulse = opening ? 1 + Math.sin(t * 18) * 0.06 : 1;
+          drawSprite(ctx, spr, this.x, this.y, 2.4 * pulse, 2.4 * pulse, 0, this.flash);
+          break;
+        }
+        case 'stormfish': {
+          const spr = Math.floor(t * 11) % 2 === 0 ? Sprites.stormfishAL : Sprites.stormfishBL;
+          drawSprite(ctx, spr, this.x, this.y, 2.6, 2.6, Math.sin(t * 2.5) * 0.05, this.flash);
+          break;
+        }
+        case 'twinsnake': {
+          const spr = Math.floor(t * 5) % 2 === 0 ? Sprites.twinsnakeAL : Sprites.twinsnakeBL;
+          drawSprite(ctx, spr, this.x, this.y, 2.6, 2.6, Math.sin(t * 2) * 0.04, this.flash);
+          break;
+        }
+        case 'owl': {
+          const spr = Math.floor(t * 2) % 2 === 0 ? Sprites.owlAL : Sprites.owlBL;
+          drawSprite(ctx, spr, this.x, this.y + Math.sin(t * 2) * 2, 2.8, 2.8, 0, this.flash);
           break;
         }
       }
@@ -4584,6 +5067,25 @@
         ctx.restore();
       }
     }
+    // 裂开效果（完全体时身体节被打至锁血1）
+    if (s.cracked) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(s.x - r * 0.5, s.y - r * 0.3);
+      ctx.lineTo(s.x - r * 0.1, s.y + r * 0.1);
+      ctx.lineTo(s.x + r * 0.3, s.y - r * 0.2);
+      ctx.lineTo(s.x + r * 0.6, s.y + r * 0.35);
+      ctx.moveTo(s.x - r * 0.2, s.y + r * 0.5);
+      ctx.lineTo(s.x + r * 0.1, s.y + r * 0.15);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(74,222,128,0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(s.x - r * 0.5, s.y - r * 0.3);
+      ctx.lineTo(s.x + r * 0.6, s.y + r * 0.35);
+      ctx.stroke();
+    }
   }
 
   /** 骨蛇头：白骨颅骨 / 空洞眼窝 / 颚骨利齿 */
@@ -4620,6 +5122,123 @@
     } else {
       ctx.fillStyle = '#ffffff';
       for (let q = 0; q < 4; q++) ctx.fillRect(r * 0.48 + q * r * 0.27, r * 0.34, 3, 3);
+    }
+  }
+
+  /** 巨型骨龙王龙头：放大颅骨 + 双弯角 + 幽绿冥火眼 + 巨颚獠牙（朝 +x 方向） */
+  function dragonHeadBoneKing(ctx, d, h, t, th) {
+    const r = d.headR || d.segR * 1.22;
+    const blink = 0.7 + Math.sin(t * 4) * 0.3;
+    // 后颈骨板（连接龙身）
+    ctx.fillStyle = th.edge;
+    ctx.fillRect(-r * 1.25, -r * 0.7, r * 0.5, r * 1.4);
+    ctx.fillStyle = th.belly;
+    ctx.fillRect(-r * 1.2, -r * 0.6, r * 0.4, r * 1.2);
+    // 巨型弯曲双角（骨质）
+    ctx.fillStyle = th.fin;
+    for (const dir of [-1, 1]) {
+      ctx.save();
+      ctx.translate(-r * 0.35, dir * r * 0.55);
+      ctx.rotate(dir * (0.5 + Math.sin(t * 2) * 0.02));
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(-r * 0.5, dir * r * 1.4, -r * 1.1, dir * r * 1.7);
+      ctx.quadraticCurveTo(-r * 0.4, dir * r * 1.2, 0, dir * 0.25);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = th.belly;
+      ctx.beginPath();
+      ctx.arc(-r * 1.05, dir * r * 1.65, r * 0.12, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = th.fin;
+    }
+    // 颅骨外廓
+    ctx.fillStyle = th.edge;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.9, -r * 0.85);
+    ctx.quadraticCurveTo(-r * 0.1, -r * 1.15, r * 0.5, -r * 0.7);
+    ctx.quadraticCurveTo(r * 0.95, -r * 0.4, r * 0.95, 0);
+    ctx.quadraticCurveTo(r * 0.95, r * 0.4, r * 0.5, r * 0.7);
+    ctx.quadraticCurveTo(-r * 0.1, r * 1.05, -r * 0.9, r * 0.85);
+    ctx.quadraticCurveTo(-r * 1.15, r * 0.2, -r * 0.9, -r * 0.85);
+    ctx.fill();
+    // 颅骨主面
+    ctx.fillStyle = th.belly;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.8, -r * 0.72);
+    ctx.quadraticCurveTo(-r * 0.1, -r * 0.98, r * 0.42, -r * 0.6);
+    ctx.quadraticCurveTo(r * 0.82, -r * 0.32, r * 0.82, 0);
+    ctx.quadraticCurveTo(r * 0.82, r * 0.32, r * 0.42, r * 0.6);
+    ctx.quadraticCurveTo(-r * 0.1, r * 0.9, -r * 0.8, r * 0.72);
+    ctx.quadraticCurveTo(-r * 1.02, r * 0.16, -r * 0.8, -r * 0.72);
+    ctx.fill();
+    // 颅骨接缝线
+    ctx.strokeStyle = th.scale; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-r * 0.4, -r * 0.78); ctx.lineTo(-r * 0.1, r * 0.78); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r * 0.1, -r * 0.65); ctx.lineTo(r * 0.25, r * 0.6); ctx.stroke();
+    // 幽绿冥火眼窝
+    ctx.fillStyle = '#1a1410';
+    ctx.beginPath(); ctx.ellipse(r * 0.08, -r * 0.22, r * 0.26, r * 0.2, -0.2, 0, TAU); ctx.fill();
+    const gx = r * 0.1, gy = -r * 0.22;
+    const grd = ctx.createRadialGradient(gx, gy, 0, gx, gy, r * 0.32);
+    grd.addColorStop(0, `rgba(180,255,160,${blink})`);
+    grd.addColorStop(0.4, `rgba(74,222,128,${0.8 * blink})`);
+    grd.addColorStop(1, 'rgba(34,197,94,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(gx, gy, r * 0.32, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#e8ffd8';
+    ctx.beginPath(); ctx.arc(gx + r * 0.04, gy - r * 0.03, r * 0.08, 0, TAU); ctx.fill();
+    // 骨质长吻
+    ctx.fillStyle = th.body;
+    ctx.beginPath();
+    ctx.moveTo(r * 0.7, -r * 0.42);
+    ctx.lineTo(r * 1.75, -r * 0.18);
+    ctx.lineTo(r * 1.85, 0);
+    ctx.lineTo(r * 1.75, r * 0.18);
+    ctx.lineTo(r * 0.7, r * 0.42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = th.scale;
+    ctx.fillRect(r * 0.72, -1, r * 1.1, 2);
+    // 鼻洞
+    ctx.fillStyle = '#1a1410';
+    ctx.beginPath(); ctx.arc(r * 1.55, -r * 0.1, r * 0.08, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(r * 1.55, r * 0.1, r * 0.08, 0, TAU); ctx.fill();
+    // 下颚骨
+    ctx.fillStyle = th.body;
+    ctx.beginPath();
+    ctx.moveTo(r * 0.7, r * 0.34);
+    ctx.lineTo(r * 1.7, r * 0.16);
+    ctx.lineTo(r * 1.62, r * 0.34);
+    ctx.lineTo(r * 0.7, r * 0.52);
+    ctx.closePath();
+    ctx.fill();
+    // 獠牙（上颚向下、下颚向上交错）
+    ctx.fillStyle = '#ffffff';
+    for (let q = 0; q < 5; q++) {
+      const tx = r * 0.82 + q * r * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(tx, r * 0.16); ctx.lineTo(tx + r * 0.07, r * 0.16); ctx.lineTo(tx + r * 0.035, r * 0.42);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(tx + r * 0.1, r * 0.34); ctx.lineTo(tx + r * 0.17, r * 0.34); ctx.lineTo(tx + r * 0.135, r * 0.1);
+      ctx.closePath(); ctx.fill();
+    }
+    // 吻端触须骨
+    ctx.strokeStyle = th.fin; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(r * 1.8, -r * 0.18); ctx.quadraticCurveTo(r * 2.1, -r * 0.1, r * 2.2, -r * 0.35);
+    ctx.moveTo(r * 1.8, r * 0.18); ctx.quadraticCurveTo(r * 2.1, r * 0.1, r * 2.2, r * 0.35);
+    ctx.stroke();
+    // 头冠骨刺
+    ctx.fillStyle = th.fin;
+    for (let q = 0; q < 4; q++) {
+      const cx = -r * 0.5 + q * r * 0.32;
+      ctx.beginPath();
+      ctx.moveTo(cx, -r * 0.72); ctx.lineTo(cx + r * 0.12, -r * 0.72);
+      ctx.lineTo(cx + r * 0.06, -r * (1.0 + (q === 1 || q === 2 ? 0.25 : 0)));
+      ctx.closePath(); ctx.fill();
     }
   }
 
@@ -4907,7 +5526,7 @@
       fx: ['#46324e', '#573f5f', '#b5ae9a', '#d8d3c2'],
       hit: ['#ffffff', '#e8e4d8', '#b5ae9a'],
       death: ['#d8d3c2', '#e8e4d8', '#b5ae9a', '#ffffff', '#8f8a78'],
-      noSpine: true, seg: dragonSegBone, head: dragonHeadBone
+      noSpine: true, seg: dragonSegBone, head: dragonHeadBone, headKing: dragonHeadBoneKing
     },
     mech: {
       id: 'mech', name: '机器蜈蚣', warn: '机器蜈蚣 钢铁来袭！', spike: 'gear', spinRate: 12,
@@ -5689,7 +6308,7 @@
       this.vx = rand(-30, 30); this.vy = rand(-20, 20);
       this.state = 'float';
       this.stateT = 0;
-      this.safeDist = rand(180, 260);
+      this.safeDist = rand(110, 160);
       this.atkT = 0;
       this.volleys = 0;
     }
@@ -5721,23 +6340,22 @@
           this.state = 'attack'; this.stateT = 0; this.atkT = 0.3; this.volleys = 0;
         }
       } else if (this.state === 'attack') {
-        // 悬停微调，连射 2 发绿火
+        // 悬停微调，仅放 2 发绿火
         this.x += Math.sin(this.t * 3) * 18 * dt;
         this.y += Math.cos(this.t * 2.4) * 14 * dt;
         this.atkT -= dt;
-        if (this.atkT <= 0 && this.volleys < 2) {
+        if (this.atkT <= 0 && this.volleys < 1) {
           this.volleys++;
           const base = Math.atan2(dy, dx);
-          for (let i = -1; i <= 1; i++) {
-            const a = base + i * 0.18;
+          for (let i = 0; i < 2; i++) {
+            const a = base + (i - 0.5) * 0.16;
             g.bullets.push(new Bullet(this.x, this.y,
               Math.cos(a) * 320, Math.sin(a) * 320,
               { kind: 'greenfire', r: 7, dmg: this.bulletDmg * g.atkScale, life: 4 }));
           }
           SFX.enemyShoot();
-          this.atkT = 0.45;
         }
-        if (this.volleys >= 2) { this.state = 'reposition'; this.stateT = 0; }
+        if (this.volleys >= 1) { this.state = 'reposition'; this.stateT = 0; }
       } else if (this.state === 'reposition') {
         // 横移后退，重寻攻击距离
         const perp = Math.atan2(ny, -nx);

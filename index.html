@@ -4,30 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>飞虎的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260907r65">
+<link rel="stylesheet" href="css/style.css?v=20260908r31">
 </head>
 <body>
 <div id="game-wrap">
   <canvas id="game" width="960" height="540"></canvas>
 
-  <!-- 顶部 HUD -->
+  <!-- 局内 HUD -->
   <div id="hud" class="hidden">
-    <div class="hud-left">
-      <div class="bar-row">
-        <span class="bar-label">生命</span>
-        <div class="bar-outer"><div id="hp-bar" class="bar-inner hp"></div></div>
-        <span id="hp-text" class="bar-text">100/100</span>
-      </div>
-      <div class="bar-row">
-        <span class="bar-label">能量</span>
-        <div class="bar-outer energy-outer"><div id="xp-bar" class="bar-inner xp"></div></div>
-        <span id="xp-text" class="bar-text">0/10</span>
-      </div>
-      <div class="bar-row">
-        <span class="bar-label">怒气</span>
-        <div class="bar-outer" id="rage-box"><div id="rage-bar" class="bar-inner rage"></div></div>
-        <span id="rage-text" class="bar-text rage-text">怒气 0/100</span>
-      </div>
+    <!-- 左上角：轮次 / 成长 / 击破 / 命 -->
+    <div class="hud-topleft">
       <div class="hud-info">
         <span id="round-text">第 1 轮</span>
         <span id="level-text">成长 0 次</span>
@@ -35,6 +21,7 @@
         <span id="lives-text" class="lives-text">❤❤❤</span>
       </div>
     </div>
+    <!-- 右上角：近战技能 + 音效/音乐开关 -->
     <div class="hud-right">
       <div id="melee-box" title="近战爪击">
         <div id="melee-icon">爪</div>
@@ -43,6 +30,31 @@
       <div class="hud-btns">
         <button id="bgm-btn" type="button">音乐 开</button>
         <button id="mute-btn" type="button">音效 开</button>
+      </div>
+    </div>
+    <!-- 左下角：生命 / 能量 -->
+    <div class="hud-bottomleft">
+      <div class="bar-row">
+        <span class="bar-label">生命</span>
+        <div class="bar-outer">
+          <div id="hp-bar" class="bar-inner hp"></div>
+          <span id="hp-text" class="bar-text">100/100</span>
+        </div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">能量</span>
+        <div class="bar-outer energy-outer">
+          <div id="xp-bar" class="bar-inner xp"></div>
+          <span id="xp-text" class="bar-text">0/10</span>
+        </div>
+      </div>
+    </div>
+    <!-- 屏幕中线正下方：怒气 -->
+    <div class="hud-rage">
+      <span class="rage-label">怒气</span>
+      <div class="bar-outer rage-outer" id="rage-box">
+        <div id="rage-bar" class="bar-inner rage"></div>
+        <span id="rage-text" class="bar-text rage-text">0/100</span>
       </div>
     </div>
   </div>
@@ -68,49 +80,51 @@
 
   <!-- 开始菜单 -->
   <div id="menu">
-    <div class="title-cn">飞虎的奇妙冒险</div>
-    <div class="title-en">FLYING TIGER'S BIZARRE ADVENTURE</div>
-    <div class="menu-desc">
-      像素风横版弹幕射击 × 肉鸽成长<br>
-      操控飞行猛虎，吞噬能量，不断成长，击败 Boss 通过轮次！<br>
-      <span class="menu-new">★ 第三轮后可解锁「闪电子弹」「防护刀刃」；小心会自爆的骷髅！</span>
-    </div>
-    <div class="mode-row">
-      <span class="mode-label">操作模式</span>
-      <button id="mode-keyboard" class="mode-btn active" type="button">⌨ 键盘模式<small>方向键 / WASD</small></button>
-      <button id="mode-mouse" class="mode-btn" type="button">🖱 鼠标模式<small>移动鼠标引导飞行</small></button>
-    </div>
-    <div class="menu-audio-row">
+    <!-- 右上角：背景音乐开关 -->
+    <div class="menu-topright">
       <button id="menu-bgm-btn" class="audio-btn" type="button">🎵 背景音乐：开</button>
     </div>
-    <div class="map-row">
-      <span class="map-label">战场地图</span>
-      <button id="menu-map-btn" class="map-btn" type="button" title="点击切换地图">🎲 随机地图</button>
+
+    <div class="title-cn">飞虎的奇妙冒险</div>
+    <div class="title-en">FLYING TIGER'S BIZARRE ADVENTURE</div>
+
+    <!-- 备战角色（醒目）：头像 + 名称 + 能力/大招/自动技能 -->
+    <div class="standby-hero">
+      <div class="standby-avatar" id="standby-avatar"></div>
+      <div class="standby-info">
+        <div class="standby-row">
+          <span class="standby-label">🐱 备战角色</span>
+          <span id="standby-name">小白</span>
+        </div>
+        <div class="standby-detail" id="standby-detail"></div>
+      </div>
     </div>
+
+    <div class="menu-main">
+      <button id="select-btn" class="big-btn" type="button">🐱 选择角色</button>
+      <button id="start-btn" class="big-btn" type="button">▶ 开始游戏</button>
+      <button id="menu-map-btn" class="big-btn map-btn" type="button" title="点击切换地图">🎲 随机地图</button>
+      <div class="mode-row">
+        <button id="mode-keyboard" class="mode-btn active" type="button">⌨ 键盘模式<small>方向键 / WASD</small></button>
+        <button id="mode-mouse" class="mode-btn" type="button">🖱 鼠标模式<small>移动鼠标引导飞行</small></button>
+      </div>
+    </div>
+
+    <!-- 操作说明：左侧靠下（去掉近战/强化/轮次） -->
     <div class="menu-ctrl">
       <div><b>移动</b>　键盘模式：方向键 / WASD　｜　鼠标模式：鼠标位置引导（均自动射击）</div>
-      <div><b>近战</b>　接触敌人自动触发角色专属技能（3 秒冷却）：小白爪击 / 侠客突刺 / 法师彩虹盾 / 不良摔投 / 狂战血铠 / 超仔激光</div>
-      <div><b>大招</b>　击杀积满怒气，按 <kbd>空格</kbd>/<kbd>J</kbd> 释放强光波，肃清全屏小怪</div>
-      <div><b>强化</b>　能量满后三选一　<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>（可解锁闪电子弹/防护刀刃等）</div>
-      <div><b>轮次</b>　每击败 1 个 Boss 通过 1 轮，怪物潮与新敌人随轮次降临</div>
+      <div><b>大招</b>　击杀积满怒气，按 <kbd>空格</kbd>/<kbd>J</kbd> 释放大招，肃清全屏小怪</div>
       <div><b>其他</b>　<kbd>P</kbd> 暂停　<kbd>M</kbd> 音效　<kbd>N</kbd> 音乐</div>
-    </div>
-    <div class="standby-row">
-      <span class="standby-label">🐱 备战角色</span>
-      <span id="standby-name">小白</span>
-    </div>
-    <div class="menu-btns">
-      <button id="select-btn" class="mid-btn" type="button">🐱 选择角色</button>
-      <button id="start-btn" class="big-btn" type="button">▶ 开始游戏</button>
     </div>
   </div>
 
   <!-- 暂停 -->
   <div id="pause" class="hidden">
-    <div class="pause-text">暂 停<br><span>按 P 继续</span></div>
+    <div class="pause-text">暂 停</div>
     <div class="pause-btns">
+      <button id="pause-resume-btn" class="pause-btn" type="button">▶ 继续游戏</button>
       <button id="pause-restart-btn" class="pause-btn" type="button">↻ 重新开始</button>
-      <button id="pause-select-btn" class="pause-btn alt" type="button">🐱 返回角色选择</button>
+      <button id="pause-select-btn" class="pause-btn" type="button">🐱 角色选择</button>
     </div>
   </div>
 
@@ -130,12 +144,12 @@
 </div>
 
 <script src="js/sprites.js?v=20260907r36"></script>
-<script src="js/characters.js?v=20260907r65"></script>
+<script src="js/characters.js?v=20260907r66"></script>
 <script src="js/config.js?v=20260906r60"></script>
 <script src="js/audio.js?v=20260906r30"></script>
 <script src="js/music.js?v=20260906r53"></script>
-<script src="js/entities.js?v=20260908r71"></script>
-<script src="js/bosses.js?v=20260908r74"></script>
-<script src="js/game.js?v=20260908r81"></script>
+<script src="js/entities.js?v=20260908r79"></script>
+<script src="js/bosses.js?v=20260908r91"></script>
+<script src="js/game.js?v=20260908r98"></script>
 </body>
 </html>

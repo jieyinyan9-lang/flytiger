@@ -5,6 +5,8 @@
 (function () {
   'use strict';
 
+  const TAU = Math.PI * 2;
+
   /** 根据字符画数组构建离屏 canvas（自动补齐行宽） */
   function build(rows, pal) {
     const h = rows.length;
@@ -1045,6 +1047,300 @@
     return cv;
   }
 
+  /* —— 飞行弹幕类敌人精灵（程序化绘制，朝右；渲染时翻转朝左） —— */
+
+  /** 刺羽鸟：圆身小鸟，翅膀/尾部带尖锐羽毛（frame 0 翅上扬 / 1 翅下扇） */
+  function buildSpikeBird(frame) {
+    const W = 32, H = 24;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const K = '#1a1a22', BD = '#5a6e3a', BG = '#8aa94f', Y = '#ffd23b', R = '#c0392b', W1 = '#f0e6d2';
+    const up = frame === 0;
+    // 翅膀（尖锐羽毛）
+    c.fillStyle = K; c.strokeStyle = K; c.lineWidth = 1; c.lineJoin = 'round';
+    for (const sgn of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(16 + sgn * 4, 12);
+      c.lineTo(16 + sgn * (up ? 16 : 14), up ? 3 : 16);
+      c.lineTo(16 + sgn * 10, 12);
+      c.closePath(); c.fill();
+      c.fillStyle = BG;
+      c.beginPath();
+      c.moveTo(16 + sgn * 5, 12);
+      c.lineTo(16 + sgn * (up ? 14 : 12), up ? 5 : 14);
+      c.lineTo(16 + sgn * 9, 12);
+      c.closePath(); c.fill();
+      c.fillStyle = K;
+    }
+    // 身体（圆身）
+    c.fillStyle = K; c.beginPath(); c.ellipse(13, 13, 8, 7, 0, 0, TAU); c.fill();
+    c.fillStyle = BD; c.beginPath(); c.ellipse(13, 13, 6.5, 5.5, 0, 0, TAU); c.fill();
+    c.fillStyle = BG; c.beginPath(); c.ellipse(13, 12, 5, 3.5, 0, 0, TAU); c.fill();
+    // 尾部尖羽
+    c.fillStyle = K;
+    c.beginPath(); c.moveTo(21, 13); c.lineTo(28, 9); c.lineTo(26, 13); c.lineTo(28, 17); c.closePath(); c.fill();
+    c.fillStyle = Y;
+    c.beginPath(); c.moveTo(22, 13); c.lineTo(27, 11); c.lineTo(26, 13); c.lineTo(27, 15); c.closePath(); c.fill();
+    // 头/眼
+    c.fillStyle = K; c.beginPath(); c.arc(7, 11, 4, 0, TAU); c.fill();
+    c.fillStyle = BD; c.beginPath(); c.arc(7, 11, 3, 0, TAU); c.fill();
+    c.fillStyle = W1; c.beginPath(); c.arc(6, 10, 1.4, 0, TAU); c.fill();
+    c.fillStyle = K; c.beginPath(); c.arc(6, 10, 0.7, 0, TAU); c.fill();
+    // 喙
+    c.fillStyle = R; c.beginPath(); c.moveTo(3, 11); c.lineTo(0, 12); c.lineTo(3, 13); c.closePath(); c.fill();
+    return cv;
+  }
+
+  /** 魔眼飞虫：圆形飞虫，中央一只巨大眼睛 */
+  function buildEyeFly(frame) {
+    const W = 30, H = 26;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const K = '#161020', BD = '#3a2255', BG = '#6b3fa0', P = '#b574ff', Y = '#ffe066', W1 = '#f4e8ff';
+    const up = frame === 0;
+    // 翅膀（半透明小翅）
+    c.fillStyle = 'rgba(180,140,255,0.5)';
+    for (const sgn of [-1, 1]) {
+      c.beginPath();
+      c.ellipse(15 + sgn * 4, up ? 7 : 11, 5, up ? 7 : 4, sgn * 0.3, 0, TAU); c.fill();
+    }
+    c.strokeStyle = BD; c.lineWidth = 1;
+    for (const sgn of [-1, 1]) {
+      c.beginPath();
+      c.ellipse(15 + sgn * 4, up ? 7 : 11, 5, up ? 7 : 4, sgn * 0.3, 0, TAU); c.stroke();
+    }
+    // 身体（圆形）
+    c.fillStyle = K; c.beginPath(); c.arc(15, 14, 8, 0, TAU); c.fill();
+    c.fillStyle = BD; c.beginPath(); c.arc(15, 14, 6.5, 0, TAU); c.fill();
+    c.fillStyle = BG; c.beginPath(); c.arc(15, 13, 5, 0, TAU); c.fill();
+    // 巨眼
+    c.fillStyle = W1; c.beginPath(); c.arc(15, 13, 4.5, 0, TAU); c.fill();
+    c.fillStyle = P; c.beginPath(); c.arc(15, 13, 3, 0, TAU); c.fill();
+    c.fillStyle = K; c.beginPath(); c.arc(15, 13, 1.6, 0, TAU); c.fill();
+    c.fillStyle = W1; c.beginPath(); c.arc(14, 12, 0.7, 0, TAU); c.fill();
+    // 触角
+    c.strokeStyle = K; c.lineWidth = 1.2;
+    c.beginPath(); c.moveTo(12, 7); c.lineTo(9, 2); c.stroke();
+    c.beginPath(); c.moveTo(18, 7); c.lineTo(21, 2); c.stroke();
+    c.fillStyle = Y;
+    c.beginPath(); c.arc(9, 2, 1.2, 0, TAU); c.fill();
+    c.beginPath(); c.arc(21, 2, 1.2, 0, TAU); c.fill();
+    return cv;
+  }
+
+  /** 魔石甲虫：甲虫轮廓，胸口嵌一块水晶 */
+  function buildStoneBeetle(frame) {
+    const W = 38, H = 28;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const K = '#14141c', BD = '#3a3a4a', BG = '#5a5a6e', CY = '#35e0ff', CY2 = '#7ff5ff', Y = '#ffd23b', W1 = '#dfe6ee';
+    const up = frame === 0;
+    // 鞘翅（左右两半）
+    c.fillStyle = K;
+    c.beginPath(); c.ellipse(19, 15, 12, 10, 0, 0, TAU); c.fill();
+    c.fillStyle = BD;
+    c.beginPath(); c.ellipse(19, 15, 10.5, 8.5, 0, 0, TAU); c.fill();
+    c.fillStyle = BG;
+    c.beginPath(); c.ellipse(16, 14, 4.5, 7, -0.2, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(22, 14, 4.5, 7, 0.2, 0, TAU); c.fill();
+    // 鞘翅中线
+    c.strokeStyle = K; c.lineWidth = 1.2;
+    c.beginPath(); c.moveTo(19, 6); c.lineTo(19, 22); c.stroke();
+    // 头部
+    c.fillStyle = K; c.beginPath(); c.arc(9, 14, 4.5, 0, TAU); c.fill();
+    c.fillStyle = BD; c.beginPath(); c.arc(9, 14, 3.5, 0, TAU); c.fill();
+    // 眼
+    c.fillStyle = Y; c.beginPath(); c.arc(7.5, 12.5, 1.2, 0, TAU); c.fill();
+    c.fillStyle = W1; c.beginPath(); c.arc(7.5, 12.5, 0.5, 0, TAU); c.fill();
+    // 触角
+    c.strokeStyle = K; c.lineWidth = 1.4;
+    c.beginPath(); c.moveTo(7, 10); c.lineTo(4, 6); c.stroke();
+    c.beginPath(); c.moveTo(10, 10); c.lineTo(11, 5); c.stroke();
+    // 胸口水晶
+    c.fillStyle = K;
+    c.beginPath(); c.moveTo(19, 10); c.lineTo(23, 15); c.lineTo(19, 20); c.lineTo(15, 15); c.closePath(); c.fill();
+    c.fillStyle = CY;
+    c.beginPath(); c.moveTo(19, 11); c.lineTo(22, 15); c.lineTo(19, 19); c.lineTo(16, 15); c.closePath(); c.fill();
+    c.fillStyle = CY2;
+    c.beginPath(); c.moveTo(19, 12); c.lineTo(20.5, 15); c.lineTo(19, 17); c.lineTo(17.5, 15); c.closePath(); c.fill();
+    // 翅膀振动示意（frame 1：鞘翅微张）
+    if (!up) {
+      c.fillStyle = 'rgba(53,224,255,0.3)';
+      c.beginPath(); c.ellipse(19, 15, 13, 5, 0, 0, TAU); c.fill();
+    }
+    return cv;
+  }
+
+  /** 浮空魔花：漂浮大花，中央一颗眼睛；frame 0 花瓣闭合 / 1 花瓣张开 */
+  function buildFloatFlower(frame) {
+    const W = 40, H = 36;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const K = '#1a1018', RD = '#8b2252', RP = '#c83a6a', R2 = '#ff5d8f', Y = '#ffd23b', W1 = '#fff0f5', CY = '#b0e0ff';
+    const open = frame === 1;
+    const cx = 20, cy = 18;
+    const petalN = 6;
+    // 花瓣
+    for (let i = 0; i < petalN; i++) {
+      const a = (TAU / petalN) * i - Math.PI / 2;
+      const len = open ? 14 : 8;
+      const px = cx + Math.cos(a) * len;
+      const py = cy + Math.sin(a) * len;
+      c.fillStyle = K;
+      c.beginPath(); c.ellipse(px, py, 5, 8, a + Math.PI / 2, 0, TAU); c.fill();
+      c.fillStyle = open ? RP : RD;
+      c.beginPath(); c.ellipse(px, py, 3.8, 6.5, a + Math.PI / 2, 0, TAU); c.fill();
+      c.fillStyle = open ? R2 : '#a02858';
+      c.beginPath(); c.ellipse(px, py, 2, 4, a + Math.PI / 2, 0, TAU); c.fill();
+    }
+    // 花心圆盘
+    c.fillStyle = K; c.beginPath(); c.arc(cx, cy, 8, 0, TAU); c.fill();
+    c.fillStyle = Y; c.beginPath(); c.arc(cx, cy, 6.5, 0, TAU); c.fill();
+    c.fillStyle = '#ff9d2e'; c.beginPath(); c.arc(cx, cy, 5, 0, TAU); c.fill();
+    // 中央眼睛
+    c.fillStyle = W1; c.beginPath(); c.arc(cx, cy, 4, 0, TAU); c.fill();
+    c.fillStyle = RD; c.beginPath(); c.arc(cx, cy, 2.6, 0, TAU); c.fill();
+    c.fillStyle = K; c.beginPath(); c.arc(cx, cy, 1.3, 0, TAU); c.fill();
+    c.fillStyle = W1; c.beginPath(); c.arc(cx - 0.8, cy - 0.8, 0.5, 0, TAU); c.fill();
+    // 花萼/茎（底部小叶）
+    c.fillStyle = '#3a7d2a';
+    c.beginPath(); c.moveTo(cx - 4, cy + 6); c.lineTo(cx, cy + 10); c.lineTo(cx + 4, cy + 6); c.closePath(); c.fill();
+    return cv;
+  }
+
+  /** 风暴飞鱼：胖飞鱼，鱼身+眼睛+两片小翅膀 */
+  function buildStormFish(frame) {
+    const W = 38, H = 26;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const K = '#0e1a22', BD = '#1f5f8b', BG = '#2f8fc9', CY = '#7fd4ff', W1 = '#eaf7ff', Y = '#ffd23b';
+    const up = frame === 0;
+    // 翅膀（两片小翅）
+    c.fillStyle = K;
+    for (const sgn of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(19, 11);
+      c.quadraticCurveTo(19 + sgn * 6, up ? 2 : 14, 19 + sgn * 11, up ? 6 : 12);
+      c.quadraticCurveTo(19 + sgn * 5, up ? 6 : 10, 19, 12);
+      c.closePath(); c.fill();
+    }
+    c.fillStyle = CY;
+    for (const sgn of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(19, 11.5);
+      c.quadraticCurveTo(19 + sgn * 5.5, up ? 3 : 13, 19 + sgn * 10, up ? 6.5 : 11.5);
+      c.quadraticCurveTo(19 + sgn * 4.5, up ? 6.5 : 10, 19, 12);
+      c.closePath(); c.fill();
+    }
+    // 鱼身（胖椭圆）
+    c.fillStyle = K; c.beginPath(); c.ellipse(19, 14, 11, 8, 0, 0, TAU); c.fill();
+    c.fillStyle = BD; c.beginPath(); c.ellipse(19, 14, 9.5, 6.5, 0, 0, TAU); c.fill();
+    c.fillStyle = BG; c.beginPath(); c.ellipse(19, 13, 8, 4.5, 0, 0, TAU); c.fill();
+    c.fillStyle = CY; c.beginPath(); c.ellipse(19, 13.5, 6, 2.5, 0, 0, TAU); c.fill();
+    // 尾鳍
+    c.fillStyle = K;
+    c.beginPath(); c.moveTo(29, 14); c.lineTo(36, 8); c.lineTo(34, 14); c.lineTo(36, 20); c.closePath(); c.fill();
+    c.fillStyle = BG;
+    c.beginPath(); c.moveTo(30, 14); c.lineTo(34, 10); c.lineTo(33, 14); c.lineTo(34, 18); c.closePath(); c.fill();
+    // 眼睛
+    c.fillStyle = W1; c.beginPath(); c.arc(12, 12, 2.5, 0, TAU); c.fill();
+    c.fillStyle = K; c.beginPath(); c.arc(12, 12, 1.3, 0, TAU); c.fill();
+    c.fillStyle = W1; c.beginPath(); c.arc(11.5, 11.5, 0.5, 0, TAU); c.fill();
+    // 鳃线
+    c.strokeStyle = K; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(15, 10); c.lineTo(15, 17); c.stroke();
+    return cv;
+  }
+
+  /** 双头飞蛇：粗蛇身，两端各一个蛇头 */
+  function buildTwinSnake(frame) {
+    const W = 46, H = 28;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const K = '#141018', BD = '#3a5a2a', BG = '#5a8a3a', YG = '#8ac85a', Y = '#ffd23b', R = '#e0453a', W1 = '#f0f5e8';
+    const phase = frame === 0 ? 0 : Math.PI / 2;
+    // 蛇身（粗S形）
+    c.strokeStyle = K; c.lineWidth = 10; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath();
+    c.moveTo(5, 14);
+    c.bezierCurveTo(14, 6 + Math.sin(phase) * 3, 20, 22 - Math.sin(phase) * 3, 27, 14);
+    c.bezierCurveTo(33, 8, 38, 20, 41, 14);
+    c.stroke();
+    c.strokeStyle = BG; c.lineWidth = 7;
+    c.beginPath();
+    c.moveTo(5, 14);
+    c.bezierCurveTo(14, 6 + Math.sin(phase) * 3, 20, 22 - Math.sin(phase) * 3, 27, 14);
+    c.bezierCurveTo(33, 8, 38, 20, 41, 14);
+    c.stroke();
+    c.strokeStyle = YG; c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(5, 14);
+    c.bezierCurveTo(14, 6 + Math.sin(phase) * 3, 20, 22 - Math.sin(phase) * 3, 27, 14);
+    c.bezierCurveTo(33, 8, 38, 20, 41, 14);
+    c.stroke();
+    // 左蛇头
+    c.fillStyle = K; c.beginPath(); c.ellipse(5, 14, 5, 4, 0, 0, TAU); c.fill();
+    c.fillStyle = BG; c.beginPath(); c.ellipse(5, 14, 4, 3, 0, 0, TAU); c.fill();
+    c.fillStyle = Y; c.beginPath(); c.arc(3, 13, 1.1, 0, TAU); c.fill();
+    c.fillStyle = K; c.beginPath(); c.arc(3, 13, 0.5, 0, TAU); c.fill();
+    // 右蛇头
+    c.fillStyle = K; c.beginPath(); c.ellipse(41, 14, 5, 4, 0, 0, TAU); c.fill();
+    c.fillStyle = BG; c.beginPath(); c.ellipse(41, 14, 4, 3, 0, 0, TAU); c.fill();
+    c.fillStyle = Y; c.beginPath(); c.arc(43, 13, 1.1, 0, TAU); c.fill();
+    c.fillStyle = K; c.beginPath(); c.arc(43, 13, 0.5, 0, TAU); c.fill();
+    // 信子
+    c.fillStyle = R;
+    c.beginPath(); c.moveTo(0, 14); c.lineTo(-3, 12); c.lineTo(-3, 16); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(46, 14); c.lineTo(49, 12); c.lineTo(49, 16); c.closePath(); c.fill();
+    return cv;
+  }
+
+  /** 预言猫头鹰：圆身猫头鹰，额头一颗小水晶 */
+  function buildOwl(frame) {
+    const W = 36, H = 34;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const K = '#141018', BD = '#6a4a32', BG = '#a0784a', TN = '#d4a86a', Y = '#ffd23b', CY = '#b0e8ff', W1 = '#fff8e8', R = '#e0453a';
+    const blink = frame === 1;
+    // 身体（圆）
+    c.fillStyle = K; c.beginPath(); c.ellipse(18, 19, 13, 12, 0, 0, TAU); c.fill();
+    c.fillStyle = BD; c.beginPath(); c.ellipse(18, 19, 11.5, 10.5, 0, 0, TAU); c.fill();
+    c.fillStyle = BG; c.beginPath(); c.ellipse(18, 20, 9, 8, 0, 0, TAU); c.fill();
+    c.fillStyle = TN; c.beginPath(); c.ellipse(18, 21, 6, 5, 0, 0, TAU); c.fill();
+    // 耳羽
+    c.fillStyle = K;
+    c.beginPath(); c.moveTo(8, 10); c.lineTo(6, 3); c.lineTo(12, 9); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(28, 10); c.lineTo(30, 3); c.lineTo(24, 9); c.closePath(); c.fill();
+    c.fillStyle = BG;
+    c.beginPath(); c.moveTo(9, 9); c.lineTo(7.5, 5); c.lineTo(11.5, 9); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(27, 9); c.lineTo(28.5, 5); c.lineTo(24.5, 9); c.closePath(); c.fill();
+    // 大眼盘
+    c.fillStyle = W1; c.beginPath(); c.arc(13, 16, 4.5, 0, TAU); c.fill();
+    c.beginPath(); c.arc(23, 16, 4.5, 0, TAU); c.fill();
+    if (blink) {
+      c.strokeStyle = K; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(10, 16); c.lineTo(16, 16); c.stroke();
+      c.beginPath(); c.moveTo(20, 16); c.lineTo(26, 16); c.stroke();
+    } else {
+      c.fillStyle = Y; c.beginPath(); c.arc(13, 16, 3, 0, TAU); c.fill();
+      c.beginPath(); c.arc(23, 16, 3, 0, TAU); c.fill();
+      c.fillStyle = K; c.beginPath(); c.arc(13, 16, 1.5, 0, TAU); c.fill();
+      c.beginPath(); c.arc(23, 16, 1.5, 0, TAU); c.fill();
+      c.fillStyle = W1; c.beginPath(); c.arc(12.5, 15.5, 0.6, 0, TAU); c.fill();
+      c.beginPath(); c.arc(22.5, 15.5, 0.6, 0, TAU); c.fill();
+    }
+    // 喙
+    c.fillStyle = R; c.beginPath(); c.moveTo(18, 19); c.lineTo(16, 22); c.lineTo(20, 22); c.closePath(); c.fill();
+    // 额头水晶
+    c.fillStyle = K;
+    c.beginPath(); c.moveTo(18, 5); c.lineTo(21, 9); c.lineTo(18, 12); c.lineTo(15, 9); c.closePath(); c.fill();
+    c.fillStyle = CY;
+    c.beginPath(); c.moveTo(18, 6); c.lineTo(20, 9); c.lineTo(18, 11); c.lineTo(16, 9); c.closePath(); c.fill();
+    c.fillStyle = W1;
+    c.beginPath(); c.moveTo(18, 7); c.lineTo(19, 9); c.lineTo(18, 10); c.lineTo(17, 9); c.closePath(); c.fill();
+    return cv;
+  }
+
   const Sprites = {
     cat: null,   // 白猫主角：assets/cat.png 原图（异步加载）
     eagleA: buildEagle(0, EAGLE_PAL),
@@ -1054,6 +1350,7 @@
     batA: build(BAT_A, BAT_PAL),
     batB: build(BAT_B, BAT_PAL),
     leigong: buildLeigong(),
+    leigongSmall: build(LEIGONG, LEI_PAL),   // 雷公小怪：旧版 19×20 像素点阵（Boss 雷公巨兽仍用 leigong.png）
     pig: build(PIG, PIG_PAL),
     archer: build(ARCHER, ARCHER_PAL),
     skeleton: build(SKEL, SKEL_PAL),
@@ -1077,6 +1374,21 @@
     crane: buildCrane(),
     bigbatA: buildBigBatA(),
     bigbatB: buildBigBatB(),
+    /* —— 飞行弹幕类敌人精灵 —— */
+    spikebirdA: buildSpikeBird(0),
+    spikebirdB: buildSpikeBird(1),
+    eyeflyA: buildEyeFly(0),
+    eyeflyB: buildEyeFly(1),
+    stonebeetleA: buildStoneBeetle(0),
+    stonebeetleB: buildStoneBeetle(1),
+    floatflowerA: buildFloatFlower(0),
+    floatflowerB: buildFloatFlower(1),
+    stormfishA: buildStormFish(0),
+    stormfishB: buildStormFish(1),
+    twinsnakeA: buildTwinSnake(0),
+    twinsnakeB: buildTwinSnake(1),
+    owlA: buildOwl(0),
+    owlB: buildOwl(1),
   };
 
   // 敌人统一朝向：翻转成朝左
@@ -1087,6 +1399,7 @@
   Sprites.batAL = flip(Sprites.batA);
   Sprites.batBL = flip(Sprites.batB);
   Sprites.leigongL = Sprites.leigong;    // leigong.png 正面图，直接复用（异步加载，不可 flip 预拷）
+  Sprites.leigongSmallL = flip(Sprites.leigongSmall);   // 小怪像素点阵朝右绘制，翻转朝左
   Sprites.pigL = flip(Sprites.pig);
   Sprites.archerL = flip(Sprites.archer);
   Sprites.skeletonL = flip(Sprites.skeleton);
@@ -1104,6 +1417,22 @@
   Sprites.strangerL = Sprites.stranger;   // guaike.png 已朝左，直接复用（异步加载，不可 flip 预拷）
   Sprites.frogL = Sprites.frog;            // Wage.png 已朝左，直接复用（异步加载，不可 flip 预拷）
   Sprites.craneL = Sprites.crane;          // Hexian.png 已朝左，直接复用（异步加载，不可 flip 预拷）
+
+  // 飞行弹幕敌人：统一翻转成朝左
+  Sprites.spikebirdAL = flip(Sprites.spikebirdA);
+  Sprites.spikebirdBL = flip(Sprites.spikebirdB);
+  Sprites.eyeflyAL = flip(Sprites.eyeflyA);
+  Sprites.eyeflyBL = flip(Sprites.eyeflyB);
+  Sprites.stonebeetleAL = flip(Sprites.stonebeetleA);
+  Sprites.stonebeetleBL = flip(Sprites.stonebeetleB);
+  Sprites.floatflowerAL = flip(Sprites.floatflowerA);
+  Sprites.floatflowerBL = flip(Sprites.floatflowerB);
+  Sprites.stormfishAL = flip(Sprites.stormfishA);
+  Sprites.stormfishBL = flip(Sprites.stormfishB);
+  Sprites.twinsnakeAL = flip(Sprites.twinsnakeA);
+  Sprites.twinsnakeBL = flip(Sprites.twinsnakeB);
+  Sprites.owlAL = flip(Sprites.owlA);
+  Sprites.owlBL = flip(Sprites.owlB);
 
   // 白猫主角：直接加载原图文件渲染（保证与素材 100% 一致）
   Sprites.whenReady = new Promise(resolve => {

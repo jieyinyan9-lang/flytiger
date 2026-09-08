@@ -129,6 +129,52 @@
         name: '草龙', hp: 26, speed: 150, contact: 16,
         bulletDmg: 12, xp: 3, score: 80, radius: 14, weight: 5, minBossKills: 1, elite: true,
         oncePerRound: true   // 每轮至多出现一次（第 2 轮起解锁）
+      },
+      /* —— 飞行弹幕类敌人：通过指定关卡后，每轮 30% 概率解锁其中 1 只 —— */
+      // 弱型｜基础弹幕（通过第 2 关后解锁，动态血量保证至少 7s 击杀，占本轮 20%）
+      spikebird: {
+        name: '刺羽鸟', hp: 42, speed: 115, contact: 10,
+        bulletDmg: 8, xp: 9, score: 20, radius: 16, weight: 7, minBossKills: 2, elite: false,
+        flyer: true, flyerTier: 'weak', group: 5,
+        dynamicHp: true, fightTime: [7, 7]
+      },
+      eyefly: {
+        name: '魔眼飞虫', hp: 40, speed: 135, contact: 8,
+        bulletDmg: 9, xp: 9, score: 20, radius: 15, weight: 7, minBossKills: 2, elite: false,
+        flyer: true, flyerTier: 'weak',
+        dynamicHp: true, fightTime: [7, 7]
+      },
+      // 中型｜强化弹幕（通过第 3 关后解锁，动态血量保证至少 10s 击杀，占本轮 10%）
+      stonebeetle: {
+        name: '魔石甲虫', hp: 72, speed: 95, contact: 14,
+        bulletDmg: 15, xp: 15, score: 32, radius: 22, weight: 4, minBossKills: 3, elite: false,
+        flyer: true, flyerTier: 'medium',
+        dynamicHp: true, fightTime: [10, 10]
+      },
+      floatflower: {
+        name: '浮空魔花', hp: 78, speed: 70, contact: 12,
+        bulletDmg: 12, xp: 15, score: 32, radius: 24, weight: 4, minBossKills: 3, elite: false,
+        flyer: true, flyerTier: 'medium',
+        dynamicHp: true, fightTime: [10, 10]
+      },
+      stormfish: {
+        name: '风暴飞鱼', hp: 70, speed: 105, contact: 13,
+        bulletDmg: 12, xp: 15, score: 32, radius: 22, weight: 4, minBossKills: 3, elite: false,
+        flyer: true, flyerTier: 'medium',
+        dynamicHp: true, fightTime: [10, 10]
+      },
+      // 强型｜特殊弹幕（通过第 4 关后解锁，动态血量保证至少 18s 击杀，占本轮 20%）
+      twinsnake: {
+        name: '双头飞蛇', hp: 135, speed: 82, contact: 18,
+        bulletDmg: 14, xp: 24, score: 55, radius: 28, weight: 6, minBossKills: 4, elite: true,
+        flyer: true, flyerTier: 'strong',
+        dynamicHp: true, fightTime: [18, 18]
+      },
+      owl: {
+        name: '预言猫头鹰', hp: 125, speed: 78, contact: 16,
+        bulletDmg: 13, xp: 24, score: 55, radius: 26, weight: 6, minBossKills: 4, elite: true,
+        flyer: true, flyerTier: 'strong',
+        dynamicHp: true, fightTime: [18, 18]
       }
     },
 

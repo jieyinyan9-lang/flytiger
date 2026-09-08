@@ -83,6 +83,38 @@
       tone(880 + Math.random() * 120, 0.07, 'square', 0.035, 420);
     },
     enemyShoot() { tone(300, 0.12, 'sawtooth', 0.04, 160); },
+    /** 飞行弹幕小怪能量弹：按弹种风格合成的射击音效（纯 WebAudio，无外部资源） */
+    flyerShoot(style) {
+      if (muted) return;
+      switch (style) {
+        case 'leaf':      // 刺羽鸟·叶片齐射：清亮"嗖"上滑 + 叶刃破空高频噪声
+          tone(540, 0.13, 'triangle', 0.08, 1080);
+          noiseAt(0, 0.1, 0.05, 'highpass', 3200, 5200);
+          break;
+        case 'eyeball':   // 魔眼飞虫·锁定魔弹：神秘双音"啾"下滑（魔幻感）
+          tone(920, 0.18, 'sine', 0.09, 430);
+          tone(460, 0.18, 'sine', 0.05, 215, 0.01);
+          break;
+        case 'flame':     // 魔石甲虫·高速火焰矛：呼啸下滑 + 火焰喷射带通噪声
+          tone(1300, 0.2, 'sawtooth', 0.06, 320);
+          noiseAt(0, 0.18, 0.08, 'bandpass', 2600, 500);
+          break;
+        case 'spikeball': // 浮空魔花·尖刺环：明亮扩散"啵"上滑 + 高泛音
+          tone(660, 0.16, 'sine', 0.09, 990);
+          tone(1320, 0.18, 'sine', 0.05, 1760, 0.04);
+          break;
+        case 'whiteorb':  // 风暴飞鱼·风暴弹：风啸带通扫频 + 低频涌动
+          noiseAt(0, 0.28, 0.11, 'bandpass', 700, 2600);
+          tone(280, 0.24, 'sine', 0.05, 520);
+          break;
+        case 'diamond':   // 双头飞蛇·紫菱连射：尖锐"哔"（每 0.22s 一对）
+          tone(1480, 0.08, 'square', 0.055, 1850);
+          break;
+        case 'cone':      // 预言猫头鹰·黄锥连射：清亮"啾"上滑（每 0.32s 一发）
+          tone(1080, 0.08, 'triangle', 0.06, 1560);
+          break;
+      }
+    },
     hit() { tone(240, 0.05, 'square', 0.05, 140); },
     melee() {
       noise(0.18, 0.22, 2600);

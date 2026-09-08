@@ -56,7 +56,9 @@
         charSel: document.getElementById('charsel'),
         charGrid: document.getElementById('char-grid'),
         charSelTitle: document.getElementById('charsel-title'),
-        standbyName: document.getElementById('standby-name')
+        standbyName: document.getElementById('standby-name'),
+        standbyAvatar: document.getElementById('standby-avatar'),
+        standbyDetail: document.getElementById('standby-detail')
       };
       // 按钮统一走 onClick 安全绑定：元素缺失（如浏览器缓存了旧版 HTML）时仅跳过并告警，
       // 绝不能让构造函数中断——否则 reset()/主循环不启动，背景音乐与音效会全部静默
@@ -64,6 +66,7 @@
       this.onClick('select-btn', () => this.openCharSelect());
       this.onClick('restart-btn', () => this.start());
       this.onClick('pause-restart-btn', () => this.start());
+      this.onClick('pause-resume-btn', () => this.togglePause());
       this.onClick('pause-select-btn', () => this.openCharSelect(true));
       this.onClick('char-back-btn', () => this.closeCharSelect());
       this.onClick('menu-map-btn', () => this.cycleMapChoice());
@@ -149,6 +152,19 @@
         // 测试模式快捷键：B 立即触发 Boss 预警（跳过倒计时），便于反复测试
         if (e.code === 'KeyB' && this.testBoss && this.state === 'playing' &&
             !this.bossActive && this.warnT <= 0) this.bossT = 0;
+        // 调试快捷键：按 1 直接召唤巨型骨龙王（无视地图/轮次/单次限制），仅测试用
+        if (e.code === 'Digit1' && this.state === 'playing' && !this.bossActive) {
+          const BDK = (window.Bosses && window.Bosses.BoneDragonKing);
+          if (BDK) this.spawnBoss(BDK);
+        }
+        // 调试快捷键：按 2 依次刷出 1 个新飞行弹幕小怪（刺羽鸟→魔眼飞虫→魔石甲虫→浮空魔花→风暴飞鱼→双头飞蛇→预言猫头鹰，循环），仅测试用
+        if (e.code === 'Digit2' && this.state === 'playing') {
+          const flyers = ['spikebird', 'eyefly', 'stonebeetle', 'floatflower', 'stormfish', 'twinsnake', 'owl'];
+          const type = flyers[this.flyerTestIdx % flyers.length];
+          this.flyerTestIdx++;
+          this.spawnEnemy(type);
+          this.toast(`测试刷怪：${CFG.enemies[type].name}`, 1.4);
+        }
         if (this.state === 'levelup' && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3')) {
           const idx = e.code === 'Digit1' ? 0 : e.code === 'Digit2' ? 1 : 2;
           if (this.pendingOptions[idx]) this.pickUpgrade(idx);
@@ -278,12 +294,14 @@
       this.flashColor = '#fff';
       this.ultWave = null;    // 大招光波特效
       this.slashFx = null;    // 侠客大招斩击特效 { x, y, t }
-      this.soundwaveT = 0;    // 不良少年声波禁锢剩余时间（敌人子弹冻结）
+      this.soundwaveT = 0;    // 浪客声波禁锢剩余时间（敌人子弹冻结）
       this.ultBubble = null;  // 大招口头禅气泡 { text, t }
       this.round = 1;
       this.wayPicksThisRound = 0;   // 每轮弹道类成长选择次数（上限 3）
       this.elemPicksThisRound = 0;  // 每轮元素弹道成长选择次数（上限 2）
       this.grassDragonThisRound = false;   // 草龙每轮至多出现一次
+      this.unlockedFlyers = new Set();      // 已解锁的飞行弹幕敌人（每轮 30% 概率解锁）
+      this.flyerTestIdx = 0;                // 测试快捷键 2 的刷怪循环索引
       this.sphinxSpawned = false;         // 狮身人面像每局至多出现一次（沙漠专属）
       this.niuMoSpawned = false;          // 牛魔特殊期每局至多出场一次（草原专属）
       this.niuMoGeneric = false;          // 12 只通用 Boss 全部轮完后，牛魔转入普通池
@@ -400,6 +418,14 @@
     ultName(ult) {
       return { wave: '强光波', slash: '前方大斩击', shield: '魔法护盾', soundwave: '禁锢声波', bloodrage: '血怒', lasers: '五重激光串' }[ult] || ult;
     }
+    /** 自动技能（近战）名称 */
+    autoSkillName(id) {
+      return { xiaobai: '爪击', xiake: '疾风突刺', mofashi: '彩虹护盾', buliang: '过肩摔', jiaodoushi: '血怒铠甲', chaoren: '巨型激光' }[id] || '爪击';
+    }
+    /** 自动技能图标字 */
+    autoSkillIcon(id) {
+      return { xiaobai: '爪', xiake: '突', mofashi: '盾', buliang: '摔', jiaodoushi: '甲', chaoren: '激' }[id] || '爪';
+    }
     /** 角色参数可读串 */
     charParams(c) {
       // 速度：>1 更快为「+」；射速(fireMul 为射击间隔倍率)：>1 更慢为「-」
@@ -438,7 +464,7 @@
           const info = document.createElement('div');
           info.className = 'char-bar-info';
           info.innerHTML =
-            `<div class="char-bar-name">${c.name}<span class="char-bar-tag">${c.tag}</span></div>` +
+            `<div class="char-bar-name">${c.name}</div>` +
             `<div class="char-bar-intro">${c.intro || c.desc}</div>` +
             `<div class="char-bar-params">${this.charParams(c)}</div>`;
           const badge = document.createElement('div');
@@ -543,10 +569,28 @@
       b.className = 'char-status ' + st;
       b.textContent = this.statusLabel(st);
     }
-    /** 同步主菜单备战角色名 */
+    /** 同步主菜单备战角色信息（名称 + 头像 + 能力/大招/自动技能） */
     syncStandbyName() {
       const c = window.CHARS && window.CHARS.get(this.charId);
-      if (this.el.standbyName && c) this.el.standbyName.textContent = `${c.icon} ${c.name}`;
+      if (!c) return;
+      if (this.el.standbyName) this.el.standbyName.textContent = `${c.icon} ${c.name}`;
+      // 头像
+      if (this.el.standbyAvatar) {
+        this.el.standbyAvatar.innerHTML = '';
+        const im = new Image();
+        im.src = c.face || c.art;
+        im.alt = c.name;
+        const fm = window.CHARS.face(this.charId);
+        if (fm && fm.complete && fm.naturalWidth) im.src = fm.src;
+        this.el.standbyAvatar.appendChild(im);
+      }
+      // 能力 / 大招 / 自动技能
+      if (this.el.standbyDetail) {
+        this.el.standbyDetail.innerHTML =
+          `<span class="sd-line sd-trait"><b>能力</b>　${c.trait}</span>` +
+          `<span class="sd-line sd-ult"><b>大招</b>　${this.ultName(c.ult)}</span>` +
+          `<span class="sd-line sd-auto"><b>自动技能</b>　${this.autoSkillName(c.id)}（接触敌人触发，3 秒冷却）</span>`;
+      }
     }
     /** 局外每 10s 随机刷新各角色心情语录 */
     refreshMoods() {
@@ -778,7 +822,7 @@
       this.toast('✨ 魔法护盾展开！无敌 5 秒', 2);
     }
 
-    /** [不良少年] 禁锢声波：禁锢所有敌人（小怪）与敌人子弹 4s */
+    /** [浪客] 禁锢声波：禁锢所有敌人（小怪）与敌人子弹 4s */
     ultSoundwave() {
       SFX.ultimate();
       this.shake(10);
@@ -799,7 +843,7 @@
       this.toast('🔊 禁锢声波！敌人静止 4 秒', 2);
     }
 
-    /** [狂战士] 血怒：无敌（不死亡）5s，受创越多弹幕增伤越高（最高 3 倍） */
+    /** [战狂] 血怒：无敌（不死亡）5s，受创越多弹幕增伤越高（最高 3 倍） */
     ultBloodrage() {
       SFX.ultimate();
       SFX.bossEnrage();
@@ -817,7 +861,7 @@
       this.toast('🩸 血怒开启！受创越多，弹幕越强', 2.2);
     }
 
-    /** [超级小子] 五重激光串：5 道追踪激光，秒杀小怪（含地下龙类）、每道对 Boss 造成 4% 最大生命、摧毁障碍；
+    /** [超猫] 五重激光串：5 道追踪激光，秒杀小怪（含地下龙类）、每道对 Boss 造成 4% 最大生命、摧毁障碍；
      *  5 道初射角度各不相同（扇形展开），发射后由追踪转向修正命中目标 */
     ultLasers() {
       SFX.ultimate();
@@ -882,7 +926,7 @@
         if (u.charOnly && this.player.charId !== u.charOnly) return false;
         return true;
       });
-      // 角色专属「子弹成长」项注入（侠客/法师/不良少年/狂战士/超级小子）
+      // 角色专属「子弹成长」项注入（侠客/法师/浪客/战狂/超猫）
       const cb = window.CHARS && window.CHARS.bulletUpgrade(this.player.charId);
       if (cb && cb.can(this.player)) pool.push(cb);
       const opts = [];
@@ -1080,6 +1124,8 @@
       this.wayPicksThisRound = 0;   // 新一轮重置弹道成长计数
       this.elemPicksThisRound = 0;  // 新一轮重置元素弹道成长计数
       this.grassDragonThisRound = false;   // 新一轮重置草龙出场标记
+      // 飞行弹幕敌人：每轮 30% 概率解锁各档次中 1 只未解锁的
+      this.rollFlyerUnlocks();
       this.score += 500;
       this.kills++;
       this.addRage(CFG.ultimate.rageBoss);
@@ -1192,12 +1238,31 @@
       this.enemies.push(new Enemy(type, this));
     }
 
+    /** 飞行弹幕敌人解锁：通过指定关卡后，每轮各档次 30% 概率解锁 1 只未解锁的 */
+    rollFlyerUnlocks() {
+      const tierMinBoss = { weak: 2, medium: 3, strong: 4 };
+      for (const tier of Object.keys(tierMinBoss)) {
+        if (this.bossCount < tierMinBoss[tier]) continue;
+        if (Math.random() > 0.30) continue;          // 每轮 30% 概率
+        const candidates = Object.keys(CFG.enemies).filter(t => {
+          const d = CFG.enemies[t];
+          return d.flyer && d.flyerTier === tier && !this.unlockedFlyers.has(t);
+        });
+        if (!candidates.length) continue;
+        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        this.unlockedFlyers.add(pick);
+        const tierName = tier === 'weak' ? '弱型' : tier === 'medium' ? '中型' : '强型';
+        this.toast(`✨ 新${tierName}飞行敌人登场：${CFG.enemies[pick].name}！`, 2.8);
+      }
+    }
+
     /** 按权重随机抽取一种当前可出场的敌人（精英/地面单位场上限 1；草龙每轮限 1 只） */
     pickEnemyType() {
       const table = [];
       Object.keys(CFG.enemies).forEach(type => {
         const def = CFG.enemies[type];
         if ((def.minBossKills || 0) > this.bossCount) return;        // 未达成 Boss 击败数：每击败1只Boss解锁1种
+        if (def.flyer && !this.unlockedFlyers.has(type)) return;    // 飞行弹幕敌人：仅已解锁的出场
         if (def.ground && this.mapId === 'ocean') return;           // 大海：不出现地面类敌人（弓箭手/炮师）
         if (def.oncePerRound && this.grassDragonThisRound) return;   // 草龙：每轮至多一次
         if ((def.elite || def.ground) && this.enemies.some(e => e.type === type && !e.isMini)) return;  // 精英/地面单位场上限 1（分裂小段不计）
@@ -1224,6 +1289,12 @@
           for (let i = 0; i < n; i++) setTimeout(() => {
             if (this.state === 'playing') this.spawnEnemy('bat');
           }, i * 220);
+        } else if (type === 'spikebird') {
+          // 刺羽鸟：5 个一组出场
+          const n = 5 * (tide ? 3 : 1);
+          for (let i = 0; i < n; i++) setTimeout(() => {
+            if (this.state === 'playing') this.spawnEnemy('spikebird');
+          }, i * 180);
         } else if (type === 'eagle' && Math.random() < 0.4) {
           this.spawnEnemy('eagle');
           setTimeout(() => { if (this.state === 'playing') this.spawnEnemy('eagle'); }, 500);
@@ -1436,8 +1507,8 @@
       this.player.update(dt, this);
       this.enemies.forEach(e => e.update(dt, this));
       this.bosses.forEach(b => {
-        // 声波禁锢：Boss 行动完全冻结（仍可被玩家攻击）
-        if (this.soundwaveT > 0) return;
+        // 声波禁锢：Boss 行动冻结（骨龙王免疫——身体太长会被卡死）
+        if (this.soundwaveT > 0 && !b.segments) return;
         b.update(dt, this);
       });
       this.bullets.forEach(b => {
@@ -1523,7 +1594,7 @@
           if (hitSeg >= 0 || circleHit) {
             if (!b.hitSet) b.hitSet = new Set();
             b.hitSet.add(e);
-            // 超级小子激光串：秒杀小怪（含龙类小段全灭）；Boss 不在此列，落到下方按比例承伤
+            // 超猫激光串：秒杀小怪（含龙类小段全灭）；Boss 不在此列，落到下方按比例承伤
             if (b.ultraKill && !e.isBoss) {
               if (e.segments) {
                 if (e.isMini) {
@@ -1671,7 +1742,7 @@
         if (b.friendly || b.dead || b.neutralized) continue;
         const rr = b.r + p.radius * 0.8;
         if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < rr * rr) {
-          // 狂战士血怒铠甲：命中的子弹转化为血色尖刺（长菱形），朝最近敌人反弹
+          // 战狂血怒铠甲：命中的子弹转化为血色尖刺（长菱形），朝最近敌人反弹
           if (p.bloodArmorT > 0) {
             b.dead = true;
             const tgt = p.nearestEnemy(this);
@@ -1774,7 +1845,7 @@
       // 怒气 / 大招
       const rageRatio = clamp(p.rage / CFG.ultimate.rageMax, 0, 1);
       this.el.rageBar.style.width = rageRatio * 100 + '%';
-      this.el.rageText.textContent = rageRatio >= 1 ? '大招就绪！空格/J' : `怒气 ${Math.floor(p.rage)}/100`;
+      this.el.rageText.textContent = rageRatio >= 1 ? '大招就绪！' : `${Math.floor(p.rage)}/100`;
       this.el.rageBox.classList.toggle('ready', rageRatio >= 1);
       this.el.roundText.textContent = `第 ${this.round} 轮`;
       this.el.levelText.textContent = `成长 ${this.totalLevels} 次`;
@@ -1788,14 +1859,9 @@
       const cdRatio = p.isMeleeing ? 0 : clamp(p.cdT / cdTotal, 0, 1);
       this.el.meleeCd.style.height = cdRatio * 100 + '%';
       this.el.meleeIcon.style.color = p.meleeReady ? '#ffd166' : '#8a7a55';
-      const SKILL_ICON = { xiaobai: '爪', xiake: '突', mofashi: '盾', buliang: '摔', jiaodoushi: '甲', chaoren: '激' };
-      const SKILL_NAME = {
-        xiaobai: '爪击', xiake: '疾风突刺', mofashi: '彩虹护盾',
-        buliang: '过肩摔', jiaodoushi: '血怒铠甲', chaoren: '巨型激光'
-      };
-      this.el.meleeIcon.textContent = SKILL_ICON[p.charId] || '爪';
+      this.el.meleeIcon.textContent = this.autoSkillIcon(p.charId);
       const meleeBox = document.getElementById('melee-box');
-      if (meleeBox) meleeBox.title = `${SKILL_NAME[p.charId] || '爪击'}（接触敌人触发，3 秒冷却）`;
+      if (meleeBox) meleeBox.title = `${this.autoSkillName(p.charId)}（接触敌人触发，3 秒冷却）`;
       // Boss 血条
       if (this.bosses.length) {
         const b = this.bosses[0];
@@ -2433,32 +2499,36 @@
           ctx.fillText('未找到 assets/cat.png，请放入白猫图片', CFG.W - 260, CFG.H - 120);
           ctx.restore();
         }
-        // 菜单左上角：备战角色头像（assets/Role/）
+        // 菜单左上角：备战角色头像（assets/Role/）—— 方形边框、放大、清晰
         const faceImg = (Sprites.charFace && Sprites.charFace[this.charId]) || null;
         if (faceImg && faceImg.complete && faceImg.naturalWidth) {
           const bob2 = Math.sin(performance.now() / 420) * 4;
-          const sz = 96;
+          const sz = 120;
+          const cx = 82, cy = 82 + bob2;
           ctx.save();
-          ctx.imageSmoothingEnabled = true;
-          // 圆形头像底
-          ctx.beginPath(); ctx.arc(70, 70 + bob2, sz / 2 + 6, 0, TAU);
-          ctx.fillStyle = 'rgba(10,16,36,.85)'; ctx.fill();
-          ctx.lineWidth = 4; ctx.strokeStyle = '#ffd166'; ctx.stroke();
-          // 圆形剪裁绘制
-          ctx.beginPath(); ctx.arc(70, 70 + bob2, sz / 2, 0, TAU); ctx.clip();
+          ctx.imageSmoothingEnabled = false;
+          // 方形头像底框
+          ctx.fillStyle = 'rgba(10,16,36,.9)';
+          ctx.fillRect(cx - sz / 2 - 5, cy - sz / 2 - 5, sz + 10, sz + 10);
+          ctx.lineWidth = 4; ctx.strokeStyle = '#ffd166';
+          ctx.strokeRect(cx - sz / 2 - 5, cy - sz / 2 - 5, sz + 10, sz + 10);
+          // 方形剪裁绘制
+          ctx.beginPath();
+          ctx.rect(cx - sz / 2, cy - sz / 2, sz, sz);
+          ctx.clip();
           const fw = faceImg.naturalWidth, fh = faceImg.naturalHeight;
           const r = Math.max(sz / fw, sz / fh);
           const dw = fw * r, dh = fh * r;
-          ctx.drawImage(faceImg, 70 - dw / 2, 70 - dh / 2 + bob2, dw, dh);
+          ctx.drawImage(faceImg, cx - dw / 2, cy - dh / 2, dw, dh);
           ctx.restore();
           // 名称
           const c = window.CHARS && window.CHARS.get(this.charId);
           if (c) {
             ctx.save();
-            ctx.font = 'bold 16px "Microsoft YaHei", sans-serif';
+            ctx.font = 'bold 18px "Microsoft YaHei", sans-serif';
             ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-            ctx.fillStyle = '#000'; ctx.fillText(c.name, 71, 128 + bob2);
-            ctx.fillStyle = '#ffe08a'; ctx.fillText(c.name, 70, 126 + bob2);
+            ctx.fillStyle = '#000'; ctx.fillText(c.name, cx + 1, cy + sz / 2 + 10 + bob2);
+            ctx.fillStyle = '#ffe08a'; ctx.fillText(c.name, cx, cy + sz / 2 + 8 + bob2);
             ctx.restore();
           }
         }

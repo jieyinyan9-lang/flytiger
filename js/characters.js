@@ -32,7 +32,7 @@
       desc: '神秘星辉法师，自转星星沿 S 形弧线飞行，命中分裂；子弹可成长为彩虹大星。大招展开魔法护盾。'
     },
     buliang: {
-      id: 'buliang', name: '不良少年', art: 'assets/BuLiang.png', face: 'assets/Role/buliangshaonian.png?v=20260907', icon: '🚬',
+      id: 'buliang', name: '浪客', art: 'assets/BuLiang.png', face: 'assets/Role/buliangshaonian.png?v=20260907', icon: '🚬',
       speedMul: 1.3, dmg: 6, fireMul: 1, bulletSpd: 0.6,
       kind: 'butt', ult: 'soundwave', bounceBase: 1,
       tag: '桀骜不良',
@@ -40,7 +40,7 @@
       desc: '叼着烟的不良猫，烟头弹会反弹并点燃敌人，砸到地面还能震伤地下的龙；子弹可成长为烈焰火把。大招释放禁锢声波。'
     },
     jiaodoushi: {
-      id: 'jiaodoushi', name: '狂战士', art: 'assets/Jiaodoushi.png', face: 'assets/Role/jiaodoushi.png?v=20260907', icon: '🪓',
+      id: 'jiaodoushi', name: '战狂', art: 'assets/Jiaodoushi.png', face: 'assets/Role/jiaodoushi.png?v=20260907', icon: '🪓',
       speedMul: 0.8, dmg: 12, fireMul: 1.25, bulletSpd: 0.6,
       kind: 'shieldSaw', ult: 'bloodrage', bounceBase: 1,
       tag: '角斗士',
@@ -48,7 +48,7 @@
       desc: '披甲角斗猫，抛掷沉重的锯齿盾牌（会反弹）；子弹可成长为巨大战斧。大招开启血怒，受创越多伤害越高。'
     },
     chaoren: {
-      id: 'chaoren', name: '超级小子', art: 'assets/ChaoRen.png', face: 'assets/Role/xiaochaoren.png?v=20260907', icon: '🦸',
+      id: 'chaoren', name: '超猫', art: 'assets/ChaoRen.png', face: 'assets/Role/xiaochaoren.png?v=20260907', icon: '🦸',
       speedMul: 1.5, dmg: 11, fireMul: 1,
       kind: 'lblock', ult: 'lasers',
       tag: '超能少年',
@@ -333,7 +333,7 @@
 
   /**
    * 角色专属「子弹成长」三选一项（四种样式：初始 + 3 次成长，第 4 阶为最终形态）
-   * 不良少年 / 狂战士每次成长额外 +1 次反弹
+   * 浪客 / 战狂每次成长额外 +1 次反弹
    */
   function bulletUpgrade(charId) {
     const c = list[charId];

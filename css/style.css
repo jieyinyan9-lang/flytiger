@@ -39,20 +39,30 @@ kbd {
 
 /* ---------- HUD ---------- */
 #hud {
-  position: absolute; left: 0; top: 0; right: 0;
-  padding: 10px 14px;
-  display: flex; justify-content: space-between; align-items: flex-start;
+  position: absolute; inset: 0;
   pointer-events: none;
   text-shadow: 1px 1px 0 #000;
 }
-.hud-left { display: flex; flex-direction: column; gap: 5px; }
+.hud-topleft { position: absolute; top: 10px; left: 14px; }
+.hud-bottomleft {
+  position: absolute; bottom: 12px; left: 14px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.hud-rage {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.rage-label {
+  font-size: 12px; font-weight: 900; color: #ffc078;
+  letter-spacing: 4px; text-shadow: 1px 1px 0 #000;
+}
 .bar-row { display: flex; align-items: center; gap: 8px; }
 .bar-label {
   width: 34px; font-size: 13px; font-weight: bold; color: #fff;
   letter-spacing: 2px;
 }
 .bar-outer {
-  width: 220px; height: 14px;
+  width: 220px; height: 18px;
   background: rgba(10, 14, 30, .75);
   border: 2px solid #000;
   box-shadow: 0 0 0 2px rgba(255,255,255,.25);
@@ -62,7 +72,18 @@ kbd {
 .bar-inner.hp { background: linear-gradient(to bottom, #ff6b6b 0%, #ff6b6b 40%, #c92a2a 60%, #c92a2a 100%); }
 .bar-inner.xp { background: linear-gradient(to bottom, #74e0ff 0%, #38bdf8 50%, #0369a1 100%); }
 .bar-inner.rage { background: linear-gradient(to bottom, #ffe08a 0%, #ffb03c 45%, #e8590c 100%); transition: width .15s; }
-.rage-text { color: #ffc078 !important; }
+/* 怒气框体：窄一点、厚一点 */
+.rage-outer { width: 180px; height: 22px; }
+.rage-text { color: #fff !important; }
+/* 数值文字：框体中心、白色 */
+.bar-text {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 900; color: #fff;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+  pointer-events: none;
+  letter-spacing: 0.5px;
+}
 #rage-box.ready {
   box-shadow: 0 0 0 2px rgba(255,209,102,.95), 0 0 16px rgba(255,150,40,.95);
   animation: ragepulse .55s infinite alternate;
@@ -74,19 +95,22 @@ kbd {
 .hud-info { display: flex; gap: 14px; margin-top: 2px; font-size: 13px; color: #ffe08a; font-weight: bold; }
 .lives-text { color: #ff5d73; letter-spacing: 2px; }
 
-.hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: auto; }
+.hud-right {
+  position: absolute; top: 10px; right: 14px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: auto;
+}
 #melee-box {
   position: relative;
-  width: 44px; height: 44px;
-  border: 2px solid #000;
-  box-shadow: 0 0 0 2px rgba(255,255,255,.3);
-  background: rgba(10,14,30,.75);
+  width: 56px; height: 56px;
+  border: 3px solid #000;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.4), 0 0 12px rgba(255,209,102,.35);
+  background: rgba(10,14,30,.85);
   overflow: hidden;
 }
 #melee-icon {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 20px; font-weight: bold; color: #ffd166;
+  font-size: 26px; font-weight: bold; color: #ffd166;
 }
 #melee-cd {
   position: absolute; left: 0; top: 0; right: 0; height: 0%;
@@ -212,36 +236,94 @@ kbd {
 }
 
 /* ---------- 菜单 / 结束 ---------- */
-#menu, #gameover, #pause {
+#gameover, #pause {
   position: absolute; inset: 0; z-index: 40;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: rgba(8, 12, 30, .78);
   gap: 8px; text-align: center;
 }
+#menu {
+  position: absolute; inset: 0; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  background: rgba(8, 12, 30, .78);
+  padding-top: 28px;
+  gap: 10px; text-align: center;
+}
 .title-cn {
-  font-size: 44px; font-weight: 900; color: #ffd166;
+  font-size: 40px; font-weight: 900; color: #ffd166;
   letter-spacing: 10px; text-indent: 10px;
   text-shadow: 3px 3px 0 #7a3b00, 6px 6px 0 rgba(0,0,0,.5);
 }
 .title-en {
   font-family: "Courier New", monospace;
-  font-size: 13px; letter-spacing: 6px; color: #7fd4ff; font-weight: bold;
+  font-size: 12px; letter-spacing: 6px; color: #7fd4ff; font-weight: bold;
   margin-top: -4px;
 }
-.menu-desc { font-size: 13px; color: #dcecff; line-height: 1.55; margin-top: 2px; }
-.menu-desc .menu-new { color: #7fe7ff; font-size: 12px; }
+
+/* 右上角：背景音乐开关 */
+.menu-topright {
+  position: absolute; top: 12px; right: 14px;
+}
+
+/* 备战角色醒目展示区 */
+.standby-hero {
+  display: flex; align-items: center; gap: 16px;
+  background: linear-gradient(160deg, rgba(28, 42, 78, .85), rgba(14, 22, 46, .92));
+  border: 3px solid #ffd166;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.6), 0 0 22px rgba(255, 209, 102, .35);
+  border-radius: 10px;
+  padding: 10px 18px;
+  margin-top: 6px;
+  width: 333px;
+}
+.standby-avatar {
+  width: 72px; height: 72px; flex: 0 0 auto;
+  background: rgba(8,12,28,.6);
+  border: 2px solid #33477a; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.standby-avatar img {
+  max-width: 64px; max-height: 66px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.6));
+}
+.standby-info { text-align: left; min-width: 0; flex: 1; }
+.standby-row {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 15px; color: #dcecff;
+}
+.standby-label { font-size: 13px; font-weight: 900; color: #ffd166; letter-spacing: 2px; }
+#standby-name { font-size: 20px; font-weight: 900; color: #fff; letter-spacing: 2px; }
+.standby-detail {
+  margin-top: 6px;
+  font-size: 12px; color: #bfe3ff; line-height: 1.6;
+}
+.standby-detail .sd-line { display: block; }
+.standby-detail b { color: #ffd166; font-weight: 900; }
+.standby-detail .sd-trait { color: #9fd8ff; }
+.standby-detail .sd-ult { color: #ff9d3c; }
+.standby-detail .sd-auto { color: #7fe0ff; }
+
+/* 主菜单按钮组（选择角色 / 开始游戏 / 地图 / 操作模式） */
+.menu-main {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  margin-top: 4px;
+}
 .menu-ctrl {
-  font-size: 12px; color: #b9ccea; line-height: 1.6;
+  position: absolute; top: 333px; left: 3px;
+  font-size: 12px; color: #b9ccea; line-height: 1.7;
   background: rgba(20,30,60,.7); border: 2px solid #33477a;
-  padding: 8px 22px;
+  padding: 8px 12px;
+  text-align: left;
+  width: 222px;
 }
 .menu-ctrl b { color: #ffd166; }
 
 /* 操作模式选择 */
 .mode-row {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
 }
-.mode-label { font-size: 14px; font-weight: 900; color: #ffd166; letter-spacing: 2px; }
 .mode-btn {
   font-family: inherit; cursor: pointer;
   font-size: 14px; font-weight: 900; color: #b9ccea;
@@ -262,23 +344,6 @@ kbd {
 .mode-btn.active small { color: #0e4a5e; font-weight: 700; }
 .mode-btn:active { transform: translateY(2px); }
 
-/* 菜单内音乐开关 */
-.menu-audio-row { display: flex; justify-content: center; margin-top: 2px; }
-
-/* 菜单地图选择 */
-.map-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
-.map-label { font-size: 14px; font-weight: 900; color: #ffd166; letter-spacing: 2px; }
-.map-btn {
-  font-family: inherit; cursor: pointer;
-  font-size: 13px; font-weight: 900; color: #9fd8ff; letter-spacing: 1px;
-  background: rgba(10,14,30,.8);
-  border: 2px solid #33477a; border-radius: 4px;
-  padding: 6px 18px;
-  transition: transform .08s, border-color .12s, color .12s;
-}
-.map-btn:hover { border-color: #6be0ff; color: #fff; }
-.map-btn:active { transform: translateY(2px); }
-
 .audio-btn {
   font-family: inherit; cursor: pointer;
   font-size: 13px; font-weight: 900; color: #9fd8ff;
@@ -291,13 +356,14 @@ kbd {
 .audio-btn:active { transform: translateY(2px); }
 .audio-btn.off { color: #7e93c0; }
 .big-btn {
-  margin-top: 6px;
-  font-family: inherit; font-size: 20px; font-weight: 900; letter-spacing: 6px;
+  font-family: inherit; font-size: 18px; font-weight: 900; letter-spacing: 4px;
   color: #221a00;
   background: linear-gradient(to bottom, #ffe08a, #f5a623);
   border: 3px solid #000;
   box-shadow: 0 6px 0 #8a5a00, 0 10px 20px rgba(0,0,0,.5);
-  padding: 10px 40px; cursor: pointer;
+  padding: 10px 28px; cursor: pointer;
+  width: 220px;
+  text-align: center;
 }
 .big-btn:hover { filter: brightness(1.1); }
 .big-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #8a5a00; }
@@ -320,23 +386,21 @@ kbd {
 .pause-text span { font-size: 16px; letter-spacing: 4px; color: #bfe3ff; }
 
 /* ---------- 暂停按钮 ---------- */
-.pause-btns { display: flex; gap: 14px; margin-top: 26px; }
+.pause-btns {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 14px; margin-top: 26px;
+}
 .pause-btn {
-  font-family: inherit; font-size: 16px; font-weight: 900; letter-spacing: 2px;
+  font-family: inherit; font-size: 18px; font-weight: 900; letter-spacing: 4px;
   color: #221a00;
   background: linear-gradient(to bottom, #ffe08a, #f5a623);
   border: 3px solid #000;
-  box-shadow: 0 4px 0 #8a5a00, 0 8px 16px rgba(0,0,0,.45);
-  padding: 9px 26px; cursor: pointer;
+  box-shadow: 0 6px 0 #8a5a00, 0 10px 20px rgba(0,0,0,.5);
+  padding: 10px 28px; cursor: pointer;
+  width: 240px; text-align: center;
 }
 .pause-btn:hover { filter: brightness(1.1); }
-.pause-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #8a5a00; }
-.pause-btn.alt {
-  color: #dff3ff;
-  background: linear-gradient(to bottom, #3b5e8f, #22406b);
-  box-shadow: 0 4px 0 #101c30, 0 8px 16px rgba(0,0,0,.45);
-}
-.pause-btn.alt:active { box-shadow: 0 1px 0 #101c30; }
+.pause-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #8a5a00; }
 
 /* ---------- 角色选择界面 ---------- */
 #charsel {
@@ -351,14 +415,6 @@ kbd {
   letter-spacing: 6px; text-shadow: 2px 2px 0 #000;
   margin-bottom: 8px;
 }
-/* 主菜单：备战角色 + 双按钮 */
-.standby-row {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 15px; color: #dcecff; margin-top: 4px;
-}
-.standby-label { font-size: 13px; font-weight: 900; color: #ffd166; letter-spacing: 2px; }
-#standby-name { font-size: 17px; font-weight: 900; color: #fff; letter-spacing: 2px; }
-.menu-btns { display: flex; gap: 16px; align-items: center; margin-top: 6px; }
 .mid-btn {
   font-family: inherit; font-size: 17px; font-weight: 900; letter-spacing: 4px;
   color: #dff3ff;
@@ -399,15 +455,15 @@ kbd {
   50%     { box-shadow: 0 0 0 2px rgba(255,236,170,1),  0 0 26px rgba(255,200,60,.85); }
 }
 .char-bar.locked { opacity: .5; }
-/* 左侧头像 */
+/* 左侧头像（去掉头像框） */
 .char-bar-avatar {
   flex: 0 0 auto; width: 66px; height: 100%;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(8,12,28,.6); border-right: 2px solid #24365e;
+  background: transparent;
   overflow: hidden;
 }
 .char-bar-avatar img {
-  max-width: 58px; max-height: 62px;
+  max-width: 60px; max-height: 64px;
   image-rendering: pixelated;
   filter: drop-shadow(0 2px 2px rgba(0,0,0,.6));
 }
@@ -419,21 +475,21 @@ kbd {
 .char-bar-info {
   flex: 1 1 auto; min-width: 0;
   display: flex; flex-direction: column; justify-content: center;
-  padding: 3px 140px 8px 8px;
-  gap: 1px;
+  padding: 4px 140px 8px 10px;
+  gap: 2px;
 }
-.char-bar-name { font-size: 14px; font-weight: 900; color: #fff; letter-spacing: 1px; }
+.char-bar-name { font-size: 15px; font-weight: 900; color: #fff; letter-spacing: 1px; text-shadow: 1px 1px 0 #000; }
 .char-bar-tag {
   display: inline-block; font-size: 10px; font-weight: bold; color: #0e162e;
   background: #ffd166; border-radius: 3px; padding: 0 5px; margin-left: 6px;
   vertical-align: middle;
 }
 .char-bar-intro {
-  font-size: 10px; color: #9fd8ff; line-height: 1.25;
+  font-size: 11px; color: #cfe4ff; line-height: 1.3;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .char-bar-params {
-  font-size: 10px; color: #ffca7a; font-weight: bold; line-height: 1.2;
+  font-size: 11px; color: #ffd166; font-weight: bold; line-height: 1.25;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* 右上角状态徽章 */
