@@ -187,7 +187,7 @@
         this.charId = order[Math.floor(Math.random() * order.length)];
         try { localStorage.setItem('flytiger_char', this.charId); } catch (e) {}
       }
-      // 角色状态表（id → 空闲/备战/角斗/探索大陆/执行任务）；默认仅备战角色为 ready
+      // 角色状态表（id → 空闲/备战/探索/委托）；默认仅备战角色为 ready
       this.charStatus = {};
       if (window.CHARS) window.CHARS.ORDER.forEach(id => { this.charStatus[id] = (id === this.charId) ? 'ready' : 'idle'; });
       this.moodT = 0;                 // 心情刷新计时（局外每 10s 刷新一次）
@@ -535,10 +535,10 @@
     }
 
     /* ---------------- 角色选择 ---------------- */
-    /** 状态轮转顺序：空闲 → 备战 → 角斗 → 探索大陆 → 执行任务 → 空闲 */
-    static CHAR_CYCLE = ['idle', 'ready', 'duel', 'explore', 'mission'];
+    /** 状态轮转顺序：空闲 → 备战 → 探索 → 委托 → 空闲 */
+    static CHAR_CYCLE = ['idle', 'ready', 'explore', 'mission'];
     statusLabel(s) {
-      return { idle: '空闲', ready: '备战', duel: '角斗', explore: '探索大陆', mission: '执行任务' }[s] || '空闲';
+      return { idle: '空闲', ready: '备战', explore: '探索', mission: '委托' }[s] || '空闲';
     }
     /** 大招名称 */
     ultName(ult) {
@@ -616,7 +616,7 @@
         grid.appendChild(bar);
       }
     }
-    /** 点击状态徽章：弹出选项菜单（角斗/探索大陆/执行任务 均提示未实装） */
+    /** 点击状态徽章：弹出选项菜单（探索/委托 均提示未实装） */
     openStatusMenu(id, anchor) {
       // 单一实例：先关旧菜单
       this.closeStatusMenu();
@@ -625,9 +625,8 @@
       menu.className = 'char-status-menu';
       const opts = [
         { key: 'ready', label: '备战', enabled: true },
-        { key: 'duel', label: '角斗', enabled: false },
-        { key: 'explore', label: '探索大陆', enabled: false },
-        { key: 'mission', label: '执行任务', enabled: false }
+        { key: 'explore', label: '探索', enabled: false },
+        { key: 'mission', label: '委托', enabled: false }
       ];
       opts.forEach(o => {
         const it = document.createElement('div');
