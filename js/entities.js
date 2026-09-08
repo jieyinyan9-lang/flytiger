@@ -6230,6 +6230,17 @@
         }
       }
       const p = g.player;
+      // 入场阶段：从屏幕外移入，接近中线目标点后才开始正常行为
+      if (this.entering && this.enterTarget) {
+        const tx = this.enterTarget.x, ty = this.enterTarget.y;
+        const dx = tx - this.x, dy = ty - this.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const spd = 260;
+        this.x += (dx / d) * spd * dt;
+        this.y += (dy / d) * spd * dt;
+        if (d < 30) this.entering = false;   // 到位，结束入场
+        return;   // 入场期间不射击、不远离
+      }
       const dx = this.x - p.x, dy = this.y - p.y;   // 方向：从玩家指向自己（远离）
       const d = Math.hypot(dx, dy) || 1;
       const nx = dx / d, ny = dy / d;

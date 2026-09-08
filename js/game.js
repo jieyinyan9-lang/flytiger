@@ -893,6 +893,10 @@
     }
 
     gainXp(v) {
+      // 骨龙王崩解（分裂）阶段不累计经验：该阶段三选一被彻底禁用，
+      // 经验在 Boss 死亡时统一结算为固定 1 次三选一，避免累积后连弹
+      const boneSplit = (this.bosses || []).some(b => !b.dead && b.headAlive === false);
+      if (boneSplit) return;
       this.xp += v;
       this.tryLevelUp();
     }
@@ -901,7 +905,7 @@
     tryLevelUp() {
       if (this.state !== 'playing') return;
       if (this.xp < this.xpNeed) return;
-      // 骨龙王崩解（分裂）阶段不弹三选一，避免打断战斗/连弹；能量保留，骨龙消亡后自动结算
+      // 骨龙王崩解（分裂）阶段不弹三选一
       const boneSplit = (this.bosses || []).some(b => !b.dead && b.headAlive === false);
       if (boneSplit) return;
       this.xp -= this.xpNeed;
@@ -1164,6 +1168,12 @@
       SFX.bossDie();
       this.slowmoT = 0.9;
       this.scheduleNextBoss();
+      // 骨龙王：死亡后固定只结算 1 次三选一（分裂阶段已禁用经验累积）
+      if (boss.constructor && boss.constructor.name === 'BoneDragonKing') {
+        this.totalLevels++;
+        this.xpNeed = CFG.xpNeed(this.totalLevels);
+        this.openLevelup();
+      }
     }
 
     /* ---------------- 火球爆炸 ---------------- */

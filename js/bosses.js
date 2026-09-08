@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  const { Bullet, Lightning, Beam, CurveBeam, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, Particle, BoneDragonMini, DRAGON_THEMES } = window.FT;
+  const { Bullet, Lightning, Beam, CurveBeam, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, Particle, BoneDragonMini, GrassDragon, DRAGON_THEMES } = window.FT;
   const TAU = Math.PI * 2;
 
   /** Boss 受击闪红时长（秒）与冷却（秒，含闪红持续期） */
@@ -3942,7 +3942,12 @@
           }
           this.packs.push({ hp, maxHp: hp, state: 'pending', enemy: null });
         }
-        this.packSpawnCd = 0.4;   // 首批骨龙组稍迟涌出
+        this.packWave = 0;            // 骨龙组刷出波次：1,2,3,4... 递增
+        this.packSpawnCd = 1.5;       // 首批 1.5s 后涌出，杜绝卡顿
+        // 碎裂瞬间立即召唤 2 条日常骨蛇小怪（GrassDragon bone 主题，击杀掉落能量）
+        for (let m = 0; m < 2; m++) {
+          g.enemies.push(new GrassDragon(g, false, null, 'bone'));
+        }
         g.shake(8);
         this.recalcHp(g);
       } else {
@@ -3976,7 +3981,9 @@
       }
     }
 
-    /** 崩解态：骨龙组分批出场（场上同时最多 4 组，死一组补一组），全灭 Boss 才死亡 */
+    /** 崩解态：骨龙组按"击杀触发"分批涌出。
+     *  第 1 波刷 1 只 → 全部击杀后等 1.5s → 第 2 波刷 2 只 → 全部击杀后等 1.5s → 第 3 波 3 只…
+     *  剩余组数 < 本波计划数时一次刷出全部剩余，全灭 Boss 才死亡 */
     updatePacks(dt, g) {
       this.packSpawnCd = Math.max(0, (this.packSpawnCd || 0) - dt);
       // 同步在场骨龙组状态
@@ -3987,22 +3994,31 @@
           else active++;
         }
       }
-      // 场上不足 4 组时，从碎裂点涌出补充（有短暂间隔，避免同帧刷屏）
-      const MAXC = 4;
-      if (this.packSpawnCd <= 0) {
-        let spawned = 0;
-        for (const pk of this.packs) {
-          if (active >= MAXC) break;
-          if (pk.state !== 'pending') continue;
-          const sx = clamp(this.x + rand(-80, 80), 70, CFG.W - 70);
-          const sy = clamp(this.y + rand(-50, 40), 90, CFG.GROUND_Y - 50);
-          const mini = new BoneDragonMini(g, sx, sy, { hp: pk.hp, scale: 1.3, pack: true });
-          g.enemies.push(mini);
-          pk.enemy = mini; pk.state = 'active';
-          burst(g, sx, sy, 10, this.deathCols, 180, 5, 0.4, 110);
-          active++; spawned++;
+      // 场上无存活骨龙组 且 冷却已到 → 刷下一波
+      if (active === 0 && this.packSpawnCd <= 0) {
+        const pending = this.packs.filter(p => p.state === 'pending');
+        if (pending.length > 0) {
+          this.packWave = (this.packWave || 0) + 1;
+          const want = this.packWave;                          // 第 N 波刷 N 只
+          const toSpawn = Math.min(want, pending.length);      // 剩余不足则全刷
+          for (let i = 0; i < toSpawn; i++) {
+            const pk = pending[i];
+            // 从屏幕外（左/右/上边缘随机一侧）生成，再移入屏幕接近中线
+            const edge = randi(0, 3);   // 0=左 1=右 2=上
+            let sx, sy;
+            if (edge === 0) { sx = -40; sy = rand(100, CFG.GROUND_Y - 80); }
+            else if (edge === 1) { sx = CFG.W + 40; sy = rand(100, CFG.GROUND_Y - 80); }
+            else { sx = rand(120, CFG.W - 120); sy = -40; }
+            const mini = new BoneDragonMini(g, sx, sy, { hp: pk.hp, scale: 1.3, pack: true });
+            // 入场目标：屏幕中线附近
+            mini.entering = true;
+            mini.enterTarget = { x: clamp(this.x + rand(-120, 120), 140, CFG.W - 140), y: clamp(CFG.H * 0.42 + rand(-40, 40), 120, CFG.GROUND_Y - 80) };
+            g.enemies.push(mini);
+            pk.enemy = mini; pk.state = 'active';
+            burst(g, sx, sy, 10, this.deathCols, 180, 5, 0.4, 110);
+          }
+          this.packSpawnCd = 1.5;   // 本波全灭后 1.5s 再刷下一波
         }
-        if (spawned > 0) this.packSpawnCd = 0.8;
       }
       this.recalcHp(g);
     }

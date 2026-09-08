@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>骨龙王脑袋导出（重绘参考）</title>
+<style>
+  body { font-family: sans-serif; background: #222; color: #eee; padding: 20px; margin: 0; }
+  .wrap { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+  .panel { background: #333; padding: 14px 16px; border-radius: 8px; min-width: 220px; }
+  canvas { border: 1px solid #555; background: #14141c; display: block; }
+  button { padding: 8px 16px; margin: 4px 4px 4px 0; cursor: pointer; font-size: 14px; }
+  label { display: block; margin: 10px 0 4px; font-size: 13px; color: #bbb; }
+  input[type=range] { width: 100%; }
+  h2 { margin-top: 0; }
+  .note { font-size: 12px; color: #999; line-height: 1.7; }
+  .chips span { display:inline-block; width:14px; height:14px; border-radius:3px; margin-right:4px; vertical-align:-2px; }
+</style>
+</head>
+<body>
+<h2>巨型骨龙王 · 脑袋导出（重绘参考）</h2>
+<div class="wrap">
+  <canvas id="cv" width="620" height="580"></canvas>
+  <div class="panel">
+    <button id="btnPng">下载 PNG（当前帧）</button>
+    <label>头部朝向角：<b id="angTxt">0°</b>（0° = 朝右，游戏中朝右为默认）</label>
+    <input type="range" id="ang" min="-180" max="180" value="0">
+    <label>缩放：<b id="scTxt">1.0x</b>（游戏内 headR ≈ 24px）</label>
+    <input type="range" id="sc" min="0.5" max="3" step="0.1" value="1">
+    <label><input type="checkbox" id="anim" checked> 眼火呼吸动画</label>
+    <label><input type="checkbox" id="grid" checked> 参考网格（每格 20px）</label>
+    <p class="note">
+      本图直接调用游戏内 <code>dragonHeadBoneKing</code> 绘制函数，所见即游戏内表现。<br>
+      绘制锚点：画布中心 = 头骨中心；+X 为长吻方向，−X 为连接龙身的后颈方向。<br>
+      纵向占比：双角上下约 ±1.7r，长吻向前约 2.2r。
+    </p>
+    <p class="note chips">
+      配色（bone 主题）：<br>
+      <span style="background:#8f8a78"></span>edge 骨廓 #8f8a78<br>
+      <span style="background:#e8e4d8"></span>belly 颅骨面 #e8e4d8<br>
+      <span style="background:#d8d3c2"></span>body 吻/下颚 #d8d3c2<br>
+      <span style="background:#b5ae9a"></span>fin 角/骨刺 #b5ae9a<br>
+      <span style="background:#4ade80"></span>冥火眼 #4ade80（渐变发光）
+    </p>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/entities.js"></script>
+<script>
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const th = FT.DRAGON_THEMES.bone;
+  const headFn = th.headKing;          // dragonHeadBoneKing(ctx, d, h, t, th)
+  let t = 0, last = performance.now();
+
+  function draw() {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (document.getElementById('anim').checked) t += dt;
+
+    const angle = +document.getElementById('ang').value * Math.PI / 180;
+    const scale = +document.getElementById('sc').value;
+    document.getElementById('angTxt').textContent = Math.round(angle * 180 / Math.PI) + '°';
+    document.getElementById('scTxt').textContent = scale.toFixed(1) + 'x';
+
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    // 背景
+    ctx.fillStyle = '#14141c'; ctx.fillRect(0, 0, cv.width, cv.height);
+    if (document.getElementById('grid').checked) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1;
+      for (let x = 0; x <= cv.width; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cv.height); ctx.stroke(); }
+      for (let y = 0; y <= cv.height; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cv.width, y); ctx.stroke(); }
+      ctx.strokeStyle = 'rgba(74,222,128,0.35)';
+      ctx.beginPath(); ctx.moveTo(cv.width / 2, 0); ctx.lineTo(cv.width / 2, cv.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, cv.height / 2); ctx.lineTo(cv.width, cv.height / 2); ctx.stroke();
+    }
+    // 绘制脑袋（游戏内 headR≈24；导出按缩放放大）
+    const cx = cv.width / 2, cy = cv.height / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.scale(scale, scale);
+    const d = { headR: 78, segR: 64 };
+    headFn(ctx, d, 0, t, th);
+    ctx.restore();
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  document.getElementById('btnPng').onclick = () => {
+    const a = document.createElement('a');
+    a.download = '骨龙王脑袋_重绘参考.png';
+    a.href = cv.toDataURL('image/png');
+    a.click();
+  };
+</script>
+</body>
+</html>
