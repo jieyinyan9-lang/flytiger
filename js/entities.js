@@ -5129,7 +5129,9 @@
 
   /** 巨型骨龙王龙头：重绘美术 assets/Boss/gulongnaodai.png（白色骨龙侧头，长吻朝 +x，背景透明）。
    *  在“已 translate(头位置) + rotate(朝向)”坐标系内绘制。锚点/缩放经浏览器校准：
-   *  图像素 (317,300) = 颈关节原点；s = 0.275（headR=24.4 基准），随 headR 等比缩放。 */
+   *  图像素 (317,300) = 颈关节原点；s = 0.275（headR=24.4 基准），随 headR 等比缩放。
+   *  侧视图朝左（hx<0）时整体旋转 180° 会令头冠朝下、上颚翻转，故沿身体纵轴（局部 x 轴）
+   *  再做一次垂直镜像，保证头冠/点赞手始终朝上、吻部朝向前方。 */
   function dragonHeadBoneKing(ctx, d, h, t, th) {
     const r = d.headR || d.segR * 1.22;
     const spr = (typeof Sprites !== 'undefined') && Sprites.gulongHead;
@@ -5137,6 +5139,7 @@
     const k = 0.275 * (r / 24.4);
     ctx.save();
     ctx.imageSmoothingEnabled = true;
+    if (d.hx < 0) ctx.scale(1, -1);
     ctx.drawImage(spr, -317 * k, -300 * k, spr.width * k, spr.height * k);
     ctx.restore();
   }
