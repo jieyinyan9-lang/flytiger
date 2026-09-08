@@ -845,8 +845,8 @@
         this.shotT = rand(1.3, 1.7);
         const a = Math.atan2(p.y - this.y, p.x - this.x);
         g.bullets.push(new Bullet(this.x - 80, this.y - 16,
-          Math.cos(a) * 500, Math.sin(a) * 500,
-          { kind: 'orb', r: 27, dmg: 15 * g.atkScale, dmgScale: g.atkScale, life: 4, color: '#ffd23b', rockBreak: true, fireTrail: true }));
+          Math.cos(a) * 310, Math.sin(a) * 310,
+          { kind: 'orb', r: 27, dmg: 15 * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#ffd23b', rockBreak: true, fireTrail: true }));
         SFX.enemyShoot();
         g.shake(3);
       }
@@ -868,8 +868,8 @@
       if (this.missileT <= 0) {
         this.missileT = rand(3.4, 4.4);
         const m = new Bullet(this.x + 88, this.y - 52,
-          160, -120,
-          { kind: 'missile', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 12,
+          120, -90,
+          { kind: 'missile', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 14,
             homing: true, turnRate: 2.3, rockBreak: true, bscale: 3, hp: 3, invuln: 4 });
         m.onBreak = (gg, b) => gg.shellBlast(b.x, b.y, b.dmg);
         m.onExpire = (gg, b) => gg.shellBlast(b.x, b.y, b.dmg);
@@ -3665,9 +3665,10 @@
       this.bossName = '巨型骨龙王';
       this.title = '分段弹幕型';
       this.deathCols = ['#d8d3c2', '#8f8a78', '#4ade80', '#e8e4d8', '#fff'];
-      this.contactDmg = 26;
+      this.contactDmg = 26;          // 头部接触伤害
+      this.bodyContactDmg = 10;      // 身体节接触伤害（轻微）
       // 龙身参数
-      this.segR = 26;                  // 身体节半径（约普通龙小段 miniR=11 的 2.4 倍）
+      this.segR = 20;                  // 身体节半径（约普通龙小段 miniR=11 的 1.8 倍）
       this.headR = this.segR * 1.22;   // 头部半径
       this.segSpace = 30;              // 节间距
       this.segCount = 201;             // 0=头，1~200=身体
@@ -3686,15 +3687,17 @@
       this.hx = 0; this.hy = -1;
       this.turnT = 0; this.arcT = 0; this.arcRate = 0; this.targetHa = this.ha;
       this.burrowT = 0;
+      this.burrowHpThreshold = 0.7;   // 头部血量降到 70% 时强制钻地（逐级 0.7→0.4→0.1）
+      this.chaseT = 0;                // 出土后追击玩家时长
       // 冲撞 / 射击
       this.chargeT = rand(2.5, 4.5);
       this.chargeCd = 0;
       this.fireT = 0.6;
-      // 从左侧地下钻出入场
-      this.x = this.xL; this.y = this.burrowY;
+      // 从屏幕右侧中心钻出入场：头部在右边缘地面下，龙身向右延伸出屏
+      this.x = this.xR; this.y = this.burrowY;
       this.trail = [];
       for (let i = 0; i < this.segCount + 2; i++) {
-        this.trail.push({ x: this.xL - i * this.segSpace, y: this.burrowY });
+        this.trail.push({ x: this.xR + i * this.segSpace, y: this.burrowY });
       }
       this.segments = [];
       for (let i = 0; i < this.segCount; i++) {
@@ -3705,6 +3708,7 @@
       this.segments[0].maxHp = this.headMaxHp;
       this.radius = this.headR;
       this.maxMini = 12;   // 同时在场的分裂小段上限
+      this.booms = [];     // 分裂爆炸队列（分帧播放，避免一帧上千粒子卡顿）
       this.spawnInvuln = 1.8;
     }
 
@@ -3714,31 +3718,43 @@
       return this.segR * (1 - 0.38 * (i / Math.max(1, n - 1)));
     }
     advanceTrail() {
-      this.trail.unshift({ x: this.x, y: this.y });
+      // 跳过几乎重合的点：冻结 / 极慢速时避免轨迹无限增长导致 updateSegments 爆量卡死
+      const last = this.trail[0];
+      if (!last || Math.hypot(this.x - last.x, this.y - last.y) > 0.5) {
+        this.trail.unshift({ x: this.x, y: this.y });
+      }
       const maxArc = (this.segments.length + 1) * this.segSpace + 30;
       let acc = 0;
       for (let i = 1; i < this.trail.length; i++) {
         acc += Math.hypot(this.trail[i].x - this.trail[i - 1].x, this.trail[i].y - this.trail[i - 1].y);
         if (acc > maxArc) { this.trail.length = i + 1; break; }
       }
+      // 硬上限兜底，防止极端情况下轨迹无限增长
+      if (this.trail.length > 2000) this.trail.length = 2000;
     }
     updateSegments() {
+      // 单次扫描：存活节紧凑排列（死掉的节不占位），共用一个轨迹指针，O(n+m)
+      const trail = this.trail;
+      if (trail.length < 2) return;
+      let ti = 1;
+      let acc = 0;
+      let a = trail[0], b = trail[1];
+      let segLen = Math.hypot(b.x - a.x, b.y - a.y) || 0.0001;
+      let aliveIdx = 0;   // 存活节序号：随死亡递增压缩，避免龙身残留远处导致卡关
       for (let idx = 0; idx < this.segments.length; idx++) {
         const s = this.segments[idx];
         if (s.dead) continue;
-        const target = (idx + 1) * this.segSpace;
-        let acc = 0, px = this.trail[0].x, py = this.trail[0].y;
-        for (let i = 1; i < this.trail.length; i++) {
-          const a = this.trail[i - 1], b = this.trail[i];
-          const segLen = Math.hypot(b.x - a.x, b.y - a.y) || 0.0001;
-          if (acc + segLen >= target) {
-            const tt = (target - acc) / segLen;
-            px = a.x + (b.x - a.x) * tt; py = a.y + (b.y - a.y) * tt;
-            break;
-          }
-          acc += segLen; px = b.x; py = b.y;
+        const target = (aliveIdx + 1) * this.segSpace;
+        aliveIdx++;
+        while (ti < trail.length - 1 && acc + segLen < target) {
+          acc += segLen;
+          ti++;
+          a = trail[ti - 1]; b = trail[ti];
+          segLen = Math.hypot(b.x - a.x, b.y - a.y) || 0.0001;
         }
-        s.x = px; s.y = py;
+        const tt = (target - acc) / segLen;
+        s.x = a.x + (b.x - a.x) * tt;
+        s.y = a.y + (b.y - a.y) * tt;
       }
     }
 
@@ -3749,13 +3765,7 @@
     }
     hitTest(bx, by, br) {
       if (this.spawnInvuln > 0) return -1;
-      // 头部存活：仅头部可命中
-      if (this.headAlive) {
-        const s = this.segments[0];
-        if (this.exposed(s, 0) && Math.hypot(s.x - bx, s.y - by) < br + this.headR) return 0;
-        return -1;
-      }
-      // 头部已碎：所有露出节可命中，取最近
+      // 完全体（头部存活）：头部 + 露出的身体节都可命中，取最近
       let best = -1, bestD = Infinity;
       for (let i = 0; i < this.segments.length; i++) {
         const s = this.segments[i];
@@ -3769,8 +3779,15 @@
     touchesPoint(px, py, pr) {
       if (this.spawnInvuln > 0) return false;
       if (this.headAlive) {
-        const s = this.segments[0];
-        return this.exposed(s, 0) && Math.hypot(s.x - px, s.y - py) < pr + this.headR;
+        // 完全体：头部 + 露出的身体节都可接触玩家（身体造成轻微伤害）
+        const head = this.segments[0];
+        if (this.exposed(head, 0) && Math.hypot(head.x - px, head.y - py) < pr + this.headR) return true;
+        for (let i = 1; i < this.segments.length; i++) {
+          const s = this.segments[i];
+          if (!this.exposed(s, i)) continue;
+          if (Math.hypot(s.x - px, s.y - py) < pr + this.segRAt(i) * 0.8) return true;
+        }
+        return false;
       }
       for (let i = 0; i < this.segments.length; i++) {
         const s = this.segments[i];
@@ -3780,11 +3797,19 @@
       }
       return false;
     }
+    /** 根据玩家触碰位置返回对应伤害值（头部高伤 / 身体节轻伤） */
+    contactDamageAt(px, py) {
+      if (this.headAlive) {
+        const head = this.segments[0];
+        if (this.exposed(head, 0) && Math.hypot(head.x - px, head.y - py) < this.headR + 30) return this.contactDmg;
+        return this.bodyContactDmg;
+      }
+      return this.contactDmg;
+    }
     nearestExposed(px, py) {
       let best = null, bestD = Infinity;
-      const idxs = this.headAlive ? [0] : null;
-      const list = idxs || this.segments.map((_, i) => i);
-      for (const i of list) {
+      // 完全体/崩解态：所有露出节均可选为目标
+      for (let i = 0; i < this.segments.length; i++) {
         const s = this.segments[i];
         if (!s || !this.exposed(s, i)) continue;
         const d = Math.hypot(s.x - px, s.y - py);
@@ -3797,8 +3822,8 @@
       if (ne) this.damageSegment(ne.i, dmg, g, null, '');
     }
     aoeDamage(x, y, radius, dmg, g) {
-      const list = this.headAlive ? [0] : this.segments.map((_, i) => i);
-      for (const i of list) {
+      // 完全体/崩解态：范围内所有露出节均受伤
+      for (let i = 0; i < this.segments.length; i++) {
         const s = this.segments[i];
         if (!s || !this.exposed(s, i)) continue;
         const rr = i === 0 ? this.headR : this.segRAt(i);
@@ -3811,32 +3836,49 @@
       if (this.dead) return;
       const s = this.segments[i];
       if (!s || s.dead || this.spawnInvuln > 0) return;
-      // 头部存活时身体节无敌（hitTest 已拦截，此处兜底）
-      if (this.headAlive && i !== 0) return;
-      s.hp -= dmg;
-      s.flash = 0.12; this.hurtT = 0.12;
-      burst(g, s.x, s.y, 3, ['#fff', '#4ade80', '#d8d3c2'], 130, 3, 0.2);
-      SFX.hit();
       if (element === 'flame') { this.dotT = 3; this.dotDps = dmg * 0.4; this.dotType = 'flame'; }
       else if (element === 'poison') { this.dotT = 6; this.dotDps = dmg * 0.25; this.dotType = 'poison'; }
-      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; this.freezeT = 4; }
-      if (s.hp <= 0) this.killSegment(i, g);
+      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; if ((this.freezeT || 0) <= 0) this.freezeT = 1.2; }
+
+      if (this.headAlive && i !== 0) {
+        // 完全体打身体：身体受 70%（锁血1，裂开），头部传导受 50%
+        s.hp -= dmg * 0.7;
+        s.flash = 0.12; this.hurtT = 0.12;
+        burst(g, s.x, s.y, 3, ['#fff', '#4ade80', '#d8d3c2'], 130, 3, 0.2);
+        if (s.hp <= 1) { s.hp = 1; s.cracked = true; }
+        // 头部传导 40% 伤害
+        const head = this.segments[0];
+        if (head && !head.dead) {
+          head.hp -= dmg * 0.4;
+          head.flash = 0.1;
+          burst(g, head.x, head.y, 2, ['#fff', '#4ade80'], 100, 2, 0.15);
+          if (head.hp <= 0) { this.killSegment(0, g); return; }
+        }
+        SFX.hit();
+      } else {
+        // 头部直接受击 / 崩解态身体节
+        s.hp -= dmg;
+        s.flash = 0.12; this.hurtT = 0.12;
+        burst(g, s.x, s.y, 3, ['#fff', '#4ade80', '#d8d3c2'], 130, 3, 0.2);
+        SFX.hit();
+        if (s.hp <= 0) this.killSegment(i, g);
+      }
     }
     takeDamage(dmg, g) {
       if (dmg >= 10000) {
-        // 大招强光波：头部存活时只削头部 30% 血；头部碎后对所有身体节各削 50%
-        if (this.headAlive) {
-          this.damageSegment(0, this.headMaxHp * 0.3, g, null, '');
-        } else {
-          for (let i = 1; i < this.segments.length; i++) {
-            const s = this.segments[i];
-            if (s.dead) continue;
-            s.hp -= s.maxHp * 0.5; s.flash = 0.2;
-            burst(g, s.x, s.y, 3, this.deathCols, 140, 3, 0.25);
-            if (s.hp <= 0) { this.killSegment(i, g); if (this.dead) return; }
+        // 大招强光波：完全体时头部 + 所有身体节各削 30%；崩解态所有身体节各削 50%
+        const ratio = this.headAlive ? 0.3 : 0.5;
+        for (let i = 0; i < this.segments.length; i++) {
+          const s = this.segments[i];
+          if (s.dead) continue;
+          s.hp -= s.maxHp * ratio; s.flash = 0.2;
+          burst(g, s.x, s.y, i === 0 ? 6 : 3, this.deathCols, 140, 3, 0.25);
+          if (s.hp <= 0) {
+            if (this.headAlive && i !== 0) { s.hp = 1; s.cracked = true; }   // 完全体身体节锁血裂开
+            else { this.killSegment(i, g); if (this.dead) return; }
           }
-          this.hurtT = 0.2;
         }
+        this.hurtT = 0.2;
         return;
       }
       const ne = this.nearestExposed(this.x, this.y);
@@ -3855,7 +3897,36 @@
         // 头部碎裂
         this.headAlive = false;
         g.toast('骨龙王头部碎裂！身体节解除无敌！', 2.2, 'lt');
-        // 重算血条为身体节总血
+        // 按关卡决定直接爆炸比例：1关60% 2关40% 3关20% 3关后10%
+        const round = g.round || 1;
+        const explodeRatio = round <= 1 ? 0.6 : round === 2 ? 0.4 : round === 3 ? 0.2 : 0.1;
+        // 收集所有存活身体节
+        const alive = [];
+        for (let j = 1; j < this.segments.length; j++) {
+          if (!this.segments[j].dead) alive.push(j);
+        }
+        // 按 HP 升序排列：锁血(1hp)的优先爆炸
+        alive.sort((a, b) => this.segments[a].hp - this.segments[b].hp);
+        const explodeCount = Math.floor(alive.length * explodeRatio);
+        // 爆炸节：标记死亡 + 入队分帧播放特效（避免一帧上千粒子卡顿）
+        for (let k = 0; k < explodeCount && k < alive.length; k++) {
+          const bs = this.segments[alive[k]];
+          bs.dead = true;
+          g.score += 5;
+          this.booms.push({ x: bs.x, y: bs.y, t: 0.05 + k * 0.012 });
+        }
+        // 分裂瞬间立即脱离 2 条小骨龙（取未爆炸的最前两节）
+        const aliveMini = g.enemies.filter(e => e.type === 'bonedragonmini' && !e.dead).length;
+        let spawned = 0;
+        for (let k = explodeCount; k < alive.length && spawned < 2; k++) {
+          if (aliveMini + spawned >= this.maxMini) break;
+          const bs = this.segments[alive[k]];
+          bs.dead = true;
+          g.enemies.push(new BoneDragonMini(g, bs.x, bs.y));
+          burst(g, bs.x, bs.y, 8, this.deathCols, 160, 4, 0.3, 90);
+          spawned++;
+        }
+        g.shake(8);
         this.recalcHp();
       } else {
         // 身体节脱离：若在场小段未达上限则生成独立敌人
@@ -3867,15 +3938,22 @@
       }
     }
     recalcHp() {
-      let hp = 0, max = 0;
-      for (let i = 1; i < this.segments.length; i++) {
-        const s = this.segments[i];
-        if (s.dead) continue;
-        hp += Math.max(0, s.hp); max += s.maxHp;
+      if (this.headAlive) {
+        // 完全体：血条显示头部血量（第一条血）
+        this.maxHp = this.headMaxHp;
+        this.hp = Math.max(0, this.segments[0].hp);
+      } else {
+        // 崩解态：血条显示存活身体节总血量
+        let hp = 0, max = 0;
+        for (let i = 1; i < this.segments.length; i++) {
+          const s = this.segments[i];
+          if (s.dead) continue;
+          hp += Math.max(0, s.hp); max += s.maxHp;
+        }
+        this.maxHp = max || 1;
+        this.hp = hp;
+        if (hp <= 0 && !this.dead) this.die(g);
       }
-      this.maxHp = max || 1;
-      this.hp = hp;
-      if (hp <= 0 && !this.dead) this.die(g);
     }
 
     /* ---------- AI ---------- */
@@ -3885,6 +3963,19 @@
       this.hurtT = Math.max(0, (this.hurtT || 0) - dt);
       this.spawnInvuln = Math.max(0, this.spawnInvuln - dt);
       for (const s of this.segments) s.flash = Math.max(0, s.flash - dt);
+      // 分裂爆炸队列：每帧只放 2 个，避免同帧粒子暴增卡顿
+      if (this.booms.length) {
+        let fired = 0;
+        for (let k = this.booms.length - 1; k >= 0; k--) {
+          const bm = this.booms[k];
+          bm.t -= dt;
+          if (bm.t <= 0) {
+            burst(g, bm.x, bm.y, 6, this.deathCols, 180, 4, 0.35, 90);
+            this.booms.splice(k, 1);
+            if (++fired >= 2) break;
+          }
+        }
+      }
       // 元素 DoT（作用于头部 / 最前活节）
       if (this.dotT > 0) {
         this.dotT -= dt;
@@ -3929,59 +4020,82 @@
       for (let i = 1; i < this.segments.length; i++) if (!this.segments[i].dead) return i;
       return -1;
     }
-    /** 头部存活：出土→空中穿梭（含冲撞+绿火）→钻地 */
+    /** 头部存活：简化状态机 —— 出土 → 空中追击（冲撞+绿火）→ 钻地
+     *  去掉弧线转向/随机转向，始终直接朝玩家转向，避免卡住或速度异常。
+     */
     updateMain(dt, g) {
       const p = g.player;
+      const head = this.segments[0];
+      // 受伤 30% 触发钻地（逐级 0.7→0.4→0.1）
+      if ((this.state === 'air' || this.state === 'charge') && this.burrowHpThreshold > 0) {
+        if (head.hp / this.headMaxHp <= this.burrowHpThreshold) {
+          this.burrowHpThreshold = Math.max(0, this.burrowHpThreshold - 0.3);
+          this.y = CFG.GROUND_Y + rand(16, 28); this.state = 'burrow'; this.stateT = 0;
+          this.burrowT = 5;
+          burst(g, this.x, CFG.GROUND_Y, 20, this.deathCols, 280, 6, 0.6, 150);
+          SFX.explode(false); g.shake(5);
+          return;
+        }
+      }
       if (this.state === 'rise') {
-        this.ha = -Math.PI / 2; this.arcT = 0;
         this.y -= 215 * dt;
-        if (this.y <= this.riseY) { this.y = this.riseY; this.state = 'air'; this.stateT = 0;
-          this.ha = this.x < CFG.W / 2 ? rand(-0.2, 0.2) : Math.PI + rand(-0.2, 0.2);
-          this.turnT = rand(0.9, 2.0); }
+        // 钻出过程：头部平滑转正上方，避免沿用钻地前旧朝向导致扭曲
+        const upA = -Math.PI / 2;
+        const dUp = ((upA - this.ha + Math.PI) % TAU + TAU) % TAU - Math.PI;
+        this.ha += clamp(dUp, -8 * dt, 8 * dt);
+        if (this.y <= this.riseY) {
+          this.y = this.riseY; this.state = 'air'; this.stateT = 0;
+          this.chaseT = 4;
+          // 不瞬转玩家：由 air 状态按追击转向率平滑转向
+        }
       } else if (this.state === 'charge') {
-        // 冲撞：锁定玩家方向高速冲刺
         const sp = 520;
         this.x += this.hx * sp * dt; this.y += this.hy * sp * dt;
-        this.stateT -= dt;
+        this.chargeDur = (this.chargeDur || 0.9) - dt;
         if (this.x < this.xL) { this.x = this.xL; this.hx = Math.abs(this.hx); }
         if (this.x > this.xR) { this.x = this.xR; this.hx = -Math.abs(this.hx); }
         if (this.y < 50) { this.y = 50; this.hy = Math.abs(this.hy); }
-        if (this.stateT <= 0) { this.state = 'air'; this.chargeT = rand(3, 5); this.turnT = 0.6; }
+        if (this.chargeDur <= 0) { this.state = 'air'; this.chargeT = rand(3, 5); }
       } else if (this.state === 'air') {
-        if (this.arcT > 0) {
-          const diff = ((this.targetHa - this.ha + Math.PI) % TAU + TAU) % TAU - Math.PI;
-          const step = this.arcRate * dt;
-          if (Math.abs(diff) <= Math.abs(step)) { this.ha = this.targetHa; this.arcT = 0; }
-          else this.ha += step;
-        }
-        const sp = 300;
+        // 朝玩家转向，但靠近边界时强制远离墙（避免卡死）
+        let dx = p.x - this.x, dy = p.y - this.y;
+        const margin = 100;
+        if (this.x < this.xL + margin) dx = Math.abs(dx) + margin;       // 靠左墙→强制朝右
+        if (this.x > this.xR - margin) dx = -(Math.abs(dx) + margin);    // 靠右墙→强制朝左
+        if (this.y < 56 + margin) dy = Math.abs(dy) + margin;            // 靠顶→强制朝下
+        const targetA = Math.atan2(dy, dx);
+        const diff = ((targetA - this.ha + Math.PI) % TAU + TAU) % TAU - Math.PI;
+        const turnRate = this.chaseT > 0 ? 6.0 : 3.0;
+        this.ha += Math.sign(diff) * Math.min(Math.abs(diff), turnRate * dt);
+        if (this.chaseT > 0) this.chaseT -= dt;
+        const sp = 220;
         this.x += Math.cos(this.ha) * sp * dt;
         this.y += Math.sin(this.ha) * sp * dt;
-        if (this.x < this.xL && Math.cos(this.ha) < 0) { this.x = this.xL; this.ha = Math.PI - this.ha; this.arcT = 0; }
-        if (this.x > this.xR && Math.cos(this.ha) > 0) { this.x = this.xR; this.ha = Math.PI - this.ha; this.arcT = 0; }
-        if (this.y < 56 && Math.sin(this.ha) < 0) { this.y = 56; this.ha = -this.ha; this.arcT = 0; }
+        // 边界硬修正（防止穿透）
+        if (this.x < this.xL) { this.x = this.xL; this.ha = Math.cos(this.ha) < 0 ? 0 : this.ha; }
+        if (this.x > this.xR) { this.x = this.xR; this.ha = Math.cos(this.ha) > 0 ? Math.PI : this.ha; }
+        if (this.y < 56) { this.y = 56; this.ha = Math.sin(this.ha) < 0 ? Math.PI / 2 : this.ha; }
         this.ha = ((this.ha + Math.PI) % TAU + TAU) % TAU - Math.PI;
         if (this.y >= CFG.GROUND_Y - 6) {
+          // 触地 → 钻地
           this.y = CFG.GROUND_Y + rand(16, 28); this.state = 'burrow'; this.stateT = 0;
-          this.burrowT = rand(1.8, 3.4); this.turnT = rand(0.5, 1.2);
-          this.ha = Math.cos(this.ha) >= 0 ? rand(-0.25, 0.25) : Math.PI + rand(-0.25, 0.25); this.arcT = 0;
+          this.burrowT = 5;
         } else {
-          this.turnT -= dt;
-          if (this.turnT <= 0) this.pickAirTurn();
-          // 冲撞判定
+          // 冲撞：朝玩家冲刺
           this.chargeT -= dt;
           if (this.chargeT <= 0 && Math.random() < 0.6) {
             const a = Math.atan2(p.y - this.y, p.x - this.x);
             this.ha = a; this.hx = Math.cos(a); this.hy = Math.sin(a);
-            this.state = 'charge'; this.stateT = 0.9;
+            this.state = 'charge'; this.chargeDur = 0.9;
           }
           // 绿火连射
           this.fireT -= dt;
           if (this.fireT <= 0) {
-            this.fireT = rand(0.5, 0.9);
+            this.fireT = this.chaseT > 0 ? rand(0.25, 0.45) : rand(0.5, 0.9);
             const base = Math.atan2(p.y - this.y, p.x - this.x);
-            for (let i = -1; i <= 1; i++) {
-              const a = base + i * 0.22;
+            const spread = this.chaseT > 0 ? 5 : 3;
+            for (let i = 0; i < spread; i++) {
+              const a = base + (i - (spread - 1) / 2) * 0.18;
               g.bullets.push(new Bullet(this.segments[0].x, this.segments[0].y,
                 Math.cos(a) * 340, Math.sin(a) * 340,
                 { kind: 'greenfire', r: 8, dmg: 14 * g.atkScale, life: 5 }));
@@ -3990,79 +4104,49 @@
           }
         }
       } else if (this.state === 'burrow') {
-        if (this.arcT > 0) {
-          const diff = ((this.targetHa - this.ha + Math.PI) % TAU + TAU) % TAU - Math.PI;
-          const step = this.arcRate * dt;
-          if (Math.abs(diff) <= Math.abs(step)) { this.ha = this.targetHa; this.arcT = 0; }
-          else this.ha += step;
-        }
-        const sp = 275;
-        this.x += Math.cos(this.ha) * sp * dt; this.y += Math.sin(this.ha) * sp * dt;
-        const yTop = CFG.GROUND_Y + 14, yBot = CFG.GROUND_Y + 58;
-        const flatten = () => { this.ha = Math.cos(this.ha) >= 0 ? rand(-0.25, 0.25) : Math.PI + rand(-0.25, 0.25); this.arcT = 0; };
-        if (this.y < yTop) { this.y = yTop; if (Math.sin(this.ha) < 0) flatten(); }
-        if (this.y > yBot) { this.y = yBot; if (Math.sin(this.ha) > 0) flatten(); }
-        if (this.x < 20 && Math.cos(this.ha) < 0) { this.x = 20; this.ha = rand(-0.3, 0.3); this.arcT = 0; }
-        if (this.x > CFG.W - 20 && Math.cos(this.ha) > 0) { this.x = CFG.W - 20; this.ha = Math.PI + rand(-0.3, 0.3); this.arcT = 0; }
-        this.turnT -= dt;
-        if (this.turnT <= 0) this.pickBurrowTurn();
+        // 地下：水平高速朝玩家 x 方向穿梭
+        const sp = 700;
+        const dir = p.x > this.x ? 1 : -1;
+        this.x += dir * sp * dt;
+        // 土层内轻微上下浮动
+        this.y = CFG.GROUND_Y + 22 + Math.sin(this.t * 4) * 16;
+        if (this.x < 20) this.x = 20;
+        if (this.x > CFG.W - 20) this.x = CFG.W - 20;
         this.burrowT -= dt;
-        if (this.burrowT <= 0) { this.state = 'rise'; this.riseY = rand(150, 320); this.ha = -Math.PI / 2; this.arcT = 0; }
+        if (this.burrowT <= 0) {
+          this.state = 'rise';
+          this.riseY = Math.min(rand(150, 260), p.y);
+          this.chaseT = 4;
+          burst(g, this.x, CFG.GROUND_Y, 26, this.deathCols, 300, 6, 0.7, 160);
+          SFX.explode(false); g.shake(6);
+        }
       }
       this.hx = Math.cos(this.ha); this.hy = Math.sin(this.ha);
     }
-    /** 头部碎裂后：身体链继续缓慢游荡（首节为领队），供玩家逐节击破 */
+    /** 头部碎裂后：身体链缓慢向玩家移动（首节为领队），供玩家逐节击破 */
     updateBody(dt, g) {
       // 找第一个存活节作为领队
       let lead = -1;
       for (let i = 0; i < this.segments.length; i++) if (!this.segments[i].dead) { lead = i; break; }
       if (lead < 0) { this.die(g); return; }
-      // 领队缓慢随机游荡
-      this.bodyDriftT = (this.bodyDriftT || 0) - dt;
-      if (this.bodyDriftT <= 0) {
-        this.bodyDriftT = rand(1.5, 3);
-        this.bodyHa = rand(0, TAU);
+      const p = g.player;
+      const dx = p.x - this.x, dy = p.y - this.y;
+      const d = Math.hypot(dx, dy) || 1;
+      // 缓慢朝玩家移动，保持龙身在屏幕内
+      const sp = 110;
+      this.x += (dx / d) * sp * dt;
+      this.y += (dy / d) * sp * dt;
+      // 到玩家附近时侧向漂移，避免重叠
+      if (d < 120) {
+        const perp = Math.atan2(dy, -dx);
+        this.x += Math.cos(perp + Math.sin(this.t * 2) * 0.5) * 40 * dt;
+        this.y += Math.sin(perp + Math.sin(this.t * 2) * 0.5) * 40 * dt;
       }
-      const sp = 90;
-      this.x += Math.cos(this.bodyHa || 0) * sp * dt;
-      this.y += Math.sin(this.bodyHa || 0) * sp * dt * 0.6;
-      if (this.x < this.xL + 40) { this.x = this.xL + 40; this.bodyHa = Math.abs(this.bodyHa || 0) < Math.PI ? 0 : Math.PI; }
-      if (this.x > this.xR - 40) { this.x = this.xR - 40; this.bodyHa = Math.abs(this.bodyHa || 0) < Math.PI ? Math.PI : 0; }
-      if (this.y < 80) { this.y = 80; }
-      if (this.y > CFG.GROUND_Y - 40) { this.y = CFG.GROUND_Y - 40; }
-      this.hx = Math.cos(this.bodyHa || 0); this.hy = Math.sin(this.bodyHa || 0);
-    }
-    pickAirTurn() {
-      const r = Math.random();
-      if (r < 0.4) {
-        let ta = ((this.ha + rand(-1.9, 1.9)) + Math.PI) % TAU;
-        if (this.y > CFG.GROUND_Y - 200 && Math.sin(ta) > 0.45) ta = rand(-2.6, -0.45);
-        this.targetHa = ta;
-        const diff = ((ta - this.ha + Math.PI) % TAU + TAU) % TAU - Math.PI;
-        this.arcRate = (diff >= 0 ? 1 : -1) * rand(1.1, 2.2);
-        this.arcT = Math.abs(diff) / Math.abs(this.arcRate) + 0.05;
-      } else if (r < 0.7) {
-        this.ha = ((this.ha + (Math.random() < 0.5 ? -1 : 1) * Math.PI / 2) + Math.PI) % TAU - Math.PI;
-        if (this.y > CFG.GROUND_Y - 200 && Math.sin(this.ha) > 0.5) this.ha = -Math.PI / 2 + rand(-0.4, 0.4);
-        this.arcT = 0;
-      } else {
-        this.ha = ((this.ha + rand(0.7, 2.4) * (Math.random() < 0.5 ? -1 : 1)) + Math.PI) % TAU - Math.PI;
-        if (this.y > CFG.GROUND_Y - 200 && Math.sin(this.ha) > 0.5) this.ha = rand(-2.6, -0.5);
-        this.arcT = 0;
-      }
-      this.turnT = rand(1.3, 2.8);
-    }
-    pickBurrowTurn() {
-      const base = Math.cos(this.ha) >= 0 ? 0 : Math.PI;
-      const dir = Math.random() < 0.35 ? base + Math.PI : base;
-      const ta = ((dir + rand(-0.5, 0.5)) + Math.PI) % TAU - Math.PI;
-      if (Math.random() < 0.5) {
-        this.targetHa = ta;
-        const diff = ((ta - this.ha + Math.PI) % TAU + TAU) % TAU - Math.PI;
-        this.arcRate = (diff >= 0 ? 1 : -1) * rand(1.4, 2.4);
-        this.arcT = Math.abs(diff) / Math.abs(this.arcRate) + 0.05;
-      } else { this.ha = ta; this.arcT = 0; }
-      this.turnT = rand(0.9, 2.0);
+      if (this.x < this.xL + 40) this.x = this.xL + 40;
+      if (this.x > this.xR - 40) this.x = this.xR - 40;
+      if (this.y < 80) this.y = 80;
+      if (this.y > CFG.GROUND_Y - 40) this.y = CFG.GROUND_Y - 40;
+      this.hx = dx / d; this.hy = dy / d;
     }
 
     /* ---------- 渲染 ---------- */
@@ -4070,15 +4154,27 @@
       const t = this.t;
       const segs = this.segments;
       const th = DRAGON_THEMES.bone;
-      // 土垄（钻地段）
+      // 土垄（钻地段）—— 头部土堆更大更醒目，突出高速感
       for (let i = segs.length - 1; i >= 0; i--) {
         const s = segs[i];
         if (s.dead || s.y < CFG.GROUND_Y - 2) continue;
-        const r = this.segRAt(i) * 1.15 + Math.sin(t * 12 + i) * 1.5;
-        ctx.fillStyle = '#5a3f63';
+        const isHead = (i === 0);
+        const baseR = this.segRAt(i) * (isHead ? 1.6 : 1.15);
+        const r = baseR + Math.sin(t * 12 + i) * (isHead ? 3 : 1.5);
+        ctx.fillStyle = isHead ? '#7a4f8a' : '#5a3f63';
         ctx.beginPath(); ctx.arc(s.x, CFG.GROUND_Y + 3, r, Math.PI, TAU); ctx.fill();
-        ctx.fillStyle = '#6e4f7a';
+        ctx.fillStyle = isHead ? '#9a6faa' : '#6e4f7a';
         ctx.beginPath(); ctx.arc(s.x, CFG.GROUND_Y + 3, r * 0.78, Math.PI, TAU); ctx.fill();
+        if (isHead) {
+          // 头部扬尘尾迹，强化速度感
+          const dir = this.hx >= 0 ? -1 : 1;
+          ctx.fillStyle = 'rgba(140,100,160,0.35)';
+          for (let k = 1; k <= 4; k++) {
+            ctx.beginPath();
+            ctx.arc(s.x + dir * k * 12, CFG.GROUND_Y + 3 + Math.sin(t*10+k)*2, r * (1 - k*0.18), Math.PI, TAU);
+            ctx.fill();
+          }
+        }
       }
       // 连接脊线：骨蛇节间断开（noSpine=true），不画
       // 龙身节（尾→头）
@@ -4086,19 +4182,14 @@
         const s = segs[i];
         if (s.dead || s.y >= CFG.GROUND_Y) continue;
         th.seg(ctx, this, s, i, t, th);
-        // 无敌提示（头部存活时身体节无敌）
-        if (this.headAlive && Math.sin(t * 6 + i) > 0.5) {
-          ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.arc(s.x, s.y, this.segRAt(i) + 3, 0, TAU); ctx.stroke();
-        }
       }
-      // 龙头（仅头部存活时绘制）
+      // 龙头（仅头部存活时绘制）—— 使用骨龙王专属巨龙头
       const head = segs[0];
       if (!head.dead && head.y < CFG.GROUND_Y) {
         ctx.save();
         ctx.translate(head.x, head.y);
         ctx.rotate(Math.atan2(this.hy, this.hx));
-        th.head(ctx, this, head, t, th);
+        (th.headKing || th.head)(ctx, this, head, t, th);
         ctx.restore();
       }
       // 持续受伤红染
