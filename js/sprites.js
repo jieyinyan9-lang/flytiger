@@ -1049,295 +1049,290 @@
 
   /* —— 飞行弹幕类敌人精灵（程序化绘制，朝右；渲染时翻转朝左） —— */
 
-  /** 刺羽鸟：圆身小鸟，翅膀/尾部带尖锐羽毛（frame 0 翅上扬 / 1 翅下扇） */
+  /** 刺羽鸟：尖羽飞鸟像素点阵（朝右绘制，游戏内翻转朝左）frame 0 展翅上扬 / 1 下扇 */
   function buildSpikeBird(frame) {
-    const W = 32, H = 24;
+    const W = 26, H = 18;
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const c = cv.getContext('2d');
-    const K = '#1a1a22', BD = '#5a6e3a', BG = '#8aa94f', Y = '#ffd23b', R = '#c0392b', W1 = '#f0e6d2';
-    const up = frame === 0;
-    // 翅膀（尖锐羽毛）
-    c.fillStyle = K; c.strokeStyle = K; c.lineWidth = 1; c.lineJoin = 'round';
-    for (const sgn of [-1, 1]) {
-      c.beginPath();
-      c.moveTo(16 + sgn * 4, 12);
-      c.lineTo(16 + sgn * (up ? 16 : 14), up ? 3 : 16);
-      c.lineTo(16 + sgn * 10, 12);
-      c.closePath(); c.fill();
-      c.fillStyle = BG;
-      c.beginPath();
-      c.moveTo(16 + sgn * 5, 12);
-      c.lineTo(16 + sgn * (up ? 14 : 12), up ? 5 : 14);
-      c.lineTo(16 + sgn * 9, 12);
-      c.closePath(); c.fill();
-      c.fillStyle = K;
-    }
-    // 身体（圆身）
-    c.fillStyle = K; c.beginPath(); c.ellipse(13, 13, 8, 7, 0, 0, TAU); c.fill();
-    c.fillStyle = BD; c.beginPath(); c.ellipse(13, 13, 6.5, 5.5, 0, 0, TAU); c.fill();
-    c.fillStyle = BG; c.beginPath(); c.ellipse(13, 12, 5, 3.5, 0, 0, TAU); c.fill();
-    // 尾部尖羽
-    c.fillStyle = K;
-    c.beginPath(); c.moveTo(21, 13); c.lineTo(28, 9); c.lineTo(26, 13); c.lineTo(28, 17); c.closePath(); c.fill();
-    c.fillStyle = Y;
-    c.beginPath(); c.moveTo(22, 13); c.lineTo(27, 11); c.lineTo(26, 13); c.lineTo(27, 15); c.closePath(); c.fill();
-    // 头/眼
-    c.fillStyle = K; c.beginPath(); c.arc(7, 11, 4, 0, TAU); c.fill();
-    c.fillStyle = BD; c.beginPath(); c.arc(7, 11, 3, 0, TAU); c.fill();
-    c.fillStyle = W1; c.beginPath(); c.arc(6, 10, 1.4, 0, TAU); c.fill();
-    c.fillStyle = K; c.beginPath(); c.arc(6, 10, 0.7, 0, TAU); c.fill();
-    // 喙
-    c.fillStyle = R; c.beginPath(); c.moveTo(3, 11); c.lineTo(0, 12); c.lineTo(3, 13); c.closePath(); c.fill();
-    return cv;
-  }
-
-  /** 魔眼飞虫：圆形飞虫，中央一只巨大眼睛 */
-  function buildEyeFly(frame) {
-    const W = 30, H = 26;
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const c = cv.getContext('2d');
-    const K = '#161020', BD = '#3a2255', BG = '#6b3fa0', P = '#b574ff', Y = '#ffe066', W1 = '#f4e8ff';
-    const up = frame === 0;
-    // 翅膀（半透明小翅）
-    c.fillStyle = 'rgba(180,140,255,0.5)';
-    for (const sgn of [-1, 1]) {
-      c.beginPath();
-      c.ellipse(15 + sgn * 4, up ? 7 : 11, 5, up ? 7 : 4, sgn * 0.3, 0, TAU); c.fill();
-    }
-    c.strokeStyle = BD; c.lineWidth = 1;
-    for (const sgn of [-1, 1]) {
-      c.beginPath();
-      c.ellipse(15 + sgn * 4, up ? 7 : 11, 5, up ? 7 : 4, sgn * 0.3, 0, TAU); c.stroke();
-    }
-    // 身体（圆形）
-    c.fillStyle = K; c.beginPath(); c.arc(15, 14, 8, 0, TAU); c.fill();
-    c.fillStyle = BD; c.beginPath(); c.arc(15, 14, 6.5, 0, TAU); c.fill();
-    c.fillStyle = BG; c.beginPath(); c.arc(15, 13, 5, 0, TAU); c.fill();
-    // 巨眼
-    c.fillStyle = W1; c.beginPath(); c.arc(15, 13, 4.5, 0, TAU); c.fill();
-    c.fillStyle = P; c.beginPath(); c.arc(15, 13, 3, 0, TAU); c.fill();
-    c.fillStyle = K; c.beginPath(); c.arc(15, 13, 1.6, 0, TAU); c.fill();
-    c.fillStyle = W1; c.beginPath(); c.arc(14, 12, 0.7, 0, TAU); c.fill();
-    // 触角
-    c.strokeStyle = K; c.lineWidth = 1.2;
-    c.beginPath(); c.moveTo(12, 7); c.lineTo(9, 2); c.stroke();
-    c.beginPath(); c.moveTo(18, 7); c.lineTo(21, 2); c.stroke();
-    c.fillStyle = Y;
-    c.beginPath(); c.arc(9, 2, 1.2, 0, TAU); c.fill();
-    c.beginPath(); c.arc(21, 2, 1.2, 0, TAU); c.fill();
-    return cv;
-  }
-
-  /** 魔石甲虫：甲虫轮廓，胸口嵌一块水晶 */
-  function buildStoneBeetle(frame) {
-    const W = 38, H = 28;
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const c = cv.getContext('2d');
-    const K = '#14141c', BD = '#3a3a4a', BG = '#5a5a6e', CY = '#35e0ff', CY2 = '#7ff5ff', Y = '#ffd23b', W1 = '#dfe6ee';
-    const up = frame === 0;
-    // 鞘翅（左右两半）
-    c.fillStyle = K;
-    c.beginPath(); c.ellipse(19, 15, 12, 10, 0, 0, TAU); c.fill();
-    c.fillStyle = BD;
-    c.beginPath(); c.ellipse(19, 15, 10.5, 8.5, 0, 0, TAU); c.fill();
-    c.fillStyle = BG;
-    c.beginPath(); c.ellipse(16, 14, 4.5, 7, -0.2, 0, TAU); c.fill();
-    c.beginPath(); c.ellipse(22, 14, 4.5, 7, 0.2, 0, TAU); c.fill();
-    // 鞘翅中线
-    c.strokeStyle = K; c.lineWidth = 1.2;
-    c.beginPath(); c.moveTo(19, 6); c.lineTo(19, 22); c.stroke();
-    // 头部
-    c.fillStyle = K; c.beginPath(); c.arc(9, 14, 4.5, 0, TAU); c.fill();
-    c.fillStyle = BD; c.beginPath(); c.arc(9, 14, 3.5, 0, TAU); c.fill();
-    // 眼
-    c.fillStyle = Y; c.beginPath(); c.arc(7.5, 12.5, 1.2, 0, TAU); c.fill();
-    c.fillStyle = W1; c.beginPath(); c.arc(7.5, 12.5, 0.5, 0, TAU); c.fill();
-    // 触角
-    c.strokeStyle = K; c.lineWidth = 1.4;
-    c.beginPath(); c.moveTo(7, 10); c.lineTo(4, 6); c.stroke();
-    c.beginPath(); c.moveTo(10, 10); c.lineTo(11, 5); c.stroke();
-    // 胸口水晶
-    c.fillStyle = K;
-    c.beginPath(); c.moveTo(19, 10); c.lineTo(23, 15); c.lineTo(19, 20); c.lineTo(15, 15); c.closePath(); c.fill();
-    c.fillStyle = CY;
-    c.beginPath(); c.moveTo(19, 11); c.lineTo(22, 15); c.lineTo(19, 19); c.lineTo(16, 15); c.closePath(); c.fill();
-    c.fillStyle = CY2;
-    c.beginPath(); c.moveTo(19, 12); c.lineTo(20.5, 15); c.lineTo(19, 17); c.lineTo(17.5, 15); c.closePath(); c.fill();
-    // 翅膀振动示意（frame 1：鞘翅微张）
-    if (!up) {
-      c.fillStyle = 'rgba(53,224,255,0.3)';
-      c.beginPath(); c.ellipse(19, 15, 13, 5, 0, 0, TAU); c.fill();
-    }
-    return cv;
-  }
-
-  /** 浮空魔花：漂浮大花，中央一颗眼睛；frame 0 花瓣闭合 / 1 花瓣张开 */
-  function buildFloatFlower(frame) {
-    const W = 40, H = 36;
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const c = cv.getContext('2d');
-    const K = '#1a1018', RD = '#8b2252', RP = '#c83a6a', R2 = '#ff5d8f', Y = '#ffd23b', W1 = '#fff0f5', CY = '#b0e0ff';
-    const open = frame === 1;
-    const cx = 20, cy = 18;
-    const petalN = 6;
-    // 花瓣
-    for (let i = 0; i < petalN; i++) {
-      const a = (TAU / petalN) * i - Math.PI / 2;
-      const len = open ? 14 : 8;
-      const px = cx + Math.cos(a) * len;
-      const py = cy + Math.sin(a) * len;
-      c.fillStyle = K;
-      c.beginPath(); c.ellipse(px, py, 5, 8, a + Math.PI / 2, 0, TAU); c.fill();
-      c.fillStyle = open ? RP : RD;
-      c.beginPath(); c.ellipse(px, py, 3.8, 6.5, a + Math.PI / 2, 0, TAU); c.fill();
-      c.fillStyle = open ? R2 : '#a02858';
-      c.beginPath(); c.ellipse(px, py, 2, 4, a + Math.PI / 2, 0, TAU); c.fill();
-    }
-    // 花心圆盘
-    c.fillStyle = K; c.beginPath(); c.arc(cx, cy, 8, 0, TAU); c.fill();
-    c.fillStyle = Y; c.beginPath(); c.arc(cx, cy, 6.5, 0, TAU); c.fill();
-    c.fillStyle = '#ff9d2e'; c.beginPath(); c.arc(cx, cy, 5, 0, TAU); c.fill();
-    // 中央眼睛
-    c.fillStyle = W1; c.beginPath(); c.arc(cx, cy, 4, 0, TAU); c.fill();
-    c.fillStyle = RD; c.beginPath(); c.arc(cx, cy, 2.6, 0, TAU); c.fill();
-    c.fillStyle = K; c.beginPath(); c.arc(cx, cy, 1.3, 0, TAU); c.fill();
-    c.fillStyle = W1; c.beginPath(); c.arc(cx - 0.8, cy - 0.8, 0.5, 0, TAU); c.fill();
-    // 花萼/茎（底部小叶）
-    c.fillStyle = '#3a7d2a';
-    c.beginPath(); c.moveTo(cx - 4, cy + 6); c.lineTo(cx, cy + 10); c.lineTo(cx + 4, cy + 6); c.closePath(); c.fill();
-    return cv;
-  }
-
-  /** 风暴飞鱼：胖飞鱼，鱼身+眼睛+两片小翅膀 */
-  function buildStormFish(frame) {
-    const W = 38, H = 26;
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const c = cv.getContext('2d');
-    const K = '#0e1a22', BD = '#1f5f8b', BG = '#2f8fc9', CY = '#7fd4ff', W1 = '#eaf7ff', Y = '#ffd23b';
-    const up = frame === 0;
-    // 翅膀（两片小翅）
-    c.fillStyle = K;
-    for (const sgn of [-1, 1]) {
-      c.beginPath();
-      c.moveTo(19, 11);
-      c.quadraticCurveTo(19 + sgn * 6, up ? 2 : 14, 19 + sgn * 11, up ? 6 : 12);
-      c.quadraticCurveTo(19 + sgn * 5, up ? 6 : 10, 19, 12);
-      c.closePath(); c.fill();
-    }
-    c.fillStyle = CY;
-    for (const sgn of [-1, 1]) {
-      c.beginPath();
-      c.moveTo(19, 11.5);
-      c.quadraticCurveTo(19 + sgn * 5.5, up ? 3 : 13, 19 + sgn * 10, up ? 6.5 : 11.5);
-      c.quadraticCurveTo(19 + sgn * 4.5, up ? 6.5 : 10, 19, 12);
-      c.closePath(); c.fill();
-    }
-    // 鱼身（胖椭圆）
-    c.fillStyle = K; c.beginPath(); c.ellipse(19, 14, 11, 8, 0, 0, TAU); c.fill();
-    c.fillStyle = BD; c.beginPath(); c.ellipse(19, 14, 9.5, 6.5, 0, 0, TAU); c.fill();
-    c.fillStyle = BG; c.beginPath(); c.ellipse(19, 13, 8, 4.5, 0, 0, TAU); c.fill();
-    c.fillStyle = CY; c.beginPath(); c.ellipse(19, 13.5, 6, 2.5, 0, 0, TAU); c.fill();
-    // 尾鳍
-    c.fillStyle = K;
-    c.beginPath(); c.moveTo(29, 14); c.lineTo(36, 8); c.lineTo(34, 14); c.lineTo(36, 20); c.closePath(); c.fill();
-    c.fillStyle = BG;
-    c.beginPath(); c.moveTo(30, 14); c.lineTo(34, 10); c.lineTo(33, 14); c.lineTo(34, 18); c.closePath(); c.fill();
-    // 眼睛
-    c.fillStyle = W1; c.beginPath(); c.arc(12, 12, 2.5, 0, TAU); c.fill();
-    c.fillStyle = K; c.beginPath(); c.arc(12, 12, 1.3, 0, TAU); c.fill();
-    c.fillStyle = W1; c.beginPath(); c.arc(11.5, 11.5, 0.5, 0, TAU); c.fill();
-    // 鳃线
-    c.strokeStyle = K; c.lineWidth = 1;
-    c.beginPath(); c.moveTo(15, 10); c.lineTo(15, 17); c.stroke();
-    return cv;
-  }
-
-  /** 双头飞蛇：粗蛇身，两端各一个蛇头 */
-  function buildTwinSnake(frame) {
-    const W = 46, H = 28;
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const c = cv.getContext('2d');
-    const K = '#141018', BD = '#3a5a2a', BG = '#5a8a3a', YG = '#8ac85a', Y = '#ffd23b', R = '#e0453a', W1 = '#f0f5e8';
-    const phase = frame === 0 ? 0 : Math.PI / 2;
-    // 蛇身（粗S形）
-    c.strokeStyle = K; c.lineWidth = 10; c.lineCap = 'round'; c.lineJoin = 'round';
-    c.beginPath();
-    c.moveTo(5, 14);
-    c.bezierCurveTo(14, 6 + Math.sin(phase) * 3, 20, 22 - Math.sin(phase) * 3, 27, 14);
-    c.bezierCurveTo(33, 8, 38, 20, 41, 14);
-    c.stroke();
-    c.strokeStyle = BG; c.lineWidth = 7;
-    c.beginPath();
-    c.moveTo(5, 14);
-    c.bezierCurveTo(14, 6 + Math.sin(phase) * 3, 20, 22 - Math.sin(phase) * 3, 27, 14);
-    c.bezierCurveTo(33, 8, 38, 20, 41, 14);
-    c.stroke();
-    c.strokeStyle = YG; c.lineWidth = 3;
-    c.beginPath();
-    c.moveTo(5, 14);
-    c.bezierCurveTo(14, 6 + Math.sin(phase) * 3, 20, 22 - Math.sin(phase) * 3, 27, 14);
-    c.bezierCurveTo(33, 8, 38, 20, 41, 14);
-    c.stroke();
-    // 左蛇头
-    c.fillStyle = K; c.beginPath(); c.ellipse(5, 14, 5, 4, 0, 0, TAU); c.fill();
-    c.fillStyle = BG; c.beginPath(); c.ellipse(5, 14, 4, 3, 0, 0, TAU); c.fill();
-    c.fillStyle = Y; c.beginPath(); c.arc(3, 13, 1.1, 0, TAU); c.fill();
-    c.fillStyle = K; c.beginPath(); c.arc(3, 13, 0.5, 0, TAU); c.fill();
-    // 右蛇头
-    c.fillStyle = K; c.beginPath(); c.ellipse(41, 14, 5, 4, 0, 0, TAU); c.fill();
-    c.fillStyle = BG; c.beginPath(); c.ellipse(41, 14, 4, 3, 0, 0, TAU); c.fill();
-    c.fillStyle = Y; c.beginPath(); c.arc(43, 13, 1.1, 0, TAU); c.fill();
-    c.fillStyle = K; c.beginPath(); c.arc(43, 13, 0.5, 0, TAU); c.fill();
-    // 信子
-    c.fillStyle = R;
-    c.beginPath(); c.moveTo(0, 14); c.lineTo(-3, 12); c.lineTo(-3, 16); c.closePath(); c.fill();
-    c.beginPath(); c.moveTo(46, 14); c.lineTo(49, 12); c.lineTo(49, 16); c.closePath(); c.fill();
-    return cv;
-  }
-
-  /** 预言猫头鹰：圆身猫头鹰，额头一颗小水晶 */
-  function buildOwl(frame) {
-    const W = 36, H = 34;
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const c = cv.getContext('2d');
-    const K = '#141018', BD = '#6a4a32', BG = '#a0784a', TN = '#d4a86a', Y = '#ffd23b', CY = '#b0e8ff', W1 = '#fff8e8', R = '#e0453a';
-    const blink = frame === 1;
-    // 身体（圆）
-    c.fillStyle = K; c.beginPath(); c.ellipse(18, 19, 13, 12, 0, 0, TAU); c.fill();
-    c.fillStyle = BD; c.beginPath(); c.ellipse(18, 19, 11.5, 10.5, 0, 0, TAU); c.fill();
-    c.fillStyle = BG; c.beginPath(); c.ellipse(18, 20, 9, 8, 0, 0, TAU); c.fill();
-    c.fillStyle = TN; c.beginPath(); c.ellipse(18, 21, 6, 5, 0, 0, TAU); c.fill();
-    // 耳羽
-    c.fillStyle = K;
-    c.beginPath(); c.moveTo(8, 10); c.lineTo(6, 3); c.lineTo(12, 9); c.closePath(); c.fill();
-    c.beginPath(); c.moveTo(28, 10); c.lineTo(30, 3); c.lineTo(24, 9); c.closePath(); c.fill();
-    c.fillStyle = BG;
-    c.beginPath(); c.moveTo(9, 9); c.lineTo(7.5, 5); c.lineTo(11.5, 9); c.closePath(); c.fill();
-    c.beginPath(); c.moveTo(27, 9); c.lineTo(28.5, 5); c.lineTo(24.5, 9); c.closePath(); c.fill();
-    // 大眼盘
-    c.fillStyle = W1; c.beginPath(); c.arc(13, 16, 4.5, 0, TAU); c.fill();
-    c.beginPath(); c.arc(23, 16, 4.5, 0, TAU); c.fill();
-    if (blink) {
-      c.strokeStyle = K; c.lineWidth = 1.5;
-      c.beginPath(); c.moveTo(10, 16); c.lineTo(16, 16); c.stroke();
-      c.beginPath(); c.moveTo(20, 16); c.lineTo(26, 16); c.stroke();
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d = '#3a471d'   // 暗橄榄绿描边（弱化黑边）
+    const m = '#7c9e3e'   // 主羽绿
+    const l = '#a8c865'   // 亮羽
+    const L = '#dcf0a0'   // 腹/羽尖
+    const Y = '#ffd23b', K = '#1a1408', R = '#d24b2e', W1 = '#f3fae0';
+    // 尾羽（左侧三根尖羽）
+    r(5, 7, 4, 1, d); r(3, 8, 6, 1, d); r(2, 9, 7, 1, d); r(3, 10, 6, 1, d); r(5, 11, 4, 1, d);
+    r(6, 7, 3, 1, m); r(4, 8, 5, 1, m); r(3, 9, 6, 1, m); r(4, 10, 5, 1, m); r(6, 11, 3, 1, m);
+    r(2, 9, 1, 1, L); r(3, 8, 1, 1, L); r(3, 10, 1, 1, L);
+    // 翅膀（frame 0 上扬 / 1 下扇）
+    if (frame === 0) {
+      r(11, 8, 3, 2, d); r(10, 6, 2, 3, m); r(9, 4, 2, 3, m); r(8, 2, 2, 3, l); r(7, 1, 3, 2, L); r(8, 0, 2, 1, W1);
     } else {
-      c.fillStyle = Y; c.beginPath(); c.arc(13, 16, 3, 0, TAU); c.fill();
-      c.beginPath(); c.arc(23, 16, 3, 0, TAU); c.fill();
-      c.fillStyle = K; c.beginPath(); c.arc(13, 16, 1.5, 0, TAU); c.fill();
-      c.beginPath(); c.arc(23, 16, 1.5, 0, TAU); c.fill();
-      c.fillStyle = W1; c.beginPath(); c.arc(12.5, 15.5, 0.6, 0, TAU); c.fill();
-      c.beginPath(); c.arc(22.5, 15.5, 0.6, 0, TAU); c.fill();
+      r(11, 10, 3, 2, d); r(10, 11, 2, 3, m); r(9, 12, 2, 3, m); r(8, 13, 2, 3, l); r(7, 15, 3, 2, L); r(8, 17, 2, 1, W1);
+    }
+    // 身体（1px 暗描边 + 实色块）
+    r(11, 6, 4, 1, d); r(9, 7, 8, 1, d); r(8, 8, 10, 1, d); r(8, 9, 11, 1, d);
+    r(8, 10, 11, 1, d); r(9, 11, 9, 1, d); r(11, 12, 4, 1, d);
+    r(10, 7, 6, 1, m); r(9, 8, 8, 1, m); r(9, 9, 9, 1, m); r(9, 10, 8, 1, m); r(10, 11, 6, 1, m); r(12, 12, 2, 1, m);
+    r(11, 10, 5, 1, l); r(12, 11, 3, 1, l); r(12, 12, 2, 1, L);
+    // 头（右侧，朝右）
+    r(17, 6, 4, 1, d); r(16, 7, 6, 1, d); r(15, 8, 8, 1, d); r(16, 9, 7, 1, d); r(16, 10, 6, 1, d); r(17, 11, 4, 1, d);
+    r(17, 7, 4, 1, m); r(16, 8, 6, 1, m); r(17, 9, 5, 1, m); r(17, 10, 4, 1, m); r(19, 9, 3, 1, l);
+    // 喙（右指）
+    r(22, 8, 2, 1, R); r(23, 9, 3, 1, R); r(22, 10, 2, 1, R); r(25, 9, 1, 1, '#f4a08a');
+    // 眼（黄环 + 黑瞳 + 高光）
+    r(18, 7, 3, 3, Y); r(19, 8, 2, 2, K); r(19, 8, 1, 1, W1);
+    return cv;
+  }
+
+  /** 魔眼飞虫：圆身独眼飞虫像素点阵 frame 0 翅上扬 / 1 翅下振 */
+  function buildEyeFly(frame) {
+    const W = 22, H = 22;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d = '#2a1540'   // 暗紫描边
+    const m = '#6334a8'   // 主紫
+    const l = '#8e58d0'   // 亮紫
+    const wg = '#a988e6'  // 翅
+    const P = '#c27aff'   // 虹膜紫
+    const W1 = '#f4ecff'  // 眼白/翅脉
+    const Y = '#ffe066', K = '#120a1e';
+    const up = frame === 0;
+    // 翅膀（frame0 上扬 / frame1 下振）
+    if (up) {
+      r(3, 2, 7, 3, wg); r(12, 2, 7, 3, wg);
+      r(3, 2, 7, 1, d); r(3, 4, 7, 1, d); r(3, 2, 1, 3, d); r(9, 2, 1, 3, d);
+      r(12, 2, 7, 1, d); r(12, 4, 7, 1, d); r(12, 2, 1, 3, d); r(18, 2, 1, 3, d);
+      r(6, 2, 1, 3, W1); r(15, 2, 1, 3, W1);
+    } else {
+      r(1, 12, 6, 4, wg); r(15, 12, 6, 4, wg);
+      r(1, 12, 6, 1, d); r(1, 15, 6, 1, d); r(1, 12, 1, 4, d); r(6, 12, 1, 4, d);
+      r(15, 12, 6, 1, d); r(15, 15, 6, 1, d); r(15, 12, 1, 4, d); r(20, 12, 1, 4, d);
+      r(2, 13, 1, 2, W1); r(18, 13, 1, 2, W1);
+    }
+    // 身体圆（1px 暗描边）
+    r(11, 5, 1, 1, d); r(9, 6, 5, 1, d); r(7, 7, 9, 1, d); r(5, 8, 13, 1, d);
+    r(4, 9, 14, 1, d); r(4, 10, 15, 1, d); r(4, 11, 15, 3, d); r(4, 14, 14, 1, d);
+    r(5, 15, 13, 1, d); r(7, 16, 9, 1, d); r(9, 17, 5, 1, d); r(11, 18, 1, 1, d);
+    r(8, 7, 7, 1, l); r(6, 8, 11, 1, l); r(5, 9, 12, 1, l);
+    r(5, 10, 13, 1, m); r(5, 11, 13, 3, m); r(5, 14, 12, 1, m); r(6, 15, 11, 1, m); r(8, 16, 7, 1, m); r(10, 17, 3, 1, m);
+    // 巨眼（眼白 + 紫虹膜 + 黑瞳 + 高光）
+    r(10, 8, 3, 1, W1); r(8, 9, 7, 1, W1); r(7, 10, 9, 1, W1);
+    r(7, 11, 9, 2, W1); r(8, 13, 7, 1, W1); r(10, 14, 3, 1, W1);
+    r(9, 10, 5, 1, P); r(9, 11, 5, 2, P); r(10, 13, 3, 1, P);
+    r(10, 11, 3, 3, K); r(9, 10, 2, 1, W1);
+    // 触角（黄球）
+    r(7, 2, 1, 4, d); r(6, 1, 2, 2, Y); r(14, 2, 1, 4, d); r(14, 1, 2, 2, Y);
+    return cv;
+  }
+
+  /** 魔石甲虫：甲壳甲虫像素点阵（朝右，头与胸甲水晶在右）frame 1 鞘翅张开透光 */
+  function buildStoneBeetle(frame) {
+    const W = 30, H = 22;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d = '#262632'   // 暗铁描边
+    const m = '#4d4d64'   // 主壳铁灰
+    const l = '#6e6e88'   // 亮壳
+    const sh = '#9494b4'  // 左鞘翅高光
+    const CY = '#35e0ff'  // 水晶青
+    const CYL = '#c8fbff'
+    const Y = '#ffd23b', W1 = '#e8f4ff';
+    const open = frame === 1;
+    // 鞘翅壳（暗描边椭圆）
+    r(11, 4, 5, 1, d); r(8, 5, 12, 1, d); r(6, 6, 16, 1, d); r(5, 7, 19, 1, d);
+    r(4, 8, 20, 7, d); r(5, 15, 19, 1, d); r(7, 16, 14, 1, d); r(10, 17, 7, 1, d);
+    r(9, 5, 10, 1, m); r(7, 6, 14, 1, m); r(6, 7, 17, 1, m);
+    r(5, 8, 18, 7, m); r(6, 15, 17, 1, m); r(8, 16, 12, 1, m); r(11, 17, 5, 1, m);
+    // 左半鞘翅高光 + 壳点
+    r(7, 6, 5, 1, sh); r(6, 7, 6, 1, sh); r(6, 8, 6, 7, sh); r(7, 15, 5, 1, sh); r(9, 16, 4, 1, sh);
+    r(9, 9, 2, 2, l); r(9, 13, 2, 2, l);
+    // 鞘翅中缝（闭合暗色 / 张开透青光）
+    if (open) { r(13, 3, 9, 1, CYL); r(9, 2, 7, 1, CY); r(13, 5, 1, 13, CYL); r(12, 5, 1, 13, CY); }
+    else { r(13, 6, 1, 11, d); }
+    // 足
+    r(7, 18, 2, 2, m); r(13, 18, 2, 2, m); r(18, 18, 2, 2, m);
+    r(6, 20, 3, 1, d); r(12, 20, 3, 1, d); r(17, 20, 3, 1, d);
+    // 胸口水晶（右侧前胸，菱形）
+    r(19, 7, 2, 1, d); r(18, 8, 4, 1, d); r(17, 9, 6, 1, d);
+    r(17, 10, 6, 1, d); r(18, 11, 4, 1, d); r(19, 12, 2, 1, d);
+    r(19, 8, 2, 1, CY); r(18, 9, 4, 1, CY); r(18, 10, 4, 1, CY); r(19, 11, 2, 1, CY);
+    r(19, 9, 2, 2, CYL);
+    // 头（右前）
+    r(23, 8, 4, 1, d); r(22, 9, 6, 5, d); r(23, 14, 4, 1, d);
+    r(24, 8, 2, 1, m); r(23, 9, 4, 5, m); r(24, 14, 2, 1, m);
+    r(25, 10, 2, 2, Y); r(26, 10, 1, 1, d); r(25, 10, 1, 1, W1);
+    // 触角
+    r(24, 5, 1, 4, d); r(23, 4, 2, 1, l); r(27, 6, 1, 3, d); r(28, 4, 1, 2, l);
+    return cv;
+  }
+
+  /** 浮空魔花：独眼大花像素点阵 frame 0 花瓣闭合 / 1 花瓣张开 */
+  function buildFloatFlower(frame) {
+    const W = 30, H = 28;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d = '#3d1024'   // 暗酒红描边
+    const pd = '#a8255c'  // 瓣根深红
+    const pm = '#d63a72'  // 瓣身玫红
+    const pl = '#ff7aa5'  // 瓣尖亮粉
+    const pt = '#ffc6da'  // 瓣端最亮
+    const Y = '#ffd23b', O = '#ff9d2e'
+    const W1 = '#fff0f5', ir = '#8b2252', K = '#1a0a12'
+    const g = '#3a7d2a', gl = '#6fbf52';
+    const open = frame === 1;
+    const cx = 15, cy = 14;
+    const tip = open ? 13 : 9;
+    const dirs = [[0, -1], [0.866, -0.5], [0.866, 0.5], [0, 1], [-0.866, 0.5], [-0.866, -0.5]];
+    // 六瓣（暗描边 → 瓣身 → 瓣根/瓣尖）
+    for (const [ux, uy] of dirs) {
+      for (let t = 7; t <= tip; t++) {
+        const x = Math.round(cx + ux * t), y = Math.round(cy + uy * t);
+        const w = (t >= 9 && t <= tip - 1) ? 1 : 0;
+        r(x - w - 1, y - w - 1, 2 * (w + 1) + 1, 2 * (w + 1) + 1, d);
+      }
+      for (let t = 8; t <= tip; t++) {
+        const x = Math.round(cx + ux * t), y = Math.round(cy + uy * t);
+        const w = (t >= 9 && t <= tip - 1) ? 1 : 0;
+        const col = t === tip ? pt : (t >= tip - 2 ? pl : (open ? pm : pd));
+        r(x - w, y - w, 2 * w + 1, 2 * w + 1, col);
+      }
+    }
+    // 花心圆盘（暗描边 → 黄环 → 橙芯）
+    r(15, 7, 1, 1, d); r(13, 8, 5, 1, d); r(11, 9, 9, 1, d); r(10, 10, 11, 1, d);
+    r(9, 11, 13, 1, d); r(8, 12, 15, 5, d); r(9, 17, 13, 1, d); r(10, 18, 11, 1, d);
+    r(11, 19, 9, 1, d); r(13, 20, 5, 1, d); r(15, 21, 1, 1, d);
+    r(14, 8, 3, 1, Y); r(12, 9, 7, 1, Y); r(11, 10, 9, 1, Y); r(10, 11, 11, 1, Y);
+    r(9, 12, 13, 5, Y); r(10, 17, 11, 1, Y); r(11, 18, 9, 1, Y); r(12, 19, 7, 1, Y); r(14, 20, 3, 1, Y);
+    r(12, 10, 7, 1, O); r(11, 11, 9, 1, O); r(10, 12, 11, 5, O); r(11, 17, 9, 1, O); r(12, 18, 7, 1, O);
+    // 中央眼（眼白 + 玫红虹膜 + 黑瞳 + 高光）
+    r(14, 11, 3, 1, W1); r(12, 12, 7, 1, W1); r(11, 13, 9, 2, W1); r(12, 15, 7, 1, W1); r(14, 16, 3, 1, W1);
+    r(13, 13, 5, 1, ir); r(12, 14, 7, 1, ir); r(13, 15, 5, 1, ir);
+    r(14, 14, 2, 2, K); r(13, 13, 2, 1, W1);
+    // 花萼（底部绿色小叶）
+    r(11, 22, 3, 2, g); r(17, 22, 3, 2, g); r(13, 24, 5, 2, g); r(13, 24, 5, 1, gl);
+    return cv;
+  }
+
+  /** 风暴飞鱼：胖飞鱼像素点阵（朝右，尾鳍在左）frame 0 背鳍上展 / 1 腹鳍下划 */
+  function buildStormFish(frame) {
+    const W = 30, H = 20;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d = '#0d3a52'   // 暗青描边
+    const m = '#1f6fa0'   // 主蓝
+    const l = '#3aa4dd'   // 亮蓝
+    const bl = '#a6e3ff'  // 腹白蓝
+    const fin = '#7fd4ff' // 鳍
+    const W1 = '#eaf7ff', K = '#0a1c2a';
+    const up = frame === 0;
+    // 背/腹鳍（先画，鱼身盖住鳍根）
+    if (up) {
+      r(12, 0, 3, 2, fin); r(11, 2, 5, 2, fin); r(10, 4, 7, 1, fin);
+      r(12, 0, 3, 1, d); r(11, 2, 5, 1, d);
+    } else {
+      r(11, 4, 6, 1, m); r(12, 5, 4, 1, d);
+      r(13, 17, 5, 2, fin); r(14, 19, 3, 1, fin); r(13, 17, 5, 1, d);
+    }
+    // 尾鳍（左侧叉形）
+    r(0, 7, 3, 1, d); r(1, 8, 6, 1, d); r(0, 9, 7, 1, d); r(0, 10, 7, 1, d);
+    r(1, 11, 6, 1, d); r(0, 12, 3, 1, d);
+    r(0, 7, 2, 1, fin); r(2, 8, 5, 1, fin); r(1, 9, 6, 1, fin); r(1, 10, 6, 1, fin);
+    r(2, 11, 5, 1, fin); r(0, 12, 2, 1, fin);
+    r(3, 9, 3, 2, m);
+    // 鱼身（暗描边）
+    r(13, 3, 5, 1, d); r(10, 4, 11, 1, d); r(8, 5, 15, 1, d); r(7, 6, 17, 1, d);
+    r(6, 7, 19, 7, d); r(7, 14, 17, 1, d); r(8, 15, 15, 1, d); r(11, 16, 9, 1, d);
+    r(14, 3, 3, 1, m);
+    r(11, 4, 9, 1, m); r(9, 5, 13, 1, m); r(8, 6, 15, 1, m);
+    r(7, 7, 17, 7, m); r(8, 14, 15, 1, m); r(9, 15, 13, 1, m); r(12, 16, 7, 1, m);
+    r(10, 5, 11, 1, l); r(9, 6, 13, 1, l); r(8, 7, 15, 3, l); r(9, 10, 13, 1, l);
+    r(9, 12, 13, 1, bl); r(8, 13, 17, 1, bl); r(9, 14, 13, 1, bl);
+    // 鳃
+    r(17, 8, 1, 4, d);
+    // 眼（右侧头部，朝前）
+    r(20, 7, 3, 3, W1); r(21, 8, 2, 2, K); r(20, 7, 1, 1, W1);
+    // 嘴
+    r(25, 11, 3, 1, d);
+    return cv;
+  }
+
+  /** 双头飞蛇：双头蛇像素点阵 frame 切换蛇身起伏相位 */
+  function buildTwinSnake(frame) {
+    const W = 44, H = 22;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d = '#20380f'   // 暗绿描边
+    const m = '#4d7a2e'   // 主蛇绿
+    const l = '#7fb04a'   // 亮鳞
+    const st = '#a6d860'  // 脊线
+    const bl = '#eaf4d8'  // 腹白
+    const Y = '#ffd23b', K = '#14240a', R = '#e0453a';
+    const phase = frame === 0 ? 0 : Math.PI / 2;
+    // S 形蛇身（像素段叠块：暗边 → 主色 → 腹白 → 脊线）
+    for (let x = 7; x <= 37; x++) {
+      const y = Math.round(11 + Math.sin(x * 0.32 + phase) * 3);
+      r(x - 1, y - 3, 3, 7, d);
+      r(x - 1, y - 2, 3, 5, m);
+      r(x - 1, y + 1, 3, 2, bl);
+      r(x, y - 2, 1, 1, st);
+    }
+    // 左蛇头
+    r(1, 8, 7, 1, d); r(0, 9, 9, 5, d); r(1, 14, 7, 1, d);
+    r(2, 9, 6, 1, l); r(1, 10, 7, 3, m); r(2, 13, 6, 1, m); r(1, 11, 2, 1, bl);
+    r(3, 10, 2, 2, Y); r(4, 10, 1, 1, K);
+    r(0, 10, 1, 1, R); r(0, 11, 1, 1, R); r(0, 12, 1, 1, R);
+    // 右蛇头
+    r(36, 8, 7, 1, d); r(35, 9, 9, 5, d); r(36, 14, 7, 1, d);
+    r(36, 9, 6, 1, l); r(36, 10, 7, 3, m); r(36, 13, 6, 1, m); r(41, 11, 2, 1, bl);
+    r(39, 10, 2, 2, Y); r(39, 10, 1, 1, K);
+    r(42, 11, 2, 1, R); r(43, 10, 1, 1, R); r(43, 12, 1, 1, R);
+    return cv;
+  }
+
+  /** 预言猫头鹰：正面猫头鹰像素点阵 frame 1 双眼眨合 */
+  function buildOwl(frame) {
+    const W = 28, H = 26;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d = '#3d2814'   // 暗棕描边
+    const m = '#8a6238'   // 主羽棕
+    const l = '#c0945a'   // 亮羽
+    const tn = '#e8c88a'  // 腹浅棕
+    const fc = '#fff6e8'  // 眼盘
+    const Y = '#ffd23b', K = '#1a0f06', R = '#d24b2e'
+    const CY = '#9fe4ff', W1 = '#f2fbff';
+    const blink = frame === 1;
+    // 耳羽
+    r(5, 2, 3, 3, d); r(6, 3, 2, 2, m);
+    r(20, 2, 3, 3, d); r(20, 3, 2, 2, m);
+    // 身体（暗描边）
+    r(10, 4, 8, 1, d); r(8, 5, 12, 1, d); r(7, 6, 14, 1, d); r(6, 7, 16, 1, d);
+    r(5, 8, 18, 11, d); r(6, 19, 16, 1, d); r(7, 20, 14, 1, d); r(9, 21, 10, 1, d); r(11, 22, 6, 1, d);
+    r(9, 5, 10, 1, m); r(8, 6, 12, 1, m); r(7, 7, 14, 1, m);
+    r(6, 8, 16, 11, m); r(7, 19, 14, 1, m); r(8, 20, 12, 1, m); r(10, 21, 8, 1, m); r(12, 22, 4, 1, m);
+    // 侧翅羽 + 腹部
+    r(7, 9, 2, 9, l); r(19, 9, 2, 9, l);
+    r(10, 15, 9, 1, tn); r(9, 16, 11, 6, tn); r(10, 22, 6, 1, tn);
+    // 眼盘（两块浅色面盘）
+    r(6, 8, 7, 1, fc); r(5, 9, 9, 6, fc); r(6, 15, 7, 1, fc);
+    r(15, 8, 7, 1, fc); r(14, 9, 9, 6, fc); r(15, 15, 7, 1, fc);
+    if (blink) {
+      r(7, 11, 5, 1, d); r(16, 11, 5, 1, d);
+    } else {
+      r(8, 10, 3, 3, Y); r(9, 11, 2, 2, K); r(8, 10, 1, 1, W1);
+      r(17, 10, 3, 3, Y); r(17, 11, 2, 2, K); r(17, 10, 1, 1, W1);
     }
     // 喙
-    c.fillStyle = R; c.beginPath(); c.moveTo(18, 19); c.lineTo(16, 22); c.lineTo(20, 22); c.closePath(); c.fill();
+    r(13, 14, 2, 2, R); r(13, 16, 2, 1, '#b53a24');
     // 额头水晶
-    c.fillStyle = K;
-    c.beginPath(); c.moveTo(18, 5); c.lineTo(21, 9); c.lineTo(18, 12); c.lineTo(15, 9); c.closePath(); c.fill();
-    c.fillStyle = CY;
-    c.beginPath(); c.moveTo(18, 6); c.lineTo(20, 9); c.lineTo(18, 11); c.lineTo(16, 9); c.closePath(); c.fill();
-    c.fillStyle = W1;
-    c.beginPath(); c.moveTo(18, 7); c.lineTo(19, 9); c.lineTo(18, 10); c.lineTo(17, 9); c.closePath(); c.fill();
+    r(13, 4, 2, 1, CY); r(12, 5, 4, 1, CY); r(13, 6, 2, 1, CY); r(13, 4, 1, 1, W1);
     return cv;
   }
 

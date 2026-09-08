@@ -387,6 +387,7 @@
       this.featherVolley = 0;   // 齐射计数：每 3 次有 1 发稀疏弹
       this.whirlT = 7.0;
       this.rushT = 12.0;
+      this.rushA = 0;          // 突袭冲锋朝向（转向速率受限，不再逐帧完美追踪）
       this.spiralA = 0;
       this.trail = [];          // 移动白色拖尾轨迹点（{x,y,life}）
       this.deathCols = ['#8b96a8', '#e8eef7', '#c0392b', '#fff'];
@@ -460,21 +461,34 @@
         this.recordTrail(this.x, this.y);   // 原地旋转：基本不产生新点，旧拖尾自然消散
       }
       else if (this.state === 'rushWind') {
-        if (this.stateT >= 0.5) { this.state = 'rush'; this.stateT = 0; SFX.dash(); }
+        // 蓄力结束：起飞方向锁定为当时玩家方位，随后转向速率受限（玩家有反应窗口）
+        if (this.stateT >= 0.5) {
+          this.state = 'rush'; this.stateT = 0;
+          this.rushA = Math.atan2(p.y - this.y, p.x - this.x);
+          SFX.dash();
+        }
       }
       else if (this.state === 'rush') {
-        // 旋转突袭：追踪玩家 6 秒
-        const a = Math.atan2(p.y - this.y, p.x - this.x);
-        const sp = 330;
-        this.x += Math.cos(a) * sp * dt;
-        this.y += Math.sin(a) * sp * dt;
-        this.x = clamp(this.x, 80, CFG.W - 40);
-        this.y = clamp(this.y, 70, CFG.GROUND_Y - 60);
+        // 旋转突袭：转向受限的追踪冲锋 —— 朝玩家方位逐步偏转（每秒最多约 143°），
+        // 无法瞬间掉头，玩家垂直急转/折返可使其冲过头；命中穿身后会沿惯性滑开，不再贴身连撞
+        const want = Math.atan2(p.y - this.y, p.x - this.x);
+        let da = want - this.rushA;
+        while (da > Math.PI) da -= TAU;
+        while (da < -Math.PI) da += TAU;
+        this.rushA += clamp(da, -2.5 * dt, 2.5 * dt);
+        const sp = 320;
+        this.x += Math.cos(this.rushA) * sp * dt;
+        this.y += Math.sin(this.rushA) * sp * dt;
+        // 撞边反弹：保持冲锋惯性折返，不会卡在边界黏住玩家
+        if (this.x < 80) { this.x = 80; this.rushA = Math.PI - this.rushA; }
+        if (this.x > CFG.W - 40) { this.x = CFG.W - 40; this.rushA = Math.PI - this.rushA; }
+        if (this.y < 70) { this.y = 70; this.rushA = -this.rushA; }
+        if (this.y > CFG.GROUND_Y - 60) { this.y = CFG.GROUND_Y - 60; this.rushA = -this.rushA; }
         this.recordTrail(this.x, this.y);   // 突袭高速冲锋（身体旋转中）：从中心拉出白色光尾
         // 拖尾
         g.particles.push(new Particle(this.x + 20, this.y, rand(-40, 40), rand(-40, 40),
           0.35, 5, '#bfe9ff'));
-        if (this.stateT >= 6.0) { this.state = 'fight'; this.stateT = 0; }
+        if (this.stateT >= 3.8) { this.state = 'fight'; this.stateT = 0; }
       }
     }
     /** 记录拖尾点：静止（帧位移 < 2px）时不记录，队列硬上限 30 点 */
@@ -3838,7 +3852,8 @@
       if (!s || s.dead || this.spawnInvuln > 0) return;
       if (element === 'flame') { this.dotT = 3; this.dotDps = dmg * 0.4; this.dotType = 'flame'; }
       else if (element === 'poison') { this.dotT = 6; this.dotDps = dmg * 0.25; this.dotType = 'poison'; }
-      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; if ((this.freezeT || 0) <= 0) this.freezeT = 1.2; }
+      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; this.freezeT = 0; }
+      // 骨龙王体积庞大、免疫冰冻（不再设置 freezeT），持续冰弹也不会将其冻住卡死
 
       if (this.headAlive && i !== 0) {
         // 完全体打身体：身体受 70%（锁血1，裂开），头部传导受 50%
@@ -3915,35 +3930,39 @@
           g.score += 5;
           this.booms.push({ x: bs.x, y: bs.y, t: 0.05 + k * 0.012 });
         }
-        // 分裂瞬间立即脱离 2 条小骨龙（取未爆炸的最前两节）
+        // 分裂瞬间立即召唤 2 条小骨龙（在头部碎裂位置出现，保证玩家可见；
+        // 同时从龙身链最末端移除同数量的节，使血条总和与脱离数一致）
         const aliveMini = g.enemies.filter(e => e.type === 'bonedragonmini' && !e.dead).length;
         let spawned = 0;
-        for (let k = explodeCount; k < alive.length && spawned < 2; k++) {
+        for (let m = 0; m < 2; m++) {
           if (aliveMini + spawned >= this.maxMini) break;
-          const bs = this.segments[alive[k]];
-          bs.dead = true;
-          g.enemies.push(new BoneDragonMini(g, bs.x, bs.y));
-          burst(g, bs.x, bs.y, 8, this.deathCols, 160, 4, 0.3, 90);
+          const mx = s.x + (m === 0 ? -36 : 36), my = s.y + 28;
+          g.enemies.push(new BoneDragonMini(g, mx, my));
+          burst(g, mx, my, 8, this.deathCols, 160, 4, 0.3, 90);
           spawned++;
         }
+        for (let k = alive.length - 1; k >= explodeCount && spawned > 0; k--) {
+          this.segments[alive[k]].dead = true;
+          spawned--;
+        }
         g.shake(8);
-        this.recalcHp();
+        this.recalcHp(g);
       } else {
         // 身体节脱离：若在场小段未达上限则生成独立敌人
         const aliveMini = g.enemies.filter(e => e.type === 'bonedragonmini' && !e.dead).length;
         if (aliveMini < this.maxMini) {
           g.enemies.push(new BoneDragonMini(g, s.x, s.y));
         }
-        this.recalcHp();
+        this.recalcHp(g);
       }
     }
-    recalcHp() {
+    recalcHp(g) {
       if (this.headAlive) {
         // 完全体：血条显示头部血量（第一条血）
         this.maxHp = this.headMaxHp;
         this.hp = Math.max(0, this.segments[0].hp);
       } else {
-        // 崩解态：血条显示存活身体节总血量
+        // 崩解态：血条显示所有存活骨龙段血量总和
         let hp = 0, max = 0;
         for (let i = 1; i < this.segments.length; i++) {
           const s = this.segments[i];

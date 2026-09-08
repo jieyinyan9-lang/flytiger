@@ -901,6 +901,9 @@
     tryLevelUp() {
       if (this.state !== 'playing') return;
       if (this.xp < this.xpNeed) return;
+      // 骨龙王崩解（分裂）阶段不弹三选一，避免打断战斗/连弹；能量保留，骨龙消亡后自动结算
+      const boneSplit = (this.bosses || []).some(b => !b.dead && b.headAlive === false);
+      if (boneSplit) return;
       this.xp -= this.xpNeed;
       this.totalLevels++;
       this.xpNeed = CFG.xpNeed(this.totalLevels);   // 下一次需求更高：成长越来越难

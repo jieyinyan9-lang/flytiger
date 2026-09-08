@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>敌人美术资源导出</title>
+<style>
+  body { font-family: sans-serif; background: #222; color: #eee; padding: 20px; }
+  .row { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 30px; }
+  .card { background: #333; padding: 12px; border-radius: 8px; text-align: center; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; border: 1px solid #555; background: #1a1a1a; }
+  button { margin-top: 8px; padding: 6px 14px; cursor: pointer; }
+  h3 { margin: 6px 0; }
+</style>
+</head>
+<body>
+<h2>敌人美术资源导出</h2>
+<p>精灵为程序化像素绘制，已放大 8 倍展示。点击「下载 PNG」保存对应帧。</p>
+<div class="row" id="cards"></div>
+
+<script src="js/sprites.js"></script>
+<script>
+  const SCALE = 8;   // 导出放大倍数（保持像素清晰）
+
+  // 需要导出的精灵：名称 -> sprite canvas
+  const targets = [
+    { name: '蝙蝠怪_帧A(翼上扬)', sprite: Sprites.batA },
+    { name: '蝙蝠怪_帧B(翼下压)', sprite: Sprites.batB },
+    { name: '小弓箭手', sprite: Sprites.archer },
+    { name: '炮师', sprite: Sprites.cannoneer },
+    // ── 飞行弹幕小怪（朝左，游戏中实际使用方向）──
+    { name: '刺羽鸟_帧A', sprite: Sprites.spikebirdAL },
+    { name: '刺羽鸟_帧B', sprite: Sprites.spikebirdBL },
+    { name: '魔眼飞虫_帧A', sprite: Sprites.eyeflyAL },
+    { name: '魔眼飞虫_帧B', sprite: Sprites.eyeflyBL },
+    { name: '魔石甲虫_帧A', sprite: Sprites.stonebeetleAL },
+    { name: '魔石甲虫_帧B', sprite: Sprites.stonebeetleBL },
+    { name: '浮空魔花_帧A', sprite: Sprites.floatflowerAL },
+    { name: '浮空魔花_帧B', sprite: Sprites.floatflowerBL },
+    { name: '风暴飞鱼_帧A', sprite: Sprites.stormfishAL },
+    { name: '风暴飞鱼_帧B', sprite: Sprites.stormfishBL },
+    { name: '双头飞蛇_帧A', sprite: Sprites.twinsnakeAL },
+    { name: '双头飞蛇_帧B', sprite: Sprites.twinsnakeBL },
+    { name: '预言猫头鹰_帧A', sprite: Sprites.owlAL },
+    { name: '预言猫头鹰_帧B', sprite: Sprites.owlBL },
+  ];
+
+  const cards = document.getElementById('cards');
+
+  targets.forEach(t => {
+    const src = t.sprite;
+    const w = src.width * SCALE, h = src.height * SCALE;
+
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(src, 0, 0, w, h);
+    card.appendChild(cv);
+
+    const label = document.createElement('div');
+    label.innerHTML = `<h3>${t.name}</h3><small>${src.width}×${src.height} px → ${w}×${h}</small>`;
+    card.appendChild(label);
+
+    const btn = document.createElement('button');
+    btn.textContent = '下载 PNG';
+    btn.onclick = () => {
+      const a = document.createElement('a');
+      a.download = `${t.name}.png`;
+      a.href = cv.toDataURL('image/png');
+      a.click();
+    };
+    card.appendChild(btn);
+
+    cards.appendChild(card);
+  });
+</script>
+</body>
+</html>
