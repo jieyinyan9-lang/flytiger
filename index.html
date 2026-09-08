@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>飞虎的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260909r35">
+<link rel="stylesheet" href="css/style.css?v=20260909r39">
 </head>
 <body>
 <div id="game-wrap">
@@ -63,11 +63,13 @@
   <div id="boss-hud" class="hidden">
     <div id="boss-name">火焰飞猪王</div>
     <div class="boss-bar-outer">
-      <div id="boss-bar-ghost" class="boss-bar-layer"></div>
-      <div id="boss-bar" class="boss-bar-inner"></div>
-      <div class="boss-bar-sheen"></div>
-      <div id="boss-bar-flash" class="boss-bar-layer"></div>
-      <canvas id="boss-bar-fx"></canvas>
+      <div class="boss-bar-clip">
+        <div id="boss-bar-ghost" class="boss-bar-layer"></div>
+        <div id="boss-bar" class="boss-bar-inner"></div>
+        <div class="boss-bar-sheen"></div>
+        <div id="boss-bar-flash" class="boss-bar-layer"></div>
+        <canvas id="boss-bar-fx"></canvas>
+      </div>
     </div>
   </div>
 
@@ -166,6 +168,6 @@
 <script src="js/achievements.js?v=20260909r2"></script>
 <script src="js/entities.js?v=20260909r88"></script>
 <script src="js/bosses.js?v=20260909r99"></script>
-<script src="js/game.js?v=20260909r106"></script>
+<script src="js/game.js?v=20260909r109"></script>
 </body>
 </html>

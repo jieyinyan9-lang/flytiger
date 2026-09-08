@@ -138,10 +138,16 @@ kbd {
 }
 .boss-bar-outer {
   position: relative;
-  height: 20px; background: #150606;
+  height: 22px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,.25) 0 2px, rgba(255,255,255,.04) 2px 4px),
+    linear-gradient(to bottom, #585e69 0%, #434850 38%, #31353d 72%, #24272e 100%);
   border: 3px solid #000;
   box-shadow: 0 0 0 2px #8d9bb8, 0 0 0 4px #000, 0 0 16px rgba(255,70,60,.55);
-  overflow: hidden;
+}
+/* 内层裁切：所有血条层与特效一律压缩在框体内 */
+.boss-bar-clip {
+  position: absolute; inset: 0; overflow: hidden;
 }
 /* 框体四角像素铆钉 */
 .boss-bar-outer::before {
@@ -159,10 +165,11 @@ kbd {
 }
 #boss-bar-ghost {
   z-index: 1;
-  background: linear-gradient(to bottom, #fff3a8 0%, #ffd24a 45%, #f59a1c 80%, #c96a08 100%);
-  box-shadow: inset -4px 0 0 #fff7c8, 0 0 10px rgba(255,200,60,.75);
+  background: linear-gradient(to bottom, #fffce0 0%, #ffe76a 30%, #ffc22e 60%, #f08808 100%);
+  box-shadow: inset -5px 0 0 #fffbe6, inset 0 0 6px rgba(255,255,255,.65), 0 0 12px rgba(255,210,70,.9);
 }
 .boss-bar-inner {
+  position: absolute; left: 0; top: 0;
   z-index: 2;
   height: 100%; width: 100%;
   background:
@@ -194,9 +201,9 @@ kbd {
   opacity: 0;
 }
 #boss-bar-fx {
-  position: absolute; inset: 0; z-index: 5;
+  position: absolute; inset: 0;
   width: 100%; height: 100%;
-  pointer-events: none;
+  z-index: 5; pointer-events: none;
   image-rendering: pixelated;
 }
 

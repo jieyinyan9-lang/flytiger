@@ -95,6 +95,9 @@
         meleeIcon: document.getElementById('melee-icon'),
         bossHud: document.getElementById('boss-hud'),
         bossBar: document.getElementById('boss-bar'),
+        bossBarGhost: document.getElementById('boss-bar-ghost'),
+        bossBarFlash: document.getElementById('boss-bar-flash'),
+        bossBarFx: document.getElementById('boss-bar-fx'),
         bossName: document.getElementById('boss-name'),
         warn: document.getElementById('boss-warn'),
         warnSub: document.getElementById('warn-sub'),
@@ -324,6 +327,7 @@
       this.toastQueue = [];   // 待显示的 toast 队列（避免多条同时出现）
       this.activeToast = null; // 当前正在显示的 toast
       this.bossMaskAlpha = 0; // Boss 战黑红蒙版透明度（0~1）
+      this.resetBossBarFx();  // Boss 血条斩击/灼烧演出状态
       this.ctrlMode = this.ctrlMode || 'keyboard';   // 操作模式：'keyboard' | 'mouse'（菜单选择）
       this.loopErr = null;      // 主循环异常捕获（首帧错误堆栈）
 
@@ -1428,6 +1432,7 @@
       }
       this.el.bossName.textContent = `${b.bossName}`;
       this.el.bossHud.classList.remove('hidden');
+      this.resetBossBarFx();   // 新 Boss：血条满状态，清空斩击/灼烧残留
       this.toast(`${b.bossName} 出现！`, 2, 'lt');
       if (b.musicTheme === 'imperial') SFX.bossArmy();   // 大王登场：万军齐吼"好！好！好！" + 战鼓号角
       else SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
@@ -1935,7 +1940,10 @@
       this.rocks = this.rocks.filter(r => !r.dead);
       this.arcs = this.arcs.filter(a => a.t < a.life);
       this.fxRings = this.fxRings.filter(ring => ring.t < ring.life);
-      if (this.bosses.length === 0) this.el.bossHud.classList.add('hidden');
+      if (this.bosses.length === 0) {
+        if (!this.el.bossHud.classList.contains('hidden')) this.resetBossBarFx();
+        this.el.bossHud.classList.add('hidden');
+      }
 
       // 能量满足门槛即触发选择（可连续触发，无冷却锁）
       this.tryLevelUp();
@@ -1967,7 +1975,7 @@
         if (this.ultBubble.t <= 0) this.ultBubble = null;
       }
 
-      this.updateHud();
+      this.updateHud(dt);
     }
 
     /* ---------------- 碰撞 ---------------- */
@@ -2247,7 +2255,7 @@
     }
 
     /* ---------------- HUD ---------------- */
-    updateHud() {
+    updateHud(dt) {
       const p = this.player;
       this.el.hpBar.style.width = clamp(p.hp / p.maxHp, 0, 1) * 100 + '%';
       this.el.hpText.textContent = `${Math.ceil(p.hp)}/${p.maxHp}`;
@@ -2273,11 +2281,181 @@
       this.el.meleeIcon.textContent = this.autoSkillIcon(p.charId);
       const meleeBox = document.getElementById('melee-box');
       if (meleeBox) meleeBox.title = `${this.autoSkillName(p.charId)}（接触敌人触发，3 秒冷却）`;
-      // Boss 血条
+      // Boss 血条（像素斩击 + 灼烧 + 亮黄追伤演出）
       if (this.bosses.length) {
         const b = this.bosses[0];
-        this.el.bossBar.style.width = clamp(b.hp / b.maxHp, 0, 1) * 100 + '%';
+        this.updateBossBar(clamp(b.hp / b.maxHp, 0, 1), dt);
       }
+    }
+
+    /* ---------------- Boss 血条演出（扣血斩击 / 灼烧火星 / 闪白 / 亮黄追伤） ---------------- */
+    resetBossBarFx() {
+      this.bossBar = {
+        ctx: null, lastRatio: null, ghost: 1, ghostDelay: 0,
+        pendingDmg: 0,  // 累积待演出伤害（ratio 单位）：高频小伤害合并后一次性斩击
+        fxCd: 0,        // 演出最小间隔（秒）
+        flash: null,    // 闪白段 { from, to, t, dur }
+        slashes: [],    // 斩击 { x, y, ang, maxLen, t, dur, w }
+        embers: []      // 锻打火花 { x, y, vx, vy, t, life, size, col, seed }
+      };
+      if (this.el) {
+        if (this.el.bossBarGhost) this.el.bossBarGhost.style.width = '100%';
+        if (this.el.bossBarFlash) this.el.bossBarFlash.style.opacity = '0';
+        if (this.el.bossBarFx) {
+          const c = this.el.bossBarFx.getContext('2d');
+          if (c) c.clearRect(0, 0, this.el.bossBarFx.width, this.el.bossBarFx.height);
+        }
+      }
+    }
+
+    updateBossBar(ratio, dt) {
+      if (!this.bossBar) this.resetBossBarFx();
+      const fx = this.bossBar;
+      const cv = this.el.bossBarFx;
+      if (!fx.ctx && cv) fx.ctx = cv.getContext('2d');
+      const ctx = fx.ctx;
+      if (ctx && cv) {
+        const w = cv.clientWidth, h = cv.clientHeight;   // 内容盒像素尺寸
+        if (w > 0 && h > 0 && (cv.width !== w || cv.height !== h)) { cv.width = w; cv.height = h; }
+      }
+      // 特效画布与条体同尺寸：斩击/火星一律压缩在框体内
+      const W = cv ? cv.width : 0, BAR_H = cv ? cv.height : 16;
+      const BAR_TOP = 0;
+
+      if (fx.lastRatio === null) { fx.lastRatio = ratio; fx.ghost = ratio; }
+      // 扣血累积：高频弹幕小伤害合并演出，冷却结束或大伤害（≥4%）时一次性斩击
+      if (ratio < fx.lastRatio - 0.0005) {
+        fx.pendingDmg += fx.lastRatio - ratio;
+      }
+      fx.fxCd -= dt;
+      if (fx.pendingDmg > 0.0005 && (fx.fxCd <= 0 || fx.pendingDmg >= 0.04)) {
+        const fromRatio = ratio + fx.pendingDmg;   // 本次演出段起点
+        fx.flash = { from: fromRatio, to: ratio, t: 0, dur: 0.34 };
+        fx.ghostDelay = 0.12;   // 亮黄段只作短暂停顿，随即快速冷却追赶
+        this.spawnBossBarSlash(ratio, W, BAR_TOP, BAR_H);
+        this.spawnBossBarEmbers(ratio, fromRatio, W, BAR_TOP, BAR_H);
+        fx.pendingDmg = 0;
+        fx.fxCd = 0.14;
+      }
+      if (ratio > fx.ghost + 0.001) {
+        // 回血 / 阶段回满（狮身人面像）：追伤条立即追上，不演出
+        fx.ghost = ratio;
+        fx.pendingDmg = 0;
+        fx.flash = null;
+        if (this.el.bossBarFlash) this.el.bossBarFlash.style.opacity = '0';
+      }
+      fx.lastRatio = ratio;
+      this.el.bossBar.style.width = (ratio * 100) + '%';
+
+      // 亮黄追伤条：极短停顿后急速冷却追赶；露头长度封顶一小格（9%），绝不长留
+      if (fx.ghost > ratio) {
+        if (fx.ghostDelay > 0) fx.ghostDelay -= dt;
+        else fx.ghost = Math.max(ratio, fx.ghost - Math.max((fx.ghost - ratio) * dt * 16, dt * 0.9));
+        if (fx.ghost > ratio + 0.09) fx.ghost = ratio + 0.09;
+      }
+      if (this.el.bossBarGhost) this.el.bossBarGhost.style.width = (fx.ghost * 100) + '%';
+
+      // 闪白：前段保持满白，后段快速褪去（露出亮黄追伤边）
+      const fl = this.el.bossBarFlash;
+      if (fx.flash && fl) {
+        fx.flash.t += dt;
+        const p = fx.flash.t / fx.flash.dur;
+        if (p >= 1) { fx.flash = null; fl.style.opacity = '0'; }
+        else {
+          fl.style.left = (fx.flash.to * 100) + '%';
+          fl.style.width = ((fx.flash.from - fx.flash.to) * 100) + '%';
+          fl.style.opacity = (p < 0.18 ? 1 : Math.max(0, 1 - (p - 0.18) / 0.82)).toFixed(3);
+        }
+      }
+
+      // 粒子推进（直线飞溅、阻尼减速）+ 画布绘制；出框即灭，压缩在条体内
+      for (const e of fx.embers) {
+        e.t += dt;
+        e.x += e.vx * dt; e.y += e.vy * dt;
+        e.vx *= (1 - Math.min(1, dt * 3.2));
+        e.vy *= (1 - Math.min(1, dt * 3.2));
+      }
+      fx.embers = fx.embers.filter(e =>
+        e.t < e.life && e.x >= 0 && e.x <= W && e.y >= BAR_TOP && e.y <= BAR_TOP + BAR_H);
+      for (const s of fx.slashes) s.t += dt;
+      fx.slashes = fx.slashes.filter(s => s.t < s.dur);
+      this.drawBossBarFx(fx, ctx, W, BAR_H);
+    }
+
+    /** 斩击：亮白主斜劈 + 反向小划，劈在扣除点 */
+    spawnBossBarSlash(ratio, W, BAR_TOP, BAR_H) {
+      const cx = Math.max(12, Math.min(W - 12, ratio * W));
+      const cy = BAR_TOP + BAR_H / 2;
+      this.bossBar.slashes.push(
+        { x: cx, y: cy, ang: -Math.PI / 4.2, maxLen: BAR_H * 3 + 22, t: 0, dur: 0.22, w: 3 },
+        { x: cx + 10, y: cy, ang: Math.PI / 4.2, maxLen: BAR_H * 1.6 + 8, t: 0.03, dur: 0.18, w: 2 }
+      );
+    }
+
+    /** 锻打火花：少量白热粒子，在扣除段内向两侧直线飞溅（不出框） */
+    spawnBossBarEmbers(ratio, oldRatio, W, BAR_TOP, BAR_H) {
+      const x0 = ratio * W, span = Math.max(8, oldRatio * W - x0);
+      const cols = ['#ffffff', '#fff3b0', '#ffe76a', '#ffd23e'];
+      for (let i = 0; i < 4; i++) {
+        this.bossBar.embers.push({
+          x: x0 + Math.random() * span,
+          y: BAR_TOP + 2 + Math.random() * (BAR_H - 4),
+          vx: (Math.random() < 0.5 ? -1 : 1) * (22 + Math.random() * 42),
+          vy: (Math.random() - 0.5) * 24,
+          t: 0, life: 0.22 + Math.random() * 0.22,
+          size: Math.random() < 0.3 ? 2 : 1,
+          col: cols[(Math.random() * cols.length) | 0],
+          seed: Math.random() * 6.28
+        });
+      }
+      for (let i = 0; i < 2; i++) {
+        this.bossBar.embers.push({
+          x: x0 + (Math.random() - 0.5) * 6,
+          y: BAR_TOP + 2 + Math.random() * (BAR_H - 4),
+          vx: (Math.random() < 0.5 ? -1 : 1) * (12 + Math.random() * 20),
+          vy: -6 - Math.random() * 12,
+          t: 0, life: 0.2 + Math.random() * 0.18,
+          size: 1, col: '#ffffff', seed: Math.random() * 6.28
+        });
+      }
+    }
+
+    drawBossBarFx(fx, ctx, W, H) {
+      if (!ctx || W <= 0) return;
+      ctx.clearRect(0, 0, W, H);
+      // 灼烧火星（像素方块 + 亮芯 + 闪烁）
+      for (const e of fx.embers) {
+        const p = e.t / e.life;
+        const a = Math.max(0, 1 - p) * (0.6 + 0.4 * Math.sin(e.t * 38 + e.seed));
+        ctx.globalAlpha = Math.max(0, Math.min(1, a));
+        ctx.fillStyle = e.col;
+        ctx.fillRect(e.x | 0, e.y | 0, e.size, e.size);
+        if (p < 0.5 && e.size >= 2) {
+          ctx.globalAlpha = Math.max(0, a * 0.85);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect((e.x | 0) + (e.size >> 1) - 1, (e.y | 0), 1, 1);
+        }
+      }
+      // 斩击：沿斜线铺亮白像素块（淡白光晕 + 纯白芯），快速劈出后淡出
+      for (const s of fx.slashes) {
+        const p = s.t / s.dur;
+        const grow = Math.min(1, p * 3.6);
+        const fade = p < 0.3 ? 1 : Math.max(0, 1 - (p - 0.3) / 0.7);
+        const len = s.maxLen * grow;
+        const dx = Math.cos(s.ang), dy = Math.sin(s.ang);
+        const nx = -dy, ny = dx;
+        const steps = Math.max(2, (len / 4) | 0);
+        for (let i = 0; i <= steps; i++) {
+          const d = -len / 2 + len * (i / steps);
+          const bx = s.x + dx * d, by = s.y + dy * d;
+          ctx.globalAlpha = fade * 0.35;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect((bx - nx * (s.w + 1)) | 0, (by - ny * (s.w + 1)) | 0, s.w + 3, s.w + 3);
+          ctx.globalAlpha = fade;
+          ctx.fillRect(bx | 0, by | 0, s.w, s.w);
+        }
+      }
+      ctx.globalAlpha = 1;
     }
 
     /* ---------------- 背景（七张地图主题：草原 / 沙漠 / 雪地 / 火焰山 / 紫荒地 / 赛博都市 / 大海） ---------------- */
