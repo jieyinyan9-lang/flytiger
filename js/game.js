@@ -1668,7 +1668,8 @@
               const dn = (b.vx * dx + b.vy * dy) / (dl * dl);
               b.vx -= 2 * dn * dx; b.vy -= 2 * dn * dy;
               b.vx += rand(-90, 90); b.vy += rand(-90, 90);
-              b.vx *= 0.5; b.vy *= 0.5;                        // 反弹减速：速度降低一半
+              const bspd = b.bounceSpd || 0.5;                  // 反弹减速（浪客烟头仅保留 0.4，更慢）
+              b.vx *= bspd; b.vy *= bspd;
               b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
               b.angle = Math.atan2(b.vy, b.vx);
               burst(this, b.x, b.y, 5, ['#fff', '#ff9d2e'], 150, 3, 0.25);
@@ -1704,7 +1705,8 @@
             b.vx -= 2 * dn * nx; b.vy -= 2 * dn * ny;       // 镜面反射
             b.x = cx + (nx / nl) * (b.r + 5); b.y = cy + (ny / nl) * (b.r + 5);
             b.vx += rand(-70, 70); b.vy += rand(-70, 70);   // 随机扰动（任意方向反弹）
-            b.vx *= 0.5; b.vy *= 0.5;                        // 反弹减速：速度降低一半
+            const bspd = b.bounceSpd || 0.5;                  // 反弹减速（浪客烟头仅保留 0.4，更慢）
+            b.vx *= bspd; b.vy *= bspd;
             b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
             b.angle = Math.atan2(b.vy, b.vx);
             burst(this, b.x, b.y, 5, ['#fff', '#caa06a'], 150, 3, 0.25);

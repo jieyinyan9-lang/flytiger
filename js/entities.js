@@ -220,6 +220,7 @@
       this.dropX = opts.dropX || 0;            // 飞抵该 x 后开始受重力下落（侠客飞刀/战狂盾牌）
       this.dropGrav = opts.dropGrav || 0;
       this.bouncesLeft = opts.bouncesLeft || 0;   // 剩余反弹次数（烟头/锯齿盾/最终激光）
+      this.bounceSpd = opts.bounceSpd || 0;       // 反弹后速度保留倍率（0=走默认 0.5；浪客烟头更慢）
       this.noDieOnHit = !!opts.noDieOnHit;     // 命中敌人后不消失（反弹类）
       this.rockReact = !!opts.rockReact;       // 与障碍物交互（分裂/反弹）
       this.burnOnHit = !!opts.burnOnHit;       // 命中点燃（持续燃烧）
@@ -2703,6 +2704,7 @@
           kind: 'butt', friendly: true, dmg,
           r: (5 + slv * 2) * bscale, glv, gmax,
           bouncesLeft: this.bounceMax, noDieOnHit: this.bounceMax > 0,
+          bounceSpd: 0.4,
           rockReact: true, burnOnHit: true, groundSlam: true,
           spinRate: 6,
           fireTrail: gmax,

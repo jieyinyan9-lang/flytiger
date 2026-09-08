@@ -33,7 +33,7 @@
     },
     buliang: {
       id: 'buliang', name: '浪客', art: 'assets/BuLiang.png', face: 'assets/Role/buliangshaonian.png?v=20260907', icon: '🚬',
-      speedMul: 1.3, dmg: 6, fireMul: 1, bulletSpd: 0.6,
+      speedMul: 1.3, dmg: 6, fireMul: 1.2, bulletSpd: 0.5,
       kind: 'butt', ult: 'soundwave', bounceBase: 1,
       tag: '桀骜不良',
       trait: '速度 +30% · 烟头反弹 + 燃烧 · 声波禁锢',
