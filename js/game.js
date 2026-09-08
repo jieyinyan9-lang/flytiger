@@ -32,7 +32,37 @@
       floatflower: ['12向环形刺球弹幕绞成了肉馅', '刺球弹幕从脚到头打成了筛子'],
       stormfish: ['S形波浪风暴弹撞断了肋骨', '三发风暴弹连环命中炸成了碎片'],
       twinsnake: ['交叉菱形弹幕切开了喉咙', '双头交替连射打成了烂泥'],
-      owl: ['追踪魔法羽毛追到天涯海角后穿心', '连续5发自机狙羽毛扎成了仙人掌']
+      owl: ['追踪魔法羽毛追到天涯海角后穿心', '连续5发自机狙羽毛扎成了仙人掌'],
+      javelinSlave: [
+        '的倒刺标枪贯穿了胸口，拔都拔不出来',
+        '瞄准齿轮眼锁定了三秒后一枪钉穿了脑门',
+        '标枪上的倒刺扯断了整条肋骨',
+        '连续两发标枪钉在了墙上像挂件一样'
+      ],
+      ramFighter: [
+        '巨型螺旋羊角顶穿了肚子',
+        '三叉短戟捅了个对穿',
+        '弹簧腿一脚踹飞出去撞碎了脊柱',
+        '脖子上的生锈铁链勒住了喉咙活活拖死'
+      ],
+      shieldSlave: [
+        '弧形青铜塔盾拍扁了脑袋',
+        '短铁棒敲碎了天灵盖',
+        '盾推着撞上了墙壁挤成了肉饼',
+        '铁棒抡断了三根肋骨后吐血而亡'
+      ],
+      puppet: [
+        '飞刀插满了后背像只刺猬',
+        '飞刀割断了膝盖的筋，跪下后又被抹了脖子',
+        '石膏裂纹手指戳进了眼窝',
+        '纸片般的身形绕到背后一刀捅穿了腰子'
+      ],
+      bombPrisoner: [
+        '贴脸自爆炸飞了半边身子',
+        '火油麻布点燃后活活烧成了焦炭',
+        '引信火花溅到身上炸成了一团火球',
+        '金属箍崩断后碎片扎穿了喉咙'
+      ]
     },
     boss: {
       pigking: ['三连大火球炸上了天摔死了', '弧形扇形火焰喷成了烤乳猪', '盘旋走位时一头撞飞掉进了岩浆'],
@@ -227,6 +257,14 @@
           this.spawnEnemy(type);
           this.toast(`测试刷怪：${CFG.enemies[type].name}`, 1.4);
         }
+        // 调试快捷键：按 4 依次刷出 1 个斗兽场地面小怪（投掷奴→羊头斗士→盾奴→皮影客→自爆囚，循环），仅测试用（无视地图限定）
+        if (e.code === 'Digit4' && this.state === 'playing') {
+          const arenaFoes = ['javelinSlave', 'ramFighter', 'shieldSlave', 'puppet', 'bombPrisoner'];
+          const type = arenaFoes[this.arenaTestIdx % arenaFoes.length];
+          this.arenaTestIdx++;
+          this.spawnEnemy(type);
+          this.toast(`测试刷怪：${CFG.enemies[type].name}`, 1.4);
+        }
         if (this.state === 'levelup' && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3')) {
           const idx = e.code === 'Digit1' ? 0 : e.code === 'Digit2' ? 1 : 2;
           if (this.pendingOptions[idx]) this.pickUpgrade(idx);
@@ -365,6 +403,7 @@
       this.grassDragonThisRound = false;   // 草龙每轮至多出现一次
       this.unlockedFlyers = new Set();      // 已解锁的飞行弹幕敌人（每轮 30% 概率解锁）
       this.flyerTestIdx = 0;                // 测试快捷键 2 的刷怪循环索引
+      this.arenaTestIdx = 0;                // 测试快捷键 4 的斗兽场小怪刷怪循环索引
       this._idleAnchor = null;              // 成就：长时间不移动判定锚点（每局重置）
       // 地图专属 Boss（狮身人面像/牛魔/骨龙王）：强制概率轮内独立掷骰（未命中本轮不入池），
       // 离开强制轮后无论是否命中过，都拉平为等权普通池成员——但地图限定永久生效、可反复出场
@@ -1603,6 +1642,7 @@
         if ((def.minBossKills || 0) > this.bossCount) return;        // 未达成 Boss 击败数：每击败1只Boss解锁1种
         if (def.flyer && !this.unlockedFlyers.has(type)) return;    // 飞行弹幕敌人：仅已解锁的出场
         if (def.ground && this.mapId === 'ocean') return;           // 大海：不出现地面类敌人（弓箭手/炮师）
+        if (def.arenaOnly && this.mapId !== 'colosseum') return;    // 斗兽场专属小怪（投掷奴/羊头斗士/盾奴/皮影客/自爆囚）
         if (def.oncePerRound && this.grassDragonThisRound) return;   // 草龙：每轮至多一次
         if ((def.elite || def.ground) && this.enemies.some(e => e.type === type && !e.isMini)) return;  // 精英/地面单位场上限 1（分裂小段不计）
         // 罗马角斗场：地面类敌人（弓箭手/炮师）刷出权重 ×3，明显更常见

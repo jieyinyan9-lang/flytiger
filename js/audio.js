@@ -124,6 +124,34 @@
       noise(big ? 0.6 : 0.3, big ? 0.4 : 0.2, big ? 700 : 1100);
       tone(big ? 120 : 200, big ? 0.5 : 0.25, 'sawtooth', big ? 0.18 : 0.1, 40);
     },
+    /** 臭屁：低频方波"噗"下滑 + 气泡低通噪声；big=大臭屁（更长更响、两连发） */
+    fart(big) {
+      if (muted) return;
+      const dur = big ? 0.55 : 0.3;
+      tone(big ? 150 : 190, dur, 'square', big ? 0.22 : 0.13, big ? 42 : 62);
+      noiseAt(0, dur, big ? 0.2 : 0.12, 'lowpass', big ? 950 : 720, big ? 170 : 230);
+      if (big) noiseAt(dur * 0.55, dur * 0.5, 0.12, 'lowpass', 620, 130);
+    },
+    /** 落地闷响 */
+    land() {
+      noise(0.12, 0.14, 480);
+      tone(120, 0.12, 'sine', 0.12, 50);
+    },
+    /** 投掷奴·投出标枪：破空"嗖" + 金属颤音 */
+    javelinThrow() {
+      noiseAt(0, 0.18, 0.09, 'bandpass', 900, 2600);
+      tone(720, 0.16, 'sawtooth', 0.05, 240);
+    },
+    /** 盾奴·抛出塔盾：沉重金属闷响 + 低通噪声 */
+    shieldThrow() {
+      tone(180, 0.2, 'square', 0.08, 88);
+      noiseAt(0, 0.16, 0.09, 'lowpass', 2300, 520);
+    },
+    /** 皮影客·投飞刀：短促高频破空 */
+    knifeThrow() {
+      tone(1200, 0.08, 'triangle', 0.05, 1700);
+      noiseAt(0, 0.08, 0.04, 'highpass', 3000, 5200);
+    },
     shock() { noise(0.35, 0.3, 400); tone(90, 0.4, 'sawtooth', 0.14, 30); },
     hurt() { tone(320, 0.25, 'sawtooth', 0.14, 90); },
     levelup() {

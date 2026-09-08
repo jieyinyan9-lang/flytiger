@@ -1470,6 +1470,233 @@
     return cv;
   }
 
+  /* ============ 斗兽场地面小怪（5 种，均朝右绘制、游戏内翻转朝左） ============ */
+
+  /** 投掷奴：锈蚀铁皮驼背人形，右臂弩炮结构，左眼瞄准齿轮，披破烂深红斗篷 */
+  function buildJavelinSlave() {
+    const W = 22, H = 24;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d  = '#3a2d28';  // 暗锈褐描边
+    const ir = '#4d4a52';  // 铁暗
+    const IR = '#6f6c78';  // 锈铁
+    const ru = '#8a5533';  // 锈斑
+    const ruL= '#a86b3c';  // 锈亮
+    const cl = '#6e2424';  // 斗篷暗
+    const CL = '#8c2f2f';  // 斗篷红
+    const cll= '#a83a3a';  // 斗篷破片
+    const gb = '#c9a24a';  // 齿轮黄铜
+    const gd = '#7d6326';  // 齿轮暗
+    const Jw = '#7a5230';  // 标枪杆
+    const Jh = '#c3c8d4';  // 标枪铁头
+    const K  = '#1a1410';
+    // —— 破烂深红斗篷（在身后左侧） ——
+    r(2, 8, 7, 1, d); r(2, 9, 1, 8, d); r(8, 12, 1, 4, d);
+    r(3, 9, 5, 8, CL);
+    r(3, 10, 1, 6, cll);                 // 斗篷高光褶
+    r(2, 17, 2, 2, cl); r(5, 17, 2, 3, cl); r(7, 16, 1, 3, cl);  // 锯齿破摆
+    r(3, 13, 4, 2, cl);                  // 斗篷暗部
+    // —— 驼背铁皮躯干 ——
+    r(8, 7, 4, 1, d); r(7, 8, 9, 1, d); r(7, 8, 1, 9, d); r(15, 8, 1, 8, d); r(8, 16, 7, 1, d);
+    r(8, 7, 4, 1, IR);
+    r(8, 8, 7, 8, IR);
+    r(8, 9, 3, 2, ru); r(12, 12, 3, 3, ru); r(9, 14, 3, 1, ruL);  // 锈斑
+    r(8, 11, 7, 1, ir);                  // 腰铁箍
+    // —— 铁头盔 + 瞄准齿轮眼 ——
+    r(14, 3, 5, 1, d); r(13, 4, 7, 1, d); r(13, 4, 1, 5, d); r(19, 4, 1, 5, d); r(14, 9, 5, 1, d);
+    r(14, 4, 5, 5, IR);
+    r(14, 8, 5, 1, ir);                  // 盔檐
+    r(15, 5, 4, 4, gd);                  // 齿轮底
+    r(15, 4, 1, 1, gb); r(18, 4, 1, 1, gb); r(14, 6, 1, 2, gb); r(19, 6, 1, 2, gb);  // 齿
+    r(16, 6, 2, 2, gb); r(16, 6, 2, 1, K);                 // 齿轮芯 + 准星
+    // —— 右臂弩炮（朝右） ——
+    r(15, 9, 4, 3, d); r(16, 9, 3, 3, IR);
+    r(20, 6, 1, 3, ir); r(20, 12, 1, 3, ir);   // 弩弓上下臂
+    r(20, 8, 1, 5, gd);                         // 弩弦
+    r(16, 10, 5, 1, Jw);                        // 上膛标枪杆
+    r(21, 9, 1, 3, Jh); r(20, 8, 1, 1, Jh); r(20, 12, 1, 1, Jh);  // 倒刺铁头
+    // —— 短腿 ——
+    r(8, 16, 3, 1, d); r(8, 17, 3, 5, ir); r(7, 22, 4, 1, d);
+    r(12, 16, 3, 1, d); r(12, 17, 3, 5, ir); r(12, 22, 4, 1, d);
+    return cv;
+  }
+
+  /** 羊头斗士：瘦削铁骨架人形，双腿为巨型羊角弹簧，右手三叉短戟，颈挂生锈铁链 */
+  function buildRamFighter() {
+    const W = 20, H = 26;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d  = '#2e3138';  // 描边
+    const bn = '#aab0bd';  // 骨架铁亮
+    const bd = '#4a4f5a';  // 骨架铁暗
+    const hn = '#cfc6a8';  // 羊角
+    const hnd= '#8a8060';  // 羊角暗
+    const st = '#d2d9e4';  // 三叉戟钢
+    const sd = '#8a93a3';
+    const ch = '#a89868';  // 铁链
+    const chd= '#6e5f3c';  // 铁链暗
+    const K  = '#14161c';
+    // —— 巨型卷曲羊角（头顶左右盘旋） ——
+    r(6, 2, 3, 1, d); r(4, 3, 3, 2, d); r(3, 5, 2, 3, d); r(4, 8, 3, 2, d); r(7, 9, 2, 1, d);
+    r(6, 2, 2, 1, hn); r(5, 3, 2, 2, hn); r(4, 5, 1, 3, hn); r(5, 8, 2, 1, hnd);
+    r(11, 2, 3, 1, d); r(13, 3, 3, 2, d); r(15, 5, 2, 3, d); r(13, 8, 3, 2, d); r(11, 9, 2, 1, d);
+    r(12, 2, 2, 1, hn); r(13, 3, 2, 2, hn); r(15, 5, 1, 3, hn); r(13, 8, 2, 1, hnd);
+    // —— 羊头骨 ——
+    r(7, 4, 6, 1, d); r(6, 5, 8, 1, d); r(6, 5, 1, 4, d); r(13, 5, 1, 4, d); r(7, 9, 6, 1, d);
+    r(7, 5, 6, 4, bn);
+    r(8, 6, 2, 2, K); r(11, 6, 1, 2, K);   // 黑眼窝
+    r(9, 8, 2, 1, bd);                      // 颌缝
+    // —— 颈挂铁链（一圈链环 + 垂下一段） ——
+    r(7, 9, 6, 1, chd);
+    r(7, 9, 1, 1, ch); r(9, 9, 1, 1, ch); r(11, 9, 1, 1, ch); r(12, 9, 1, 1, ch);
+    r(12, 10, 1, 1, ch); r(12, 11, 1, 1, chd); r(12, 12, 1, 1, ch); r(11, 13, 2, 1, chd);  // 垂链
+    // —— 瘦削骨架躯干 ——
+    r(9, 10, 2, 7, bd); r(9, 10, 1, 7, bn);     // 脊柱
+    r(7, 11, 6, 1, bd);                          // 肋骨横
+    r(7, 13, 6, 1, bd);
+    // —— 右臂持三叉短戟（朝右） ——
+    r(13, 11, 3, 1, bd); r(15, 9, 1, 3, bn);     // 臂
+    r(15, 5, 1, 9, sd);                          // 戟杆
+    r(13, 5, 1, 2, st); r(15, 4, 1, 2, st); r(17, 5, 1, 2, st);  // 三叉
+    // —— 左臂 ——
+    r(4, 11, 5, 1, bd); r(4, 12, 1, 3, bn);
+    // —— 羊角弹簧双腿（盘旋压缩） ——
+    r(5, 17, 5, 1, d); r(6, 18, 4, 1, bn); r(5, 19, 5, 1, bd); r(6, 20, 4, 1, bn);
+    r(5, 21, 5, 1, bd); r(6, 22, 4, 1, bn); r(5, 23, 5, 1, d);
+    r(4, 24, 6, 1, d);                          // 左脚
+    r(11, 17, 5, 1, d); r(12, 18, 4, 1, bn); r(11, 19, 5, 1, bd); r(12, 20, 4, 1, bn);
+    r(11, 21, 5, 1, bd); r(12, 22, 4, 1, bn); r(11, 23, 5, 1, d);
+    r(10, 24, 6, 1, d);                         // 右脚
+    return cv;
+  }
+
+  /** 盾奴：魁梧圆桶金属身躯，左手弧形青铜塔盾，右手短铁棒，钢盔插褪色红缨 */
+  function buildShieldSlave() {
+    const W = 24, H = 24;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d  = '#2b2f38';  // 描边
+    const bd = '#3d4350';  // 桶身暗
+    const BD = '#5a6072';  // 桶身铁
+    const BL = '#737b8c';  // 桶身高光
+    const hb = '#8a6432';  // 青铜盾暗
+    const HB = '#b8894a';  // 青铜盾
+    const hl = '#d4a860';  // 青铜亮
+    const dn = '#6e4e28';  // 盾凹痕
+    const rd = '#7a8090';  // 铁棒
+    const pl = '#c83a3a';  // 红缨
+    const pld= '#8c2828';
+    const hm = '#7d8698';  // 钢盔
+    // —— 红缨 + 钢盔 ——
+    r(10, 1, 2, 1, pl); r(9, 2, 4, 1, pld);     // 缨穗
+    r(9, 3, 6, 1, d); r(8, 4, 8, 1, d); r(8, 4, 1, 4, d); r(15, 4, 1, 4, d); r(9, 8, 6, 1, d);
+    r(9, 4, 6, 4, hm); r(9, 7, 6, 1, bd);       // 盔 + 檐
+    r(10, 5, 4, 1, '#1a1a22');                  // 盔下阴影/目视缝
+    // —— 圆桶金属身躯 ——
+    r(6, 8, 10, 1, d); r(5, 9, 12, 1, d); r(5, 9, 1, 11, d); r(16, 9, 1, 11, d);
+    r(6, 20, 10, 1, d); r(7, 21, 8, 1, d);
+    r(6, 9, 10, 11, BD); r(6, 9, 2, 11, BL); r(14, 9, 2, 11, bd);
+    r(5, 12, 12, 1, bd); r(5, 17, 12, 1, bd);   // 桶身两道铁箍
+    // —— 右手短铁棒（在身后左侧） ——
+    r(3, 10, 2, 1, d); r(3, 10, 1, 8, rd); r(2, 17, 3, 1, d);
+    // —— 弧形青铜塔盾（前方右侧，约同身高） ——
+    r(15, 5, 7, 1, d); r(14, 6, 8, 1, d); r(14, 6, 1, 15, d); r(21, 6, 1, 15, d);
+    r(14, 21, 8, 1, d); r(15, 22, 6, 1, d);     // 盾外框（弧形顶/底）
+    r(15, 6, 6, 15, HB); r(15, 6, 1, 15, hl); r(20, 6, 1, 15, hb);
+    r(16, 9, 2, 2, dn); r(19, 13, 2, 2, dn); r(16, 17, 3, 1, dn);   // 凹痕
+    r(17, 12, 3, 3, hb); r(18, 12, 1, 3, hl); r(17, 13, 3, 1, hl);  // 盾心护拳
+    // —— 短腿 ——
+    r(7, 21, 3, 2, bd); r(6, 23, 4, 1, d);
+    r(12, 21, 3, 2, bd); r(12, 23, 4, 1, d);
+    return cv;
+  }
+
+  /** 皮影客：纸片纤细人形，灰白石膏纹路，无面铁盔，腰挂飞刀，关节分明 */
+  function buildPuppet() {
+    const W = 16, H = 26;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d  = '#26262e';  // 描边/关节
+    const p  = '#dcdad0';  // 石膏白
+    const ps = '#bcb8a8';  // 石膏暗
+    const cr = '#8a8678';  // 石膏裂纹
+    const hm = '#565b68';  // 铁盔
+    const hd = '#3a3f4a';  // 铁盔暗
+    const kn = '#c8ccd6';  // 飞刀钢
+    const kd = '#7a8090';
+    const kh = '#6a4a30';  // 刀柄
+    // —— 无面铁盔 ——
+    r(6, 1, 4, 1, d); r(5, 2, 6, 1, d); r(5, 2, 1, 5, d); r(10, 2, 1, 5, d); r(6, 7, 4, 1, d);
+    r(6, 2, 4, 5, hm); r(6, 6, 4, 1, hd);       // 盔体 + 檐
+    r(6, 4, 4, 1, hd);                          // 无面：仅一道目隐缝
+    // —— 纤细纸身 ——
+    r(7, 7, 2, 1, d);                           // 颈
+    r(7, 8, 2, 8, p); r(7, 8, 1, 8, ps);        // 躯干（窄）
+    r(7, 10, 2, 1, cr); r(8, 12, 1, 3, cr);     // 石膏裂纹
+    // —— 关节臂（皮影关节点） ——
+    r(5, 9, 2, 1, d); r(4, 11, 1, 3, p); r(4, 14, 1, 1, d);   // 左臂 + 肘点
+    r(9, 9, 2, 1, d); r(11, 10, 1, 4, p); r(12, 14, 1, 1, d);  // 右臂 + 肘点
+    r(5, 9, 1, 1, d); r(10, 9, 1, 1, d);        // 肩关节点
+    // —— 腰挂飞刀（一排刀柄+刀尖） ——
+    r(5, 15, 6, 1, kh);
+    r(5, 16, 1, 2, kn); r(7, 16, 1, 2, kn); r(9, 16, 1, 2, kn); r(11, 16, 1, 1, kd);
+    // —— 关节腿（纤细、外撇如傀儡） ——
+    r(7, 16, 1, 1, d); r(9, 16, 1, 1, d);       // 髋关节点
+    r(6, 17, 1, 5, p); r(6, 21, 1, 1, d); r(4, 22, 3, 1, d);   // 左腿（外撇）+ 膝点 + 脚
+    r(9, 17, 1, 5, p); r(9, 21, 1, 1, d); r(9, 22, 3, 1, d);   // 右腿 + 膝点 + 脚
+    return cv;
+  }
+
+  /** 自爆囚：臃肿球形金属身，短肢，头顶带塞铁罐冒黑烟，火油麻布包裹，背插引信 */
+  function buildBombPrisoner() {
+    const W = 22, H = 24;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d  = '#33261c';  // 描边
+    const b  = '#8a6a3c';  // 火油麻布
+    const bd = '#5e4828';  // 麻布暗/油渍
+    const bl = '#a88350';  // 麻布亮
+    const ir = '#6a6a72';  // 金属
+    const ird= '#4a4a54';  // 金属暗
+    const cn = '#7d7d88';  // 铁罐
+    const cnd= '#4a4a54';
+    const ck = '#6a4a2a';  // 塞子
+    const sm = '#9a9aa2';  // 黑烟
+    const smd= '#74747c';
+    const fu = '#c8b080';  // 引信
+    const sp = '#ffb03a';  // 火花
+    const sp2= '#ff5a2a';
+    // —— 黑烟（罐口上方） ——
+    r(8, 1, 4, 1, smd); r(7, 2, 6, 1, sm); r(9, 0, 3, 1, sm);
+    r(10, 0, 2, 1, smd);
+    // —— 带塞铁罐头 ——
+    r(10, 2, 2, 2, ck);                        // 塞子
+    r(8, 4, 6, 1, d); r(7, 5, 8, 1, d); r(7, 5, 1, 4, d); r(14, 5, 1, 4, d); r(8, 9, 6, 1, d);
+    r(8, 5, 6, 4, cn); r(8, 8, 6, 1, cnd);
+    r(9, 6, 4, 1, ird);                        // 罐身铁箍
+    // —— 背插引信（左侧，带火花） ——
+    r(3, 6, 1, 4, fu); r(2, 5, 2, 1, sp2); r(2, 4, 1, 1, sp);
+    r(5, 5, 1, 3, fu); r(5, 4, 1, 1, sp);
+    // —— 臃肿球形身体 ——
+    r(6, 9, 10, 1, d); r(4, 10, 14, 1, d); r(3, 11, 16, 1, d); r(3, 11, 1, 9, d); r(18, 11, 1, 9, d);
+    r(4, 20, 14, 1, d); r(6, 21, 10, 1, d);
+    r(4, 10, 14, 11, b);                       // 麻布包身
+    r(4, 10, 2, 11, bl); r(16, 10, 2, 11, bd); // 麻布明暗
+    r(3, 13, 16, 1, bd); r(3, 17, 16, 1, ir); r(3, 18, 16, 1, ird);  // 油渍 + 金属箍
+    r(7, 11, 3, 2, bd); r(12, 15, 3, 2, bd);   // 油迹斑
+    // —— 短四肢 ——
+    r(1, 12, 2, 1, d); r(1, 12, 1, 4, ir); r(0, 16, 2, 1, d);   // 左臂
+    r(19, 12, 2, 1, d); r(20, 12, 1, 4, ir); r(20, 16, 2, 1, d); // 右臂
+    r(7, 21, 3, 2, ird); r(6, 23, 4, 1, d);    // 左腿
+    r(12, 21, 3, 2, ird); r(12, 23, 4, 1, d);  // 右腿
+    return cv;
+  }
+
   const Sprites = {
     cat: null,   // 白猫主角：assets/cat.png 原图（异步加载）
     eagleA: buildEagle(0, EAGLE_PAL),
@@ -1486,6 +1713,12 @@
     blackSkel: build(BLACK_SKEL, BLACK_SKEL_PAL),
     skullhead: build(SKULLHEAD, SKULLHEAD_PAL),
     cannoneer: buildCannoneer(),
+    /* —— 斗兽场地面小怪（朝右绘制，翻转成朝左使用） —— */
+    javelinSlave: buildJavelinSlave(),   // 投掷奴
+    ramFighter: buildRamFighter(),       // 羊头斗士
+    shieldSlave: buildShieldSlave(),     // 盾奴
+    puppet: buildPuppet(),               // 皮影客
+    bombPrisoner: buildBombPrisoner(),   // 自爆囚
     samurai: buildWushi(),
     swordEagleA: buildYing1(),
     swordEagleB: buildYing2(),
@@ -1535,6 +1768,12 @@
   Sprites.skeletonL = flip(Sprites.skeleton);
   Sprites.blackSkelL = flip(Sprites.blackSkel);
   Sprites.cannoneerL = flip(Sprites.cannoneer);
+  // 斗兽场地面小怪：统一翻转成朝左
+  Sprites.javelinSlaveL = flip(Sprites.javelinSlave);
+  Sprites.ramFighterL   = flip(Sprites.ramFighter);
+  Sprites.shieldSlaveL  = flip(Sprites.shieldSlave);
+  Sprites.puppetL       = flip(Sprites.puppet);
+  Sprites.bombPrisonerL = flip(Sprites.bombPrisoner);
   Sprites.samuraiL = Sprites.samurai;    // wushi.png 已朝左，直接复用（异步加载，不可 flip 预拷）
   Sprites.swordEagleAL = Sprites.swordEagleA;  // ying1.png 已朝左，直接复用（异步加载，不可 flip 预拷）
   Sprites.swordEagleBL = Sprites.swordEagleB;  // ying2.png 已朝左，直接复用

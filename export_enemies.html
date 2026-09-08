@@ -17,7 +17,7 @@
 <p>精灵为程序化像素绘制，已放大 8 倍展示。点击「下载 PNG」保存对应帧。</p>
 <div class="row" id="cards"></div>
 
-<script src="js/sprites.js"></script>
+<script src="js/sprites.js?v=20260909r39"></script>
 <script>
   const SCALE = 8;   // 导出放大倍数（保持像素清晰）
 
@@ -54,6 +54,12 @@
     { name: '双头飞蛇_帧B', sprite: Sprites.twinsnakeBL },
     { name: '预言猫头鹰_帧A', sprite: Sprites.owlAL },
     { name: '预言猫头鹰_帧B', sprite: Sprites.owlBL },
+    // ── 斗兽场地面小怪（朝左，游戏中实际使用方向）──
+    { name: '投掷奴(1轮)', sprite: Sprites.javelinSlaveL },
+    { name: '羊头斗士(2轮)', sprite: Sprites.ramFighterL },
+    { name: '盾奴(3轮)', sprite: Sprites.shieldSlaveL },
+    { name: '皮影客(4轮)', sprite: Sprites.puppetL },
+    { name: '自爆囚(5轮)', sprite: Sprites.bombPrisonerL },
   ];
 
   const cards = document.getElementById('cards');

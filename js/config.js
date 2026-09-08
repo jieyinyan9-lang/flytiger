@@ -71,6 +71,58 @@
       blastDmg: 18          // 爆炸伤害
     },
 
+    /** 斗兽场地面小怪（5 种专属单位）调参 */
+    arena: {
+      // 投掷奴
+      javelin: {
+        walkSpd: 70,        // 接近行走速度
+        sprintSpd: 300,     // 锁定后助跑冲刺速度
+        aimTime: 0.7,       // 助跑/瞄准时长
+        cdMin: 3.4, cdMax: 4.6,  // 投枪间隔（低频）
+        spearSpd: 430,      // 标枪速度
+        spearR: 13,         // 标枪判定半径
+        downTime: 1.0       // 击落玩家坠落时长（秒）
+      },
+      // 羊头斗士
+      ram: {
+        walkSpd: 92,
+        sprintSpd: 250,     // 锁定助跑速度
+        windup: 0.55,       // 起跳前助跑/下蹲时长
+        leapUpV: 560,       // 起跳垂直初速
+        grav: 1500,         // 跳跃重力
+        leapSpd: 210,       // 空中水平速度（慢、可预判）
+        leapDmg: 30         // 空中撞击高额伤害
+      },
+      // 盾奴
+      shieldSlave: {
+        walkSpd: 52,
+        stopRange: 420,     // 距玩家多远停下开始抛盾
+        throwCd: 1.5,       // 抛盾间隔（持续投掷）
+        shieldG: 360,       // 塔盾抛射重力
+        shieldSpd: 300,     // 塔盾初速
+        shieldR: 20         // 塔盾判定（大号）
+      },
+      // 皮影客
+      puppet: {
+        moveSpd: 135,       // 下方左右移动速度（对齐玩家 x）
+        groundOff: 70,      // 在地面上方活动的高度偏移
+        knifeCd: 0.55,      // 朝上投飞刀间隔
+        knifeSpd: 430,      // 飞刀上投速度
+        knifeR: 7
+      },
+      // 自爆囚
+      bomb: {
+        walkSpd: 46,        // 缓慢行走
+        midX: 0.5,          // 移向屏幕中线（比例）
+        windup: 0.6,        // 起跳前蓄力（闪红预警）
+        leapUpV: 520,
+        grav: 1300,
+        leapSpd: 330,       // 空中速度偏快但可预判
+        blastR: 120,        // 自爆半径
+        blastHpFrac: 0.4    // 命中玩家造成其最大生命 40% 的爆炸伤害
+      }
+    },
+
     /** 闪电子弹（闪电链） */
     chain: {
       range: 180,          // 链接搜索半径
@@ -122,6 +174,42 @@
       cannoneer: {
         name: '炮师', hp: 62, speed: 60, contact: 12,
         bulletDmg: 16, xp: 12, score: 26, radius: 36, weight: 7, minBossKills: 3, elite: false, ground: true
+      },
+      /* —— 斗兽场专属地面小怪（arenaOnly，仅斗兽场地图刷新；按 1~5 轮依次解锁） —— */
+      // 1轮：投掷奴——锁定助跑后投出倒刺铁头标枪（击落玩家 1s），低频，动态血量 3s
+      javelinSlave: {
+        name: '投掷奴', hp: 60, speed: 80, contact: 12,
+        bulletDmg: 14, xp: 14, score: 30, radius: 30, weight: 7, minBossKills: 0, elite: false,
+        ground: true, arenaOnly: true, noKnockback: true,
+        dynamicHp: true, fightTime: [3, 3]
+      },
+      // 2轮：羊头斗士——锁定助跑后跳跃撞击（高额伤害），落回中线再跳，白气拖尾，慢而可预判，动态血量 5s
+      ramFighter: {
+        name: '羊头斗士', hp: 90, speed: 95, contact: 12,
+        xp: 18, score: 38, radius: 30, weight: 7, minBossKills: 1, elite: false,
+        ground: true, arenaOnly: true, noKnockback: true,
+        dynamicHp: true, fightTime: [5, 5]
+      },
+      // 3轮：盾奴——持续抛射大号塔盾（中等伤害、抛射弹道），动态血量 6s
+      shieldSlave: {
+        name: '盾奴', hp: 120, speed: 55, contact: 12,
+        bulletDmg: 15, xp: 20, score: 42, radius: 34, weight: 7, minBossKills: 2, elite: false,
+        ground: true, arenaOnly: true, noKnockback: true,
+        dynamicHp: true, fightTime: [6, 6]
+      },
+      // 4轮：皮影客——下方左右移动对齐玩家，持续朝正上方投飞刀，动态血量 4s
+      puppet: {
+        name: '皮影客', hp: 70, speed: 130, contact: 10,
+        bulletDmg: 11, xp: 16, score: 34, radius: 26, weight: 7, minBossKills: 3, elite: false,
+        ground: true, arenaOnly: true, noKnockback: true,
+        dynamicHp: true, fightTime: [4, 4]
+      },
+      // 5轮：自爆囚——移向中线后跳起撞击，命中闪红自爆（40%爆炸伤害），死亡/空中爆炸均波及周围敌人，动态血量 7s
+      bombPrisoner: {
+        name: '自爆囚', hp: 150, speed: 48, contact: 18,
+        xp: 26, score: 56, radius: 34, weight: 7, minBossKills: 4, elite: false,
+        ground: true, arenaOnly: true, bomber: true, noKnockback: true,
+        dynamicHp: true, fightTime: [7, 7]
       },
       superboy: {
         name: '小超人', hp: 52, speed: 105, contact: 14,

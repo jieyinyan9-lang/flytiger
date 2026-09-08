@@ -803,6 +803,58 @@
           ctx.restore();
           break;
         }
+        /* 投掷奴：倒刺铁头大标枪（沿飞行方向的长杆 + 铁矛头 + 倒刺 + 尾羽） */
+        case 'javelin': {
+          ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+          // 长杆
+          ctx.fillStyle = '#6a4a24'; ctx.fillRect(-r * 2.5, -r * 0.18, r * 2.7, r * 0.36);
+          ctx.fillStyle = '#8a6230'; ctx.fillRect(-r * 2.5, -r * 0.18, r * 2.7, r * 0.12);
+          // 尾羽
+          ctx.fillStyle = '#c83a3a';
+          ctx.beginPath(); ctx.moveTo(-r * 2.5, 0); ctx.lineTo(-r * 3.0, -r * 0.5); ctx.lineTo(-r * 2.8, 0); ctx.lineTo(-r * 3.0, r * 0.5); ctx.closePath(); ctx.fill();
+          // 铁矛头
+          ctx.fillStyle = '#d8dce6';
+          ctx.beginPath(); ctx.moveTo(r * 1.6, 0); ctx.lineTo(r * 0.2, -r * 0.42); ctx.lineTo(r * 0.2, r * 0.42); ctx.closePath(); ctx.fill();
+          // 倒刺
+          ctx.fillStyle = '#9aa0ae';
+          ctx.beginPath(); ctx.moveTo(r * 0.6, 0); ctx.lineTo(r * 0.12, -r * 0.66); ctx.lineTo(r * 0.8, -r * 0.12); ctx.closePath(); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(r * 0.6, 0); ctx.lineTo(r * 0.12, r * 0.66); ctx.lineTo(r * 0.8, r * 0.12); ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = '#2c3140'; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.moveTo(r * 1.6, 0); ctx.lineTo(r * 0.2, -r * 0.42); ctx.lineTo(r * 0.2, r * 0.42); ctx.closePath(); ctx.stroke();
+          ctx.restore();
+          break;
+        }
+        /* 盾奴：大号青铜塔盾（翻滚抛射，矩形盾 + 盾脐 + 铆钉） */
+        case 'shield': {
+          ctx.save(); ctx.translate(x, y); ctx.rotate(this.spin);
+          const w = r * 1.7, h = r * 2.1;
+          ctx.shadowColor = 'rgba(255,180,60,0.55)'; ctx.shadowBlur = 9;
+          ctx.fillStyle = '#5a3e12'; ctx.fillRect(-w / 2, -h / 2, w, h);              // 深色边框
+          ctx.fillStyle = '#c89036'; ctx.fillRect(-w / 2 + 3, -h / 2 + 3, w - 6, h - 6); // 青铜盾面
+          ctx.fillStyle = '#e8b25a'; ctx.fillRect(-w / 2 + 6, -h / 2 + 6, w - 12, 4);   // 顶部高光
+          ctx.fillStyle = '#8a5e20'; ctx.fillRect(-w / 2 + 6, h / 2 - 10, w - 12, 4);   // 底部暗部
+          // 盾脐
+          ctx.fillStyle = '#e8b25a'; ctx.beginPath(); ctx.arc(0, 0, r * 0.34, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#7a5218'; ctx.beginPath(); ctx.arc(0, 0, r * 0.16, 0, TAU); ctx.fill();
+          // 铆钉
+          ctx.fillStyle = '#5a3e12';
+          ctx.beginPath(); ctx.arc(-w * 0.28, -h * 0.32, 2.4, 0, TAU); ctx.arc(w * 0.28, -h * 0.32, 2.4, 0, TAU);
+          ctx.arc(-w * 0.28, h * 0.32, 2.4, 0, TAU); ctx.arc(w * 0.28, h * 0.32, 2.4, 0, TAU); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.restore();
+          break;
+        }
+        /* 皮影客：竖直上投的小飞刀（尖刃 + 短柄），沿飞行方向 */
+        case 'dart': {
+          ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+          ctx.fillStyle = '#cfd4de';
+          ctx.beginPath(); ctx.moveTo(r * 1.4, 0); ctx.lineTo(-r * 0.5, -r * 0.36); ctx.lineTo(-r * 0.2, 0); ctx.lineTo(-r * 0.5, r * 0.36); ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = '#5a6070'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(r * 1.4, 0); ctx.lineTo(-r * 0.5, -r * 0.36); ctx.moveTo(r * 1.4, 0); ctx.lineTo(-r * 0.5, r * 0.36); ctx.stroke();
+          ctx.fillStyle = '#6a4a24'; ctx.fillRect(-r * 1.0, -r * 0.13, r * 0.55, r * 0.26);  // 短柄
+          ctx.restore();
+          break;
+        }
       }
       ctx.globalAlpha = baseAlpha;
     }
@@ -2080,6 +2132,8 @@
       this.invT = 0;
       this.meleeHit = null;
       this.faceTilt = 0;
+      this.downT = 0;        // 被标枪击落：失控坠落+翻滚倒计时
+      this.downSpin = 0;     // 击落翻滚角度
       // 大招（怒气）
       this.rage = 0;
       // 额外弹道解锁
@@ -2474,12 +2528,21 @@
       }
     }
 
+    /** 被倒刺标枪命中：失控坠落（sec 秒内无法操作、摔向地面并翻滚） */
+    applyDown(sec) {
+      if (this.downT > sec) return;
+      this.downT = sec;
+      this.vy = 140;
+      g && g.shake && g.shake(5);
+    }
+
     update(dt, g) {
       // 计时
       this.wingT += dt;
       this.invT = Math.max(0, this.invT - dt);
       this.hurtFlash = Math.max(0, this.hurtFlash - dt);
       this.shieldFlash = Math.max(0, this.shieldFlash - dt);
+      this.downT = Math.max(0, this.downT - dt);   // 击落状态倒计时
       // 护罩激活倒计时：超时未破碎则静默消散
       if (this.shieldT > 0) {
         this.shieldT -= dt;
@@ -2512,11 +2575,24 @@
         if (g.keys.right) mx += 1;
         if (mx || my) { const l = Math.hypot(mx, my); mx /= l; my /= l; }
       }
+      // 被标枪击落：禁用飞行输入（失控）
+      if (this.downT > 0) { mx = 0; my = 0; }
       // 护罩存在期间移速加成（护罩强化 Lv5/Lv8）
       const shieldSpd = (this.shieldActive && this.shieldDef && this.shieldDef.spd) ? this.shieldDef.spd : 0;
       const spd = CFG.player.speed * (this.speedMul || 1) * (1 + (this.sizeMul - 1) * 0.08)
         * (1 + (this.moveSpdLv || 0) * 0.12) * (1 + shieldSpd);
-      this.vx = mx * spd; this.vy = my * spd;
+      if (this.downT > 0) {
+        // 失控下坠：加速落到地面后瘫坐，同时持续翻滚
+        this.downSpin += dt * 13;
+        this.vx *= 0.9;
+        const gyD = g.groundYAt ? g.groundYAt(this.x) : CFG.GROUND_Y;
+        const floor = gyD - this.radius * 0.5;
+        if (this.y < floor - 1) this.vy = Math.min(780, this.vy + 2400 * dt);
+        else { this.vy = 0; this.y = floor; }
+      } else {
+        this.downSpin = 0;
+        this.vx = mx * spd; this.vy = my * spd;
+      }
       this.x += this.vx * dt; this.y += this.vy * dt;
       this.radius = CFG.player.radius * (0.75 + this.sizeMul * 0.25);
       this.x = clamp(this.x, 40, CFG.W - 60);
@@ -2925,16 +3001,17 @@
         const targetLen = 92 * this.sizeMul;
         const s = targetLen / art.width;
         const w = art.width * s, h = art.height * s;
+        const bodyRot = this.downT > 0 ? this.downSpin : this.faceTilt;   // 击落时翻滚
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.rotate(this.faceTilt);
+        ctx.rotate(bodyRot);
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(art, -w / 2, -h / 2, w, h);
         ctx.restore();
         // 受伤闪红：红色染色叠加
         if (this.hurtFlash > 0) {
           const fa = clamp(this.hurtFlash / 0.4, 0, 1);
-          drawSpriteTinted(ctx, art, this.x, this.y, w, h, this.faceTilt, '#ff1a1a', fa * 0.82);
+          drawSpriteTinted(ctx, art, this.x, this.y, w, h, bodyRot, '#ff1a1a', fa * 0.82);
         }
       }
       ctx.globalAlpha = 1;
@@ -3307,6 +3384,52 @@
         this.featherSeq = 0;   // 连射剩余发数
         this.spawnInvuln = 2.5;
       }
+
+      /* ===== 斗兽场专属地面小怪（5 种）===== */
+      if (type === 'javelinSlave' || type === 'ramFighter' ||
+          type === 'shieldSlave' || type === 'puppet' || type === 'bombPrisoner') {
+        // 站立地面 y：按精灵高度 × 3 倍缩放，使脚底贴近 GROUND_Y
+        const SPR_H = { javelinSlave: 24, ramFighter: 26, shieldSlave: 24, puppet: 26, bombPrisoner: 24 };
+        this.drawScale = (type === 'puppet') ? 3.1 : 3.0;
+        this.restY = CFG.GROUND_Y - (SPR_H[type] * this.drawScale) / 2 + 2;
+        this.y = this.restY;
+        this.baseY = this.restY;
+        this.air = false;          // 是否离地（跳跃中）
+        this.jumpVx = 0; this.jumpVy = 0;
+        this.spawnInvuln = 1.2;
+        this.contactBase = def.contact;   // 普通接触伤害（空中撞击时临时提高）
+      }
+      // 投掷奴：行走接近 → 锁定助跑冲刺（0.7s）→ 投出倒刺标枪（低频）
+      if (type === 'javelinSlave') {
+        this.state = 'walk';
+        this.atkT = rand(1.6, 2.6);
+        this.aimT = 0; this.lockX = 0; this.lockY = 0;
+      }
+      // 羊头斗士：行走接近 → 锁定助跑 → 跳跃撞击（高额）→ 落回中线再跳
+      if (type === 'ramFighter') {
+        this.state = 'walk';
+        this.atkT = rand(2.0, 3.0);
+        this.windT = 0;
+      }
+      // 盾奴：行走到位 → 持续抛射大号塔盾（抛射弹道）
+      if (type === 'shieldSlave') {
+        this.state = 'walk';
+        this.atkT = rand(1.4, 2.2);
+        this.throwT = 0;
+      }
+      // 皮影客：下方左右移动对齐玩家 → 持续朝正上方投飞刀
+      if (type === 'puppet') {
+        this.state = 'hunt';
+        this.atkT = 1.0;
+      }
+      // 自爆囚：缓慢移向中线 → 蓄力（闪红预警）→ 跳起撞击自爆；死亡/空中爆炸波及周围
+      if (type === 'bombPrisoner') {
+        this.state = 'march';
+        this.windT = 0; this.redT = 0;
+        this.exploded = false;
+        this.midX = CFG.W * (CFG.arena.bomb.midX || 0.5);
+        this.spin = 0;
+      }
     }
 
     /** 自爆骷髅：接触玩家引爆（无能量掉落，纯爆炸伤害） */
@@ -3331,13 +3454,14 @@
       this.hp -= dmg;
       this.flash = 0.08;
       this.hurtT = 0.12;   // 持续受伤红染：连续命中时 hurtT 始终 >0，不会闪烁
-      if (kb) { this.kbX += kb.x; this.kbY += kb.y; }
+      if (kb && !this.def.noKnockback) { this.kbX += kb.x; this.kbY += kb.y; }   // 斗兽场精英单位免疫击退
       burst(g, this.x - 10, this.y, 2, ['#fff', '#ffe08a'], 120, 3, 0.18);
       SFX.hit();
       if (this.hp <= 0) this.die(g);
     }
 
     die(g) {
+      if (this.dead) return;
       this.dead = true;
       g.kills++;
       g.score += this.def.score;
@@ -3355,6 +3479,8 @@
         g.gems.push(new Gem(this.x, this.y, xp));
         if (Math.random() < 0.25) g.gems.push(new Gem(this.x + rand(-10, 10), this.y, this.def.xp));
       }
+      // 自爆囚：被击杀后也会爆炸（非命中，波及周围敌人；已在引爆流程中则跳过）
+      if (this.type === 'bombPrisoner' && !this.exploded) this.bombBoom(g, false);
     }
     deathColors() {
       return {
@@ -3374,7 +3500,12 @@
         floatflower: ['#c83a6a', '#ffd23b', '#ff5d8f', '#fff'],
         stormfish: ['#2f8fc9', '#7fd4ff', '#ffd23b', '#fff'],
         twinsnake: ['#5a8a3a', '#8ac85a', '#e0453a', '#ffd23b'],
-        owl: ['#a0784a', '#d4a86a', '#b0e8ff', '#ffd23b']
+        owl: ['#a0784a', '#d4a86a', '#b0e8ff', '#ffd23b'],
+        javelinSlave: ['#8a5a2b', '#c98f4a', '#d8d8e0', '#ffd23b'],
+        ramFighter: ['#b8b8c0', '#8a8a96', '#e0453a', '#fff'],
+        shieldSlave: ['#c89036', '#8a5e20', '#d8d8e0', '#ffd23b'],
+        puppet: ['#3a2a4a', '#7a5a9a', '#c83a5a', '#ffd23b'],
+        bombPrisoner: ['#9a9aa2', '#5a5a64', '#ff7b2e', '#ffd23b', '#e0453a']
       }[this.type] || ['#fff', '#aaa'];
     }
 
@@ -3466,6 +3597,11 @@
         case 'stormfish': this.aiStormFish(dt, g, p); break;
         case 'twinsnake': this.aiTwinSnake(dt, g, p); break;
         case 'owl': this.aiOwl(dt, g, p); break;
+        case 'javelinSlave': this.aiJavelinSlave(dt, g, p); break;
+        case 'ramFighter': this.aiRamFighter(dt, g, p); break;
+        case 'shieldSlave': this.aiShieldSlave(dt, g, p); break;
+        case 'puppet': this.aiPuppet(dt, g, p); break;
+        case 'bombPrisoner': this.aiBombPrisoner(dt, g, p); break;
       }
       // 飞离屏幕清理
       if (this.x < -80 || this.y > CFG.H + 100 || this.y < -160) this.dead = true;
@@ -4012,6 +4148,205 @@
       }
     }
 
+    /* ===== 斗兽场地面小怪 AI（5 种）===== */
+
+    /** 投掷奴：行走接近 → 锁定玩家后加速助跑冲刺（0.7s）→ 投出倒刺铁头标枪（低频，击落玩家 4s） */
+    aiJavelinSlave(dt, g, p) {
+      const A = CFG.arena.javelin;
+      this.y = this.restY; this.kbY = 0;     // 始终踩地
+      if (this.state === 'walk') {
+        this.x -= A.walkSpd * this.speedMul * dt;
+        this.atkT -= dt;
+        if (this.atkT <= 0 && this.x < CFG.W * 0.9) {
+          this.state = 'aim'; this.aimT = A.aimTime;
+        }
+      } else if (this.state === 'aim') {
+        this.lockX = p.x; this.lockY = p.y;             // 锁定玩家位置（持续跟踪）
+        this.x -= A.sprintSpd * this.speedMul * dt;     // 加速助跑冲刺
+        this.aimT -= dt;
+        if (this.aimT <= 0) {
+          this.fireJavelin(g, p);
+          this.state = 'walk';
+          this.atkT = rand(A.cdMin, A.cdMax);           // 低频
+        }
+      }
+    }
+    fireJavelin(g, p) {
+      const A = CFG.arena.javelin;
+      const x0 = this.x - 16, y0 = this.y - 6;
+      const dx = this.lockX - x0, dy = this.lockY - y0;
+      const d = Math.hypot(dx, dy) || 1;
+      const dmg = Math.round(this.bulletDmg * g.atkScale);
+      const sp = new Bullet(x0, y0, dx / d * A.spearSpd, dy / d * A.spearSpd,
+        { kind: 'orb', r: A.spearR, dmg, dmgScale: g.atkScale, life: 6, eb: 'javelin' });
+      // 命中玩家：造成伤害并击落（失控坠落 4s）
+      sp.onPlayerHit = (gg) => { if (gg.player && gg.player.applyDown) gg.player.applyDown(A.downTime); };
+      g.bullets.push(sp);
+      SFX.javelinThrow();
+    }
+
+    /** 羊头斗士：行走接近 → 锁定助跑 → 跳跃撞击（高额，慢而可预判）→ 落回中线再跳；白气拖尾 + 臭屁音效 */
+    aiRamFighter(dt, g, p) {
+      const A = CFG.arena.ram;
+      if (!this.air) { this.y = this.restY; this.kbY = 0; this.contactDmg = this.contactBase; }
+      if (this.state === 'walk') {
+        this.x -= A.walkSpd * this.speedMul * dt;
+        this.atkT -= dt;
+        if (this.atkT <= 0 && this.x < CFG.W * 0.92) {
+          this.state = 'windup'; this.windT = A.windup;
+          this.lockX = p.x; this.lockY = p.y;
+        }
+      } else if (this.state === 'windup') {
+        this.lockX = p.x; this.lockY = p.y;
+        this.x -= A.sprintSpd * this.speedMul * dt;     // 锁定后加速助跑
+        this.windT -= dt;
+        if (this.windT <= 0) {
+          this.air = true; this.state = 'leap';
+          this.jumpVy = -A.leapUpV;
+          this.jumpVx = (this.lockX < this.x ? -1 : 1) * A.leapSpd;   // 空中水平慢、可预判
+          this.contactDmg = A.leapDmg;
+          SFX.fart(false);                             // 臭屁音效
+          burst(g, this.x, this.y + 30, 14, ['#f2f6ff', '#dfe8f5', '#b9c6d8'], 120, 5, 0.5, 60);
+        }
+      } else if (this.state === 'leap') {
+        this.jumpVy += A.grav * dt;
+        this.x += this.jumpVx * dt; this.y += this.jumpVy * dt;
+        // 白气拖尾
+        g.particles.push(new Particle(this.x + rand(-6, 6), this.y + rand(0, 18),
+          rand(-40, 10), rand(-30, 10), rand(0.3, 0.55), rand(3, 6),
+          Math.random() < 0.5 ? '#f2f6ff' : '#cdd8e8'));
+        if (this.jumpVy >= 0 && this.y >= this.restY) {
+          this.y = this.restY; this.air = false; this.jumpVx = 0; this.jumpVy = 0;
+          this.contactDmg = this.contactBase;
+          burst(g, this.x, this.restY + 30, 18, ['#e8ddc0', '#cdb88f', '#fff'], 170, 5, 0.5, 130);  // 落地沙尘
+          SFX.land();
+          this.state = 'recenter';
+        }
+      } else if (this.state === 'recenter') {
+        // 落地移动到屏幕中线位置
+        const ddx = CFG.W * 0.5 - this.x;
+        if (Math.abs(ddx) < 18) {
+          this.state = 'windup'; this.windT = A.windup;    // 到位后再次锁定玩家起跳
+          this.lockX = p.x; this.lockY = p.y;
+        } else {
+          this.x += Math.sign(ddx) * A.walkSpd * 1.3 * this.speedMul * dt;
+        }
+      }
+    }
+
+    /** 盾奴：行走到位 → 持续朝玩家抛射大号塔盾（抛射弹道，中等伤害） */
+    aiShieldSlave(dt, g, p) {
+      const A = CFG.arena.shieldSlave;
+      this.y = this.restY; this.kbY = 0;
+      if (this.state === 'walk') {
+        this.x -= A.walkSpd * this.speedMul * dt;
+        this.atkT -= dt;
+        if (this.atkT <= 0 && this.x < CFG.W * 0.88) { this.state = 'throw'; this.throwT = 0.4; }
+      } else if (this.state === 'throw') {
+        if (this.x - p.x > CFG.W * 0.72) this.x -= A.walkSpd * 0.6 * this.speedMul * dt;   // 太远则缓慢逼近
+        this.throwT -= dt;
+        if (this.throwT <= 0) { this.throwT = A.throwCd; this.throwShield(g, p); }
+      }
+    }
+    throwShield(g, p) {
+      const A = CFG.arena.shieldSlave;
+      const x0 = this.x - 16, y0 = this.y - 10;
+      const dx = p.x - x0, dy = p.y - y0;
+      const d = Math.max(160, Math.hypot(dx, dy));
+      const t = clamp(d / A.shieldSpd, 0.7, 1.5);
+      const vx = dx / t;
+      const vy = (dy - 0.5 * A.shieldG * t * t) / t;
+      const dmg = Math.round(this.bulletDmg * g.atkScale);
+      g.bullets.push(new Bullet(x0, y0, vx, vy,
+        { kind: 'orb', r: A.shieldR, dmg, dmgScale: g.atkScale, life: 5, grav: A.shieldG, eb: 'shield' }));
+      SFX.shieldThrow();
+    }
+
+    /** 皮影客：下方左右移动对齐玩家 x，持续朝正上方投飞刀 */
+    aiPuppet(dt, g, p) {
+      const A = CFG.arena.puppet;
+      this.y = this.restY; this.kbY = 0;
+      const ddx = p.x - this.x;
+      if (Math.abs(ddx) > 6) this.x += Math.sign(ddx) * A.moveSpd * this.speedMul * dt;   // 左右移动对齐
+      this.x = clamp(this.x, 50, CFG.W - 40);
+      this.atkT -= dt;
+      if (this.atkT <= 0) {
+        this.atkT = A.knifeCd;
+        const vx = clamp(ddx * 0.12, -50, 50);     // 基本垂直，带极小水平修正
+        g.bullets.push(new Bullet(this.x, this.restY - 34, vx, -A.knifeSpd,
+          { kind: 'orb', r: A.knifeR, dmg: Math.round(this.bulletDmg * g.atkScale), dmgScale: g.atkScale, life: 4, eb: 'dart' }));
+        SFX.knifeThrow();
+      }
+    }
+
+    /** 自爆囚：缓慢移向中线 → 蓄力（预警）→ 跳起撞击（空中自转 + 火焰拖尾 + 大臭屁）；命中先闪红再自爆 */
+    aiBombPrisoner(dt, g, p) {
+      const A = CFG.arena.bomb;
+      // 引爆前闪红：原地颤抖 0.35s 后自爆
+      if (this.redT > 0) {
+        this.redT -= dt;
+        this.x += Math.sin(this.t * 44) * 0.8;
+        if (this.redT <= 0) { this.bombBoom(g, true); this.die(g); }
+        return;
+      }
+      if (!this.air) { this.y = this.restY; this.kbY = 0; }
+      if (this.state === 'march') {
+        const ddx = this.midX - this.x;
+        if (Math.abs(ddx) > 14) this.x += Math.sign(ddx) * A.walkSpd * this.speedMul * dt;   // 缓慢移向中线
+        else { this.state = 'windup'; this.windT = A.windup; }
+      } else if (this.state === 'windup') {
+        this.windT -= dt;
+        if (this.windT <= 0) {
+          this.air = true; this.state = 'leap'; this.spin = 0;
+          this.jumpVy = -A.leapUpV;
+          this.jumpVx = (p.x < this.x ? -1 : 1) * A.leapSpd;   // 偏快但可预判
+          SFX.fart(true);                            // 大臭屁音效
+          burst(g, this.x, this.y + 30, 16, ['#9a9aa2', '#74747c', '#ff8a3c'], 140, 6, 0.6, 80);
+        }
+      } else if (this.state === 'leap') {
+        this.jumpVy += A.grav * dt;
+        this.x += this.jumpVx * dt; this.y += this.jumpVy * dt;
+        this.spin += dt * 3;                         // 空中慢慢自转
+        for (let i = 0; i < 2; i++) {                // 火焰粒子拖尾
+          g.particles.push(new Particle(this.x + rand(-10, 10), this.y + rand(-8, 12),
+            rand(-30, 30), rand(-50, 10), rand(0.25, 0.5), rand(3, 6),
+            ['#ff7b2e', '#ffd23b', '#ff3b1e', '#9a9aa2'][randi(0, 3)]));
+        }
+        // 命中玩家 → 先闪红再自爆
+        if (Math.hypot(p.x - this.x, p.y - this.y) < this.radius + p.radius + 6) {
+          this.air = false; this.jumpVx = 0; this.jumpVy = 0;
+          this.state = 'preboom'; this.redT = 0.35;
+          return;
+        }
+        // 落地未命中 → 落地沙尘后再次蓄力起跳
+        if (this.jumpVy >= 0 && this.y >= this.restY) {
+          this.y = this.restY; this.air = false; this.jumpVx = 0; this.jumpVy = 0;
+          burst(g, this.x, this.restY + 28, 14, ['#e8ddc0', '#cdb88f', '#ff8a3c'], 150, 5, 0.5, 130);
+          SFX.land();
+          this.state = 'windup'; this.windT = A.windup;
+        }
+      }
+    }
+    /** 自爆囚爆炸：directHit=命中玩家（40% 最大生命）；两种爆炸都波及周围敌人 */
+    bombBoom(g, directHit) {
+      if (this.exploded) return;
+      this.exploded = true;
+      const A = CFG.arena.bomb;
+      const R = A.blastR;
+      burst(g, this.x, this.y, 42, ['#ff7b2e', '#ffd23b', '#ff3b1e', '#9a9aa2', '#fff'], 340, 8, 0.75, 90);
+      SFX.explode(true);
+      g.shake(13);
+      const p = g.player;
+      if (p) {
+        const d = Math.hypot(p.x - this.x, p.y - this.y);
+        if (directHit) {
+          p.invT = 0;   // 自爆是延迟重击，无视此前接触的无敌帧，确保 40% 爆炸伤害生效
+          p.hurt(Math.round(p.maxHp * A.blastHpFrac), g, this.dsrc);                                  // 命中：40% 最大生命
+        } else if (d < R + p.radius) p.hurt(Math.round(18 * g.atkScale * (d < R * 0.5 ? 1 : 0.6)), g, this.dsrc);
+      }
+      g.aoe(this.x, this.y, R, Math.round(34 * g.atkScale));   // 波及周围敌人（含空中爆炸）
+    }
+
     /* 渲染 */
     render(ctx) {
       const flip = this.flash > 0;
@@ -4145,6 +4480,64 @@
         case 'owl': {
           const spr = Math.floor(t * 2) % 2 === 0 ? Sprites.owlAL : Sprites.owlBL;
           drawSprite(ctx, spr, this.x, this.y + Math.sin(t * 2) * 2, 2.8, 2.8, 0, this.flash);
+          break;
+        }
+        /* ===== 斗兽场地面小怪（移动时轻微左右晃动）===== */
+        case 'javelinSlave': {
+          const moving = this.state === 'walk' || this.state === 'aim';
+          const fr = this.state === 'aim' ? 14 : 9;          // 助跑冲刺晃得更快
+          const sx = moving ? Math.sin(t * fr) * 2.5 : 0;
+          const bob = moving ? Math.abs(Math.sin(t * fr)) * -3 : 0;
+          const ang = moving ? Math.sin(t * fr) * 0.06 : 0;
+          drawSprite(ctx, Sprites.javelinSlaveL, this.x + sx, this.y + bob, this.drawScale, this.drawScale, ang, this.flash);
+          break;
+        }
+        case 'ramFighter': {
+          let ang = 0, sx = 0, bob = 0;
+          if (this.state === 'leap') {
+            ang = clamp(this.jumpVy / 900, -0.25, 0.4);      // 空中按垂直速度俯仰
+          } else {
+            const moving = this.state === 'walk' || this.state === 'windup' || this.state === 'recenter';
+            const fr = this.state === 'windup' ? 16 : 9;
+            if (moving) { sx = Math.sin(t * fr) * 2.5; bob = Math.abs(Math.sin(t * fr)) * -3; ang = Math.sin(t * fr) * 0.06; }
+          }
+          drawSprite(ctx, Sprites.ramFighterL, this.x + sx, this.y + bob, this.drawScale, this.drawScale, ang, this.flash);
+          break;
+        }
+        case 'shieldSlave': {
+          const moving = this.state === 'walk';
+          const sx = moving ? Math.sin(t * 9) * 2.2 : 0;
+          const bob = moving ? Math.abs(Math.sin(t * 9)) * -3 : 0;
+          const ang = moving ? Math.sin(t * 9) * 0.05 : 0;
+          drawSprite(ctx, Sprites.shieldSlaveL, this.x + sx, this.y + bob, this.drawScale, this.drawScale, ang, this.flash);
+          break;
+        }
+        case 'puppet': {
+          // 皮影客始终在下方左右游移
+          const sx = Math.sin(t * 11) * 3;
+          const bob = Math.abs(Math.sin(t * 11)) * -3;
+          const ang = Math.sin(t * 11) * 0.08;
+          drawSprite(ctx, Sprites.puppetL, this.x + sx, this.y + bob, this.drawScale, this.drawScale, ang, this.flash);
+          break;
+        }
+        case 'bombPrisoner': {
+          let ang = 0, sx = 0, bob = 0;
+          if (this.state === 'leap') {
+            ang = this.spin;                                 // 跳起时自身慢慢自转
+          } else if (this.redT > 0) {
+            sx = Math.sin(t * 44) * 3;                       // 引爆前颤抖
+            ang = Math.sin(t * 44) * 0.1;
+          } else if (this.state === 'windup') {
+            sx = Math.sin(t * 38) * 2.2;                     // 蓄力微颤
+          } else {
+            sx = Math.sin(t * 9) * 2.2; bob = Math.abs(Math.sin(t * 9)) * -3; ang = Math.sin(t * 9) * 0.05;
+          }
+          if (this.redT > 0 && Math.floor(t * 18) % 2 === 0) {
+            const w = Sprites.bombPrisonerL.width * this.drawScale, h = Sprites.bombPrisonerL.height * this.drawScale;
+            drawSpriteTinted(ctx, Sprites.bombPrisonerL, this.x + sx, this.y + bob, w, h, ang, '#ff2a1a', 0.85);  // 闪红
+          } else {
+            drawSprite(ctx, Sprites.bombPrisonerL, this.x + sx, this.y + bob, this.drawScale, this.drawScale, ang, this.flash);
+          }
           break;
         }
       }
