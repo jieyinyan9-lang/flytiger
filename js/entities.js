@@ -4642,7 +4642,11 @@
     // 大海：礁石（高/中，上窄下宽）/ 珊瑚（低）
     reefT:  { w: 126, h: 138, trap: true, trapInset: 0.30, shape: 'reef', v: 0, debris: ['#5f7480', '#465863', '#87a0ad', '#dff1fa'] },
     reefM:  { w: 100, h: 92,  trap: true, trapInset: 0.30, shape: 'reef', v: 1, debris: ['#5f7480', '#465863', '#87a0ad'] },
-    coralL: { w: 92,  h: 70,  shape: 'coral', debris: ['#ff6f61', '#d6485e', '#ffc48a', '#fff'] }
+    coralL: { w: 92,  h: 70,  shape: 'coral', debris: ['#ff6f61', '#d6485e', '#ffc48a', '#fff'] },
+    // 罗马角斗场·地刺（高/中/低）：铁刺条底座 + 一排向上尖刺
+    spikeT: { w: 152, h: 132, trap: true, trapInset: 0.34, shape: 'spike', v: 0, debris: ['#7d8794', '#a7b3c2', '#5a5f66', '#fff', '#ff7b2e'] },
+    spikeM: { w: 118, h: 96,  trap: true, trapInset: 0.34, shape: 'spike', v: 1, debris: ['#7d8794', '#a7b3c2', '#5a5f66', '#fff'] },
+    spikeL: { w: 92,  h: 62,  trap: true, trapInset: 0.34, shape: 'spike', v: 2, debris: ['#7d8794', '#a7b3c2', '#5a5f66'] }
   };
 
   /** 像素块填充（坐标自动取整） */
@@ -4769,6 +4773,7 @@
           case 'building': drawBuilding(c, this); break;
           case 'reef': drawReef(c, this); break;
           case 'coral': drawCoral(c, this); break;
+          case 'spike': drawSpike(c, this); break;
           default: this.renderRock(c);
         }
       };
@@ -5114,6 +5119,44 @@
         obsPx(ctx, lx - 4, ly, 3, s, shade);
       }
     });
+  }
+
+  /** 罗马角斗场·地刺：铁制底座条（铆钉）+ 一排高低错落的向上尖刺 */
+  function drawSpike(ctx, r) {
+    const s = 8;
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    // 铁制底座条
+    const barH = 16;
+    obsPx(ctx, x0, base - barH, w, barH, '#3a3f47');
+    obsPx(ctx, x0, base - barH, w, 4, '#6b7280');        // 顶沿高光
+    obsPx(ctx, x0, base - 4, w, 4, '#23262c');           // 底沿阴影
+    for (let k = 0; k < Math.floor(w / 24); k++) {       // 铆钉
+      const rx = x0 + 12 + k * 24;
+      obsPx(ctx, rx, base - barH + 5, 4, 4, '#23262c');
+      obsPx(ctx, rx + 1, base - barH + 5, 2, 2, '#8d96a3');
+    }
+    // 尖刺排（高低错落）
+    const n = Math.max(3, Math.round(w / 36));
+    const maxH = h - barH;
+    const hPat = [1.0, 0.66, 0.86, 0.72];
+    for (let i = 0; i < n; i++) {
+      const cx = x0 + (i + 0.5) * (w / n);
+      const sph = maxH * hPat[(i + v) % hPat.length];
+      const sw = (w / n) * 0.62;
+      const rows = Math.max(1, Math.round(sph / s));
+      for (let j = 0; j < rows; j++) {
+        const t = (j + 1) / rows;
+        const hw = Math.max(3, sw / 2 * (1 - t * 0.9));
+        const yy = base - barH - (j + 1) * s;
+        const tip = j === rows - 1;
+        const col = tip ? '#dfe5ee' : (j < rows * 0.3 ? '#5a5f66' : (j % 2 ? '#8d96a3' : '#7d8794'));
+        obsPx(ctx, cx - hw, yy, hw * 2, s, col);
+        if (!tip) {
+          obsPx(ctx, cx - hw, yy, Math.min(s, hw * 2), s, '#5a5f66');       // 左棱阴影
+          obsPx(ctx, cx + hw - s, yy, Math.min(s, hw * 2), s, '#a7b3c2');   // 右棱高光
+        }
+      }
+    }
   }
 
   /* ---------------- 草龙（长条草木龙：60 节龙身 / 随机穿梭路线 / 断裂分裂） ---------------- */
