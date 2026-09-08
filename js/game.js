@@ -1445,6 +1445,11 @@
       this.score += 500;
       this.kills++;
       this.addRage(CFG.ultimate.rageBoss);
+      // 成就系统：Boss 击败结算 + 轮次推进（须在回血奖励之前读取残血状态）
+      if (window.Ach) {
+        Ach.evt('bossDefeated', { g: this, boss: boss });
+        Ach.evt('round', { g: this, round: this.round });
+      }
       // Boss 死亡：场上所有敌方弹幕无效化，逐渐消失
       this.bullets.forEach(b => { if (!b.friendly) b.neutralize(); });
       // 击败 Boss 默认回复 40% 生命
@@ -2043,12 +2048,12 @@
             }
             // 闪电子弹：命中后闪电链跳跃链接附近敌人
             if (p.chainJumps >= 1 && !e.dead) this.chainLightning(e, b.dmg);
-            // 爆炸弹
+            // 爆炸弹：命中即范围爆炸（不再吞弹 —— 随后正常消耗穿透/反弹次数，与穿透、反弹、贯穿激光协同）
             if (b.bombLv > 0) {
               const radius = 34 + b.bombLv * 12;
               this.aoe(b.x, b.y, radius, b.dmg * (0.55 + b.bombLv * 0.16));
-              b.dead = true;
-            } else if (b.noDieOnHit && b.bouncesLeft > 0 && b.pierce <= 0) {
+            }
+            if (b.noDieOnHit && b.bouncesLeft > 0 && b.pierce <= 0) {
               // 烟头/锯齿盾命中敌人：朝任意方向反弹（消耗反弹次数，不消失），反弹后速度/伤害减半
               b.bouncesLeft--;
               const rc = (hitSeg >= 0 && e.segments[hitSeg]) ? e.segments[hitSeg] : e;

@@ -76,6 +76,18 @@
     { id: 'cr_replay', cat: 'chaoren', icon: '🎬', name: '「我要上精彩回放！」', desc: '单次激光串击杀12个以上敌人' },
     { id: 'cr_god',    cat: 'chaoren', icon: '🦸', name: '「全场唯一真神」',     desc: '使用超级小子到达第10轮' },
 
+    /* ============ 🏟️ 角斗场专属成就 ============ */
+    { id: 'ar_enter',    cat: 'arena', icon: '🏟️', name: '「谁把我扔进来的喵？」', desc: '首次进入罗马角斗场' },
+    { id: 'ar_kills100', cat: 'arena', icon: '⚔️', name: '「这里挺热闹嘛~」',     desc: '在角斗场累计击败100名敌人' },
+    { id: 'ar_melee',    cat: 'arena', icon: '👊', name: '「喵喵拳！」',           desc: '角斗场中近距离连续击杀10名敌人' },
+    { id: 'ar_swarm',    cat: 'arena', icon: '🌀', name: '「别贴这么近啊！」',     desc: '角斗场中被大量敌人包围后成功脱身' },
+    { id: 'ar_flawless', cat: 'arena', icon: '🛡️', name: '「猫猫灵活得很！」',     desc: '不受伤完成一轮角斗场战斗' },
+    { id: 'ar_burst',    cat: 'arena', icon: '⚡', name: '「一个都别跑！」',       desc: '角斗场中3秒内连续击杀20名敌人' },
+    { id: 'ar_lowhp',    cat: 'arena', icon: '❤️‍🔥', name: '「残血？问题不大。」',   desc: '低生命值完成角斗场一轮战斗' },
+    { id: 'ar_rounds3',  cat: 'arena', icon: '🏅', name: '「这里我说了算！」',     desc: '单局角斗场连续完成3轮战斗' },
+    { id: 'ar_streak',   cat: 'arena', icon: '🔥', name: '「全场都是我的！」',     desc: '单局角斗场无伤连杀60名敌人' },
+    { id: 'ar_round15',  cat: 'arena', icon: '👑', name: '「猫猫还没打够！」',     desc: '角斗场累计完成15轮战斗' },
+
     /* ============ ❓ 隐藏成就 ============ */
     { id: 'h_idle',    cat: 'hidden', icon: '😴', name: '「猫猫不想动」',   desc: '长时间不移动仍然存活', hidden: true },
     { id: 'h_die',     cat: 'hidden', icon: '💀', name: '「我就试一下」',   desc: '第一次死亡', hidden: true },
@@ -102,7 +114,9 @@
       lastDeathKey: '',    // 上一局击杀来源
       deathSame: 0,        // 被同一敌人连续击杀次数
       lastRunAt: 0,        // 上一次开局时间戳
-      restartStreak: 0     // 快速连续开局次数
+      restartStreak: 0,    // 快速连续开局次数
+      arenaKills: 0,       // 角斗场累计击杀
+      arenaRounds: 0       // 角斗场累计完成轮数（击败Boss数）
     }
   };
 
@@ -157,7 +171,14 @@
       lowHpT: 0,               // 残血连击窗口
       lowHpKillsWindow: 0,
       lastKillT: -99,          // 上次击杀的游戏时间
-      passbyFired: false
+      passbyFired: false,
+      /* —— 角斗场专属 —— */
+      arena: false,            // 本局是否在罗马角斗场
+      arenaMeleeStreak: 0,     // 近距离连续击杀
+      arenaRounds: 0,          // 本局角斗场完成轮数
+      arenaRoundHurt: false,   // 本轮是否受过伤
+      swarmT: 0,               // 被包围持续时间
+      swarmArmed: false        // 已确认被包围（待脱身）
     };
   }
 
@@ -201,6 +222,11 @@
         } else saved.stats.restartStreak = 1;
         saved.stats.lastRunAt = now;
         saved.stats.runs++;
+        // 角斗场：标记本局地图
+        if (run && g && g.mapId === 'colosseum') {
+          run.arena = true;
+          unlock('ar_enter');
+        }
         save();
         unlock('g_debut');
         if (saved.stats.restartStreak >= 3) unlock('h_restart');
@@ -271,6 +297,17 @@
         if (run.charId === 'jiaodoushi' && ratio <= 0.3) unlock('js_fight');
         // 超级小子：大招后击败Boss
         if (run.charId === 'chaoren' && run.ultKind === 'lasers' && run.ultT > 0) unlock('cr_ult');
+        // —— 角斗场：完成一轮结算 ——
+        if (run.arena) {
+          run.arenaRounds++;
+          saved.stats.arenaRounds++;
+          if (!run.arenaRoundHurt) unlock('ar_flawless');        // 本轮未受伤
+          if (ratio <= 0.3) unlock('ar_lowhp');                 // 残血完成一轮
+          if (run.arenaRounds >= 3) unlock('ar_rounds3');       // 单局连过3轮
+          if (saved.stats.arenaRounds >= 15) unlock('ar_round15'); // 累计15轮
+          run.arenaRoundHurt = false;                           // 新一轮重置受伤标记
+          save();
+        }
         run.bossDmgTaken = 0;
         break;
       }
@@ -305,6 +342,22 @@
         const recent = run.killTimes.filter(t => run.time - t <= 3);
         run.killTimes = recent;
         if (run.charId === 'xiake' && recent.length >= 15) unlock('xk_burst');
+        // —— 角斗场专属击杀统计 ——
+        if (run.arena) {
+          saved.stats.arenaKills++;
+          if (saved.stats.arenaKills >= 100) unlock('ar_kills100');
+          // 无伤连杀60
+          if (run.noHurtStreak >= 60) unlock('ar_streak');
+          // 3秒内连杀20
+          if (recent.length >= 20) unlock('ar_burst');
+          // 近距离（110px 内）连续击杀10
+          const ex = d.e ? d.e.x : p.x, ey = d.e ? d.e.y : p.y;
+          if (Math.hypot(ex - p.x, ey - p.y) <= 110) {
+            run.arenaMeleeStreak++;
+            if (run.arenaMeleeStreak >= 10) unlock('ar_melee');
+          } else run.arenaMeleeStreak = 0;
+          save();
+        }
         break;
       }
 
@@ -375,6 +428,7 @@
         if (!run || !p) break;
         run.noHurtStreak = 0;
         run.dodgeStreak = 0;
+        if (run.arena) run.arenaRoundHurt = true;   // 角斗场：本轮受伤，无伤轮失效
         if (g.bossActive) run.bossDmgTaken += d.amt || 0;
         // 残血连击窗口：血量跌到 25% 以下开启 10s
         if (p.maxHp && p.hp / p.maxHp <= 0.25 && run.lowHpT <= 0) {
@@ -469,6 +523,25 @@
     if (!run.passbyFired && run.time >= 35 && run.time - run.lastKillT >= 35) {
       run.passbyFired = true;
       unlock('h_passby');
+    }
+    // 角斗场：被大量敌人包围（130px 内 ≥8 个）后成功脱身（≤3 个）
+    if (run.arena && g && g.player && g.enemies) {
+      const pl = g.player;
+      let near = 0;
+      for (const e of g.enemies) {
+        if (e.dead) continue;
+        if (Math.hypot(e.x - pl.x, e.y - pl.y) <= 130) near++;
+      }
+      if (near >= 8) {
+        run.swarmT += dt;
+        if (run.swarmT >= 0.6) run.swarmArmed = true;   // 包围持续 0.6s 才算数
+      } else {
+        run.swarmT = 0;
+        if (run.swarmArmed && near <= 3) {              // 包围圈消散 = 脱身成功
+          run.swarmArmed = false;
+          unlock('ar_swarm');
+        }
+      }
     }
   }
 
@@ -608,6 +681,7 @@
       { key: 'buliang', title: '🐱 不良少年 —— 街头混混' },
       { key: 'jiaodoushi', title: '🐱 狂战士 —— 越挨打越兴奋' },
       { key: 'chaoren', title: '🐱 超级小子 —— 全场C位' },
+      { key: 'arena', title: '🏟️ 角斗场专属成就' },
       { key: 'hidden', title: '❓ 隐藏成就' }
     ];
     listEl.innerHTML = '';

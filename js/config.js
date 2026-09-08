@@ -41,12 +41,27 @@
       windup: 0.9          // 引爆前原地预警时长（秒）
     },
 
-    /** 防护罩：受伤概率触发减伤 */
+    /** 防护罩：受伤概率激活；激活期间完全抵挡若干次伤害，破碎时释放金色冲击波 */
     shield: {
       baseChance: 0.30,     // 初始触发概率 30%
       maxChance: 0.70,      // 概率上限 70%
-      baseReduce: 0.40,     // 初始减伤 40%
-      maxReduce: 0.50       // 减伤上限 50%
+      activeTime: 8,        // 护罩激活后持续时间（秒，超时自动消散）
+      /** 护罩强化 10 级成长表（索引即等级）：
+       *  blocks：抵挡次数；wave：破碎冲击波 {kb 击退力, slow 减速秒, dmg 伤害}；
+       *  radius：冲击波范围倍率；spd：护罩存在期间自身移速加成 */
+      levels: [
+        null,
+        { blocks: 1 },                                                          // Lv1
+        { blocks: 1, wave: { kb: 150 } },                                       // Lv2 破碎冲击波
+        { blocks: 2, wave: { kb: 210 } },                                       // Lv3 抵挡+1、击退小幅提升
+        { blocks: 2, wave: { kb: 210, slow: 1.0 } },                            // Lv4 冲击波减速 1s
+        { blocks: 2, wave: { kb: 210, slow: 1.0 }, spd: 0.10 },                 // Lv5 护罩期间移速 +10%
+        { blocks: 3, wave: { kb: 210, slow: 1.5 } },                            // Lv6 抵挡+1、减速 1.5s
+        { blocks: 3, wave: { kb: 210, slow: 1.5 }, radius: 1.25 },              // Lv7 冲击波范围扩大
+        { blocks: 3, wave: { kb: 210, slow: 1.5 }, radius: 1.25, spd: 0.15 },   // Lv8 移速加成 15%
+        { blocks: 3, wave: { kb: 300, slow: 1.5 }, radius: 1.25, spd: 0.15 },   // Lv9 击退中幅提升
+        { blocks: 3, wave: { kb: 300, slow: 2.0, dmg: 10 }, radius: 1.25, spd: 0.15 } // Lv10 减速 2s + 微量伤害
+      ]
     },
 
     /** 炮师（地面抛射炮兵） */
@@ -268,9 +283,9 @@
       },
       {
         id: 'chainN', icon: '⛓', cls: 'c-way', name: '闪电链接',
-        desc: '闪电链可链接的敌人数量 +1（在敌人间连续跳跃）',
+        desc: '闪电链可链接的敌人数量 +2（在敌人间连续跳跃）',
         can(p, g) { return g && g.round >= 4 && p.chainJumps >= 1 && p.chainJumps < CFG.chain.maxJumps; },
-        apply(p) { p.chainJumps++; },
+        apply(p) { p.chainJumps = Math.min(CFG.chain.maxJumps, p.chainJumps + 2); },
         level(p) { return p.chainJumps; }
       },
       /* —— 第三轮后出现：防护刀刃（环绕光剑） —— */
@@ -309,12 +324,12 @@
       /* —— 防护罩：解锁 + 两条成长线 —— */
       {
         id: 'shield', icon: '◈', cls: 'c-life', name: '防护罩',
-        desc: '受到伤害时 30% 概率触发防护罩，减免 40% 伤害',
+        desc: '受到伤害时 30% 概率激活金色护罩：完全抵挡 1 次伤害；可通过护罩强化成长',
         can(p) { return !p.shieldLv; },
         apply(p) {
           p.shieldLv = 1;
           p.shieldChance = CFG.shield.baseChance;
-          p.shieldReduce = CFG.shield.baseReduce;
+          p.shieldRLv = 1;       // 解锁即 1 级（抵挡 1 次）
         },
         level(p) { return p.shieldLv; }
       },
@@ -327,10 +342,22 @@
       },
       {
         id: 'shieldR', icon: '⬢', cls: 'c-life', name: '护罩强化',
-        desc: '防护罩减伤提升 +5%（最高减伤 50%）',
-        can(p) { return p.shieldLv >= 1 && p.shieldReduce < CFG.shield.maxReduce - 0.001; },
-        apply(p) { p.shieldReduce = Math.min(CFG.shield.maxReduce, p.shieldReduce + 0.05); },
-        level(p) { return Math.round((p.shieldReduce - CFG.shield.baseReduce) / 0.05); }
+        desc(p) {
+          const lv = Math.min(10, (p.shieldRLv || 1) + 1);
+          const L = CFG.shield.levels[lv] || {};
+          let s = `护罩强化 ${lv}/10 级：抵挡 ${L.blocks} 次伤害`;
+          if (L.wave) {
+            s += '；破碎冲击波击退小怪';
+            if (L.wave.slow) s += `并减速 ${L.wave.slow}s`;
+            if (L.wave.dmg) s += `、造成 ${L.wave.dmg} 点伤害`;
+          }
+          if (L.radius) s += '；冲击波范围扩大';
+          if (L.spd) s += `；护罩期间移速 +${Math.round(L.spd * 100)}%`;
+          return s;
+        },
+        can(p) { return p.shieldLv >= 1 && (p.shieldRLv || 1) < 10; },
+        apply(p) { p.shieldRLv = Math.min(10, (p.shieldRLv || 1) + 1); },
+        level(p) { return p.shieldRLv || 0; }
       },
       /* —— 额外生命 —— */
       {

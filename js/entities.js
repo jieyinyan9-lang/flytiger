@@ -195,6 +195,7 @@
       this.pierce = opts.pierce || 0;
       this.hitSet = null;
       this.bombLv = opts.bombLv || 0;
+      this.spdTrail = opts.spdTrail || 0;     // 弹速强化等级：>0 时弹尾拉出速度线（视觉反馈）
       this.tier = opts.tier || 0;
       this.dmgScale = opts.dmgScale || 1;   // 敌人子弹伤害系数（Boss成长）
       this.grav = opts.grav || 0;           // 重力（抛射弹道）
@@ -465,6 +466,26 @@
               (-by * rand(50, 140) + Math.sin(ja) * jr - 30) * (this.trailLite ? 0.35 : 1),
               this.trailLite ? rand(0.14, 0.26) : rand(0.35, 0.7), psize,
               fireCols[randi(0, fireCols.length - 1)]));
+          }
+        }
+      }
+      // 弹速强化速度线：我方弹弹尾拉出青白速度线，等级越高越长越密（纯视觉反馈）
+      if (this.friendly && this.spdTrail > 0 && !this.neutralized) {
+        this._spdT = (this._spdT || 0) + dt;
+        if (this._spdT > 0.035) {
+          this._spdT = 0;
+          const spd = Math.hypot(this.vx, this.vy) || 1;
+          const bx = this.vx / spd, by = this.vy / spd;
+          const nP = this.spdTrail >= 6 ? 2 : 1;
+          for (let i = 0; i < nP; i++) {
+            g.particles.push(new Particle(
+              this.x - bx * this.r * 1.5 + rand(-2, 2),
+              this.y - by * this.r * 1.5 + rand(-2, 2),
+              -bx * rand(40, 110) + rand(-14, 14),
+              -by * rand(40, 110) + rand(-14, 14),
+              0.1 + this.spdTrail * 0.03,
+              rand(1.4, 2 + this.spdTrail * 0.3),
+              Math.random() < 0.45 ? '#ffffff' : '#a5f3fc'));
           }
         }
       }
@@ -2080,9 +2101,12 @@
       this.maxLives = 3;
       // 防护罩（成长解锁）
       this.shieldLv = 0;        // 0 = 未解锁
-      this.shieldChance = 0;    // 触发概率
-      this.shieldReduce = 0;    // 减伤比例
-      this.shieldFlash = 0;     // 触发特效计时
+      this.shieldChance = 0;    // 受伤时激活概率
+      this.shieldRLv = 0;       // 护罩强化等级（1-10，决定抵挡次数/冲击波/移速）
+      this.shieldActive = false;// 护罩激活中
+      this.shieldCharges = 0;   // 剩余抵挡次数
+      this.shieldT = 0;         // 激活剩余时间
+      this.shieldFlash = 0;     // 激活/破碎特效计时
       // 移动速度强化
       this.moveSpdLv = 0;
       // 受伤闪红
@@ -2116,7 +2140,8 @@
       this.bladeAng += CFG.blade.spin * dt;
       const dmg = CFG.blade.baseDmg + CFG.blade.dmgPerLv * (this.bladeDmgLv - 1);
       const lenMul = this.bladeLenMul;
-      // 接触敌人造成伤害（每敌 0.5s 一次；草龙按最近露出节判定）
+      // 接触敌人造成伤害（命中冷却按剑数分摊：剑越多，同一敌人受击越频繁；草龙按最近露出节判定）
+      const cdInterval = 0.5 / Math.max(1, this.blades);
       g.targets().forEach(e => {
         if (e.dead) return;
         if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) return;   // Boss 入场/转场免伤
@@ -2134,7 +2159,7 @@
           }
           if (hx !== null) {
             const now = g.time;
-            if (now - (this.bladeCd.get(e) ?? -1) > 0.5) {
+            if (now - (this.bladeCd.get(e) ?? -1) > cdInterval) {
               this.bladeCd.set(e, now);
               const kb = { x: Math.cos(bp.a) * 150, y: Math.sin(bp.a) * 150 };
               if (e.segments) e.damageAt(hx, hy, dmg, g);
@@ -2338,18 +2363,24 @@
     }
 
     /** 受伤：魔法护盾直接免疫；血怒期间照常受创但不会死亡（转化为弹幕增伤）。
-     *  防护罩概率减免，伤害取整；死亡时消耗生命条数。返回 false=无敌帧未命中。
+     *  防护罩：未激活时按概率激活；激活期间完全抵挡伤害并消耗抵挡次数，次数耗尽破碎释放金色冲击波。
+     *  死亡时消耗生命条数。返回 false=无敌帧未命中（或本次伤害被护罩抵挡）。
      *  src：击杀者归因 { k:'e'小怪|'b'Boss|'env'环境, key }，供死亡死法文案使用 */
     hurt(amount, g, src) {
       if (this.invT > 0 || this.magicShieldT > 0) return false;
       let amt = Math.max(1, Math.round(amount));
       if (src) g.lastHurtSrc = src;   // 记录最近一次伤害来源（死亡时归因）
-      // 防护罩：概率触发减伤
-      if (this.shieldLv > 0 && Math.random() < this.shieldChance) {
-        amt = Math.max(1, Math.round(amt * (1 - this.shieldReduce)));
-        this.shieldFlash = 0.55;
-        SFX.zap();
-        burst(g, this.x, this.y, 12, ['#7fe7ff', '#fff', '#c9f6ff'], 200, 4, 0.4);
+      // 防护罩：未激活时按概率激活；激活后完全抵挡本次伤害
+      if (this.shieldLv > 0) {
+        if (!this.shieldActive && Math.random() < this.shieldChance) this.activateShield(g);
+        if (this.shieldActive) {
+          this.shieldCharges--;
+          this.shieldFlash = 0.4;
+          SFX.zap();
+          burst(g, this.x, this.y, 12, ['#ffd23b', '#fff', '#ffe9a8'], 200, 4, 0.4);
+          if (this.shieldCharges <= 0) this.breakShield(g);
+          return false;   // 本次伤害被护罩抵挡（不触发受击无敌/受伤归因/敌方回血等回调）
+        }
       }
       // 血怒：累计受到的伤害转化为弹幕伤害提升（最高 3 倍）
       if (this.bloodRageT > 0) this.rageBoost += amt;
@@ -2365,6 +2396,49 @@
       }
       if (window.Ach) window.Ach.evt('playerHurt', { g: g, amt: amt, src: src });
       return true;
+    }
+
+    /** 护罩激活：按护罩强化等级获得抵挡次数 */
+    activateShield(g) {
+      const def = CFG.shield.levels[Math.min(10, Math.max(1, this.shieldRLv))];
+      this.shieldActive = true;
+      this.shieldCharges = def.blocks;
+      this.shieldT = CFG.shield.activeTime;
+      this.shieldFlash = 0.55;
+      burst(g, this.x, this.y, 16, ['#ffd23b', '#fff5d0', '#fff'], 220, 5, 0.5);
+    }
+
+    /** 护罩破碎：金色护罩溶解并喷出冲击波（仅对小怪生效：击退 / 减速 / Lv10 微量伤害；Boss 免疫） */
+    breakShield(g) {
+      this.shieldActive = false;
+      this.shieldT = 0;
+      this.shieldFlash = 0.55;
+      const def = CFG.shield.levels[Math.min(10, Math.max(1, this.shieldRLv))] || {};
+      const w = def.wave;
+      g.fxRings.push({ x: this.x, y: this.y, r: 12, vr: 460 * (def.radius || 1), t: 0, life: 0.5, col: '#ffd23b' });
+      burst(g, this.x, this.y, 26, ['#ffd23b', '#fff5d0', '#fff', '#ffb300'], 320, 6, 0.6, 130);
+      SFX.explode(false);
+      g.shake(6);
+      if (w) {
+        const R = 130 * (def.radius || 1);
+        g.targets().forEach(e => {
+          if (e.dead || e.isBoss || e.segments) return;   // 冲击波仅小怪生效
+          const dx = e.x - this.x, dy = e.y - this.y;
+          const d = Math.hypot(dx, dy);
+          if (d < R + (e.radius || 16)) {
+            const nx = dx / (d || 1), ny = dy / (d || 1);
+            if (w.dmg) e.takeDamage(w.dmg, g, { x: nx * w.kb, y: ny * w.kb * 0.6 - 50 });
+            else { e.kbX += nx * w.kb; e.kbY += ny * w.kb * 0.6 - 60; }
+            if (w.slow) e.slowT = Math.max(e.slowT || 0, w.slow);
+            burst(g, e.x, e.y, 6, ['#ffd23b', '#fff'], 170, 4, 0.3);
+          }
+        });
+      }
+    }
+
+    /** 当前护罩等级配置（未解锁返回 null） */
+    get shieldDef() {
+      return this.shieldLv > 0 ? (CFG.shield.levels[Math.min(10, Math.max(1, this.shieldRLv))] || null) : null;
     }
 
     /** 血怒增伤倍率：受创越多伤害越高，最高 3 倍 */
@@ -2406,6 +2480,11 @@
       this.invT = Math.max(0, this.invT - dt);
       this.hurtFlash = Math.max(0, this.hurtFlash - dt);
       this.shieldFlash = Math.max(0, this.shieldFlash - dt);
+      // 护罩激活倒计时：超时未破碎则静默消散
+      if (this.shieldT > 0) {
+        this.shieldT -= dt;
+        if (this.shieldT <= 0) { this.shieldT = 0; this.shieldActive = false; this.shieldCharges = 0; }
+      }
       // 角色大招状态计时：魔法护盾 / 血怒（血怒结束清空增伤累计）
       const wasRage = this.bloodRageT;
       this.magicShieldT = Math.max(0, this.magicShieldT - dt);
@@ -2433,7 +2512,10 @@
         if (g.keys.right) mx += 1;
         if (mx || my) { const l = Math.hypot(mx, my); mx /= l; my /= l; }
       }
-      const spd = CFG.player.speed * (this.speedMul || 1) * (1 + (this.sizeMul - 1) * 0.08) * (1 + (this.moveSpdLv || 0) * 0.12);
+      // 护罩存在期间移速加成（护罩强化 Lv5/Lv8）
+      const shieldSpd = (this.shieldActive && this.shieldDef && this.shieldDef.spd) ? this.shieldDef.spd : 0;
+      const spd = CFG.player.speed * (this.speedMul || 1) * (1 + (this.sizeMul - 1) * 0.08)
+        * (1 + (this.moveSpdLv || 0) * 0.12) * (1 + shieldSpd);
       this.vx = mx * spd; this.vy = my * spd;
       this.x += this.vx * dt; this.y += this.vy * dt;
       this.radius = CFG.player.radius * (0.75 + this.sizeMul * 0.25);
@@ -2629,16 +2711,20 @@
         }
       } else this.groundTick = 0;
 
-      // 尾部喷射火焰
+      // 尾部喷射火焰（移速强化等级越高：喷焰越密、越粗、越快、越持久）
       this.flameT = (this.flameT || 0) - dt;
       if (this.flameT <= 0) {
-        this.flameT = 0.04;
+        const mlv = this.moveSpdLv || 0;
+        this.flameT = 0.04 - Math.min(0.024, mlv * 0.005);
         const s = this.sizeMul;
-        g.particles.push(new Particle(
-          this.x - 40 * s, this.y + 6 * s + rand(-6, 6),
-          rand(-260, -140), rand(-60, 60),
-          rand(0.18, 0.38), rand(3, 6) * s,
-          Math.random() < 0.3 ? '#ffe066' : (Math.random() < 0.55 ? '#ff7b2e' : '#e53935')));
+        const nP = 1 + Math.floor(mlv / 2);          // 每喷粒子数 1-3
+        for (let i = 0; i < nP; i++) {
+          g.particles.push(new Particle(
+            this.x - 40 * s - mlv * 3, this.y + 6 * s + rand(-6 - mlv, 6 + mlv),
+            rand(-260 - mlv * 45, -140 - mlv * 22), rand(-60 - mlv * 10, 60 + mlv * 10),
+            rand(0.18, 0.38) + mlv * 0.04, rand(3, 6) * s * (1 + mlv * 0.09),
+            Math.random() < 0.3 ? '#ffe066' : (Math.random() < 0.55 ? '#ff7b2e' : '#e53935')));
+        }
       }
 
       // 自动射击（近战期间停火；射速按角色射速倍率）
@@ -2696,7 +2782,7 @@
           r: (5 + slv * 2.2) * bscale, glv, gmax,
           dropX: CFG.W * 0.5, dropGrav: 900,
           trailCols: gmax && FIN ? FIN.trail : null, trailLite: gmax,
-          bombLv: this.bombLv
+          bombLv: this.bombLv, spdTrail: this.spdLv
         });
       }
       if (kind === 'star') {
@@ -2744,7 +2830,7 @@
         const opts = {
           kind: 'lblock', friendly: true, dmg,
           r: (5 + slv * 2) * bscale, glv, gmax,
-          bombLv: this.bombLv
+          bombLv: this.bombLv, spdTrail: this.spdLv
         };
         if (gmax) {
           opts.len = Math.min(CFG.W - x - 24, 640);   // 一长至屏最右
@@ -2963,9 +3049,9 @@
         ctx.globalAlpha = 1;
       }
 
-      // 超猫巨型红色激光：向右贯穿的粗激光束
+      // 超猫巨型红色激光：向右贯穿的粗激光束（起点在角色前方，不遮挡角色）
       if (this.laserT > 0) {
-        const lx = this.x, ly = this.y;
+        const lx = this.x + 40, ly = this.y;
         const L = CFG.W - lx + 20;
         const pulse = 1 + Math.sin(this.wingT * 30) * 0.12;
         const Wd = 30 * pulse;
@@ -3014,17 +3100,29 @@
         ctx.restore();
       }
 
-      // 防护罩触发特效：青色光罩扩散
+      // 防护罩：激活期间金色常亮护罩（呼吸感）；激活/破碎瞬间金色光罩扩散
+      if (this.shieldActive) {
+        const r = this.radius * 1.7;
+        const pulse = 0.85 + Math.sin(this.wingT * 6) * 0.15;
+        ctx.save();
+        ctx.globalAlpha = 0.5 * pulse;
+        ctx.strokeStyle = '#ffd23b'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.stroke();
+        ctx.globalAlpha = 0.14 * pulse;
+        ctx.fillStyle = '#ffd23b';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
       if (this.shieldFlash > 0) {
         const a = clamp(this.shieldFlash / 0.55, 0, 1);
         const r = this.radius * (1.6 + (1 - a) * 0.7);
         ctx.save();
         ctx.globalAlpha = a * 0.8;
-        ctx.strokeStyle = '#7fe7ff';
+        ctx.strokeStyle = '#ffd23b';
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.stroke();
         ctx.globalAlpha = a * 0.25;
-        ctx.fillStyle = '#7fe7ff';
+        ctx.fillStyle = '#ffd23b';
         ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
         ctx.restore();
       }
@@ -3344,6 +3442,9 @@
       if (this.baseY !== undefined) this.baseY += this.kbY * dt;
       this.x += this.kbX * dt; this.y += this.kbY * dt;
       this.kbX *= 0.86; this.kbY *= 0.86;
+
+      // 减速（护罩破碎冲击波）：行动节奏降至 45%（计时器仍按真实时间流逝，不影响击退）
+      if (this.slowT > 0) { this.slowT -= dt; dt *= 0.45; }
 
       const p = g.player;
       switch (this.type) {
