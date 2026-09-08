@@ -436,9 +436,9 @@
       hpGrow: 0.05,                   // 每次 Boss 生命 +5%
       atkGrow: 0.05,                  // 每次 Boss 攻击 +5%
       roundHpMul: 0.09,               // 每轮额外血量系数
-      /** 第 ord 只 Boss 的目标交战时长（秒）：20/30/40/50，第 5 只起 52s，之后每只 +2s，上限 80s */
+      /** 第 ord 只 Boss 的目标交战时长（秒）：35/40/45/50，第 5 只起 52s，之后每只 +2s，上限 80s */
       fightTime(ord) {
-        if (ord <= 4) return 10 + ord * 10;
+        if (ord <= 4) return 30 + ord * 5;
         return Math.min(80, 52 + (ord - 5) * 2);
       }
     },

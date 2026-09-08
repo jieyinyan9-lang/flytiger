@@ -50,7 +50,7 @@
       this.radius = radius;
       this.contactDmg = contactDmg;
       // 血量按玩家 DPS 动态生成：目标交战时长按 Boss 序号递增
-      // 第1只20s / 第2只30s / 第3只40s / 第4只50s / 第5只起60-80s
+      // 第1只35s / 第2只40s / 第3只45s / 第4只50s / 第5只起52-80s
       const fightTime = CFG.boss.fightTime(g.bossSpawned + 1);
       this.maxHp = Math.round(g.playerDps() * fightTime * g.bossHpMul());
       this.hp = this.maxHp;
