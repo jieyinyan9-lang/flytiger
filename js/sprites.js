@@ -879,6 +879,24 @@
     return cv;
   }
 
+  /** 巨型骨龙王脑袋美术资源：加载 assets/Boss/gulongnaodai.png（620×580，侧面白色骨龙头，
+   *  长吻朝 +x（右）与游戏内龙头朝向一致；背景透明）。 */
+  function buildGulongHead() {
+    const W = 620, H = 580;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] gulongnaodai.png 加载失败');
+    img.src = 'assets/Boss/gulongnaodai.png';
+    return cv;
+  }
+
   /** 火鸡王美术资源：加载 assets/Boss/huoji.png（368×208，侧面火鸡、火焰尾羽，已朝左）。
    *  Sprites.pheasantL 直接指向本 canvas（已朝左，不可 flip 预拷）。 */
   function buildHuoji() {
@@ -1336,6 +1354,122 @@
     return cv;
   }
 
+  /** 小弓箭手：草帽 + 绿衣 + 裹腿 + 右持弓（朝右绘制，游戏内翻转朝左）。
+   *  实色块像素拼接，深暖褐描边替代近黑。 */
+  function buildArcher() {
+    const W = 16, H = 16;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d  = '#40301a';  // 深暖褐描边（弱化黑边）
+    const hd = '#7d5f1c';  // 草帽深边
+    const Y  = '#ecc24a';  // 草帽亮
+    const yy = '#c89a2e';  // 草帽暗 / 帽带
+    const S  = '#f4cfa6';  // 皮肤
+    const Sk = '#2a1d10';  // 眼 / 口（小面积点睛）
+    const G  = '#58aa46';  // 绿衣
+    const g  = '#3f8436';  // 绿衣暗
+    const L  = '#7d5730';  // 裹腿
+    const Ll = '#5b3f22';  // 裹腿暗 / 靴
+    const B  = '#9a6a35';  // 弓木
+    const Bd = '#6e4a24';  // 弓木暗 / 箭
+    const Wt = '#f7f7f2';  // 弓弦 / 眼高光
+    // —— 草帽 ——
+    r(6, 1, 4, 1, hd);          // 帽冠顶
+    r(5, 2, 6, 2, hd);          // 帽冠侧
+    r(6, 2, 4, 2, Y);           // 帽冠填
+    r(5, 3, 6, 1, yy);          // 帽带
+    r(2, 4, 11, 1, hd);         // 帽檐
+    r(3, 4, 9, 1, Y);
+    r(3, 5, 9, 1, yy);          // 檐底阴影
+    // —— 脸 ——
+    r(5, 5, 5, 1, S);           // 额
+    r(4, 6, 1, 2, d); r(10, 6, 1, 2, d);  // 脸颊暗边
+    r(5, 6, 5, 2, S);           // 脸
+    r(5, 8, 5, 1, d);           // 下巴
+    r(8, 6, 2, 1, Sk); r(8, 6, 1, 1, Wt);  // 眼（朝右）+ 高光
+    r(7, 7, 2, 1, '#d98f6f');   // 腮红/嘴
+    // —— 躯干绿衣 ——
+    r(4, 8, 7, 1, d);           // 肩线
+    r(3, 9, 9, 1, d);           // 肩外扩
+    r(3, 9, 1, 3, d); r(11, 9, 1, 3, d);   // 躯干左右边
+    r(4, 12, 7, 1, d);          // 腰 / 衣摆
+    r(4, 9, 7, 3, G);           // 衣填
+    r(5, 9, 2, 2, g);           // 衣褶阴影
+    r(4, 11, 7, 1, g);          // 衣摆暗
+    // —— 右臂 + 弓（朝右） ——
+    r(10, 9, 2, 2, S);          // 前臂 / 手
+    r(14, 6, 1, 1, Bd); r(15, 7, 1, 1, Bd);   // 弓上梢
+    r(14, 7, 1, 5, B);                          // 弓梁
+    r(15, 11, 1, 1, Bd); r(14, 12, 1, 1, Bd);  // 弓下梢
+    r(12, 7, 1, 5, Wt);                         // 弓弦
+    r(12, 9, 2, 1, Bd);                         // 搭箭
+    // —— 腿（裹腿 + 靴） ——
+    r(4, 12, 3, 1, d); r(4, 13, 3, 2, L); r(3, 15, 4, 1, Ll);
+    r(8, 12, 3, 1, d); r(8, 13, 3, 2, L); r(8, 15, 4, 1, Ll);
+    return cv;
+  }
+
+  /** 炮师：铁盔 + 深蓝炮服 + 肩扛右向炮管（朝右绘制，游戏内翻转朝左）。
+   *  实色块像素拼接，深蓝灰描边替代近黑。 */
+  function buildCannoneer() {
+    const W = 18, H = 16;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d  = '#232c44';  // 深蓝灰描边（弱化黑边）
+    const hd = '#39425a';  // 盔暗边
+    const M  = '#6f7c98';  // 铁盔亮
+    const m  = '#4d586e';  // 铁盔暗
+    const S  = '#f4cfa6';  // 皮肤
+    const Sk = '#1f2430';  // 眼 / 炮口黑洞
+    const C  = '#3b4a68';  // 炮服亮
+    const cc = '#27314a';  // 炮服暗 / 腰
+    const Mt = '#5a6680';  // 肩甲
+    const Wt = '#dbe3ef';  // 炮管金属亮
+    const wl = '#a9b5c8';  // 炮管金属暗
+    const Y  = '#8a5a2b';  // 炮架木
+    const Yd = '#64401d';  // 炮架暗
+    const F  = '#ffb03a';  // 炮口火
+    // —— 铁盔 ——
+    r(7, 0, 2, 1, hd);           // 盔顶尖
+    r(6, 1, 4, 1, M);            // 盔脊
+    r(5, 2, 6, 1, hd);
+    r(4, 3, 8, 2, hd);           // 盔体
+    r(5, 3, 6, 2, M);
+    r(5, 4, 6, 1, m);            // 盔檐暗
+    r(8, 5, 1, 2, M);            // 护鼻
+    // —— 脸 ——
+    r(5, 5, 6, 1, S);
+    r(4, 6, 1, 2, d); r(10, 6, 1, 2, d);
+    r(5, 6, 5, 2, S);
+    r(5, 8, 6, 1, d);
+    r(9, 6, 2, 1, Sk); r(9, 6, 1, 1, Wt);  // 眼（朝右）+ 高光
+    // —— 躯干炮服 ——
+    r(3, 8, 3, 2, Mt); r(9, 8, 3, 2, Mt);   // 双肩甲
+    r(4, 8, 7, 1, d);           // 肩线
+    r(3, 9, 9, 1, d);           // 肩外扩
+    r(3, 9, 1, 3, d); r(11, 9, 1, 3, d);
+    r(4, 12, 7, 1, d);          // 腰
+    r(4, 9, 7, 3, C);           // 炮服填
+    r(4, 11, 7, 1, cc);         // 腰带暗
+    // —— 肩扛炮管（朝右） ——
+    r(10, 8, 7, 3, d);          // 炮管外框
+    r(11, 8, 5, 3, Wt);         // 炮管金属
+    r(11, 8, 5, 1, wl);         // 顶暗
+    r(11, 10, 5, 1, wl);        // 底暗
+    r(16, 7, 2, 5, d);          // 炮口箍
+    r(17, 8, 1, 3, Sk);         // 炮口黑洞
+    r(17, 9, 1, 1, F);          // 火光芯
+    r(12, 11, 2, 1, Yd);        // 炮架支腿
+    r(11, 12, 2, 3, Y);
+    r(10, 15, 3, 1, Yd);
+    // —— 腿（炮服裤 + 靴） ——
+    r(4, 12, 3, 1, d); r(4, 13, 3, 2, cc); r(3, 15, 4, 1, Sk);
+    r(7, 12, 3, 1, d); r(7, 13, 3, 2, cc); r(7, 15, 4, 1, Sk);
+    return cv;
+  }
+
   const Sprites = {
     cat: null,   // 白猫主角：assets/cat.png 原图（异步加载）
     eagleA: buildEagle(0, EAGLE_PAL),
@@ -1347,17 +1481,18 @@
     leigong: buildLeigong(),
     leigongSmall: build(LEIGONG, LEI_PAL),   // 雷公小怪：旧版 19×20 像素点阵（Boss 雷公巨兽仍用 leigong.png）
     pig: build(PIG, PIG_PAL),
-    archer: build(ARCHER, ARCHER_PAL),
+    archer: buildArcher(),
     skeleton: build(SKEL, SKEL_PAL),
     blackSkel: build(BLACK_SKEL, BLACK_SKEL_PAL),
     skullhead: build(SKULLHEAD, SKULLHEAD_PAL),
-    cannoneer: build(CANNONEER, CAN_PAL),
+    cannoneer: buildCannoneer(),
     samurai: buildWushi(),
     swordEagleA: buildYing1(),
     swordEagleB: buildYing2(),
     niu1: buildNiu('niu1.png', 310, 336),
     niu2: buildNiu('niu2.png', 388, 466),
     niu3: buildNiu('niu3.png', 524, 638),
+    gulongHead: buildGulongHead(),
     dogHead: buildGoutou(),
     pheasant: buildHuoji(),
     superboy: buildSuperboy(),
