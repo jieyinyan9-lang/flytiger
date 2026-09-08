@@ -244,27 +244,6 @@
         // 测试模式快捷键：B 立即触发 Boss 预警（跳过倒计时），便于反复测试
         if (e.code === 'KeyB' && this.testBoss && this.state === 'playing' &&
             !this.bossActive && this.warnT <= 0) this.bossT = 0;
-        // 调试快捷键：按 1 直接召唤巨型骨龙王（绕过出场抽取，无视地图/轮次/概率规则），仅测试用
-        if (e.code === 'Digit1' && this.state === 'playing' && !this.bossActive) {
-          const BDK = (window.Bosses && window.Bosses.BoneDragonKing);
-          if (BDK) this.spawnBoss(BDK);
-        }
-        // 调试快捷键：按 2 依次刷出 1 个新飞行弹幕小怪（刺羽鸟→魔眼飞虫→魔石甲虫→浮空魔花→风暴飞鱼→双头飞蛇→预言猫头鹰，循环），仅测试用
-        if (e.code === 'Digit2' && this.state === 'playing') {
-          const flyers = ['spikebird', 'eyefly', 'stonebeetle', 'floatflower', 'stormfish', 'twinsnake', 'owl'];
-          const type = flyers[this.flyerTestIdx % flyers.length];
-          this.flyerTestIdx++;
-          this.spawnEnemy(type);
-          this.toast(`测试刷怪：${CFG.enemies[type].name}`, 1.4);
-        }
-        // 调试快捷键：按 4 依次刷出 1 个斗兽场地面小怪（投掷奴→羊头斗士→盾奴→皮影客→自爆囚，循环），仅测试用（无视地图限定）
-        if (e.code === 'Digit4' && this.state === 'playing') {
-          const arenaFoes = ['javelinSlave', 'ramFighter', 'shieldSlave', 'puppet', 'bombPrisoner'];
-          const type = arenaFoes[this.arenaTestIdx % arenaFoes.length];
-          this.arenaTestIdx++;
-          this.spawnEnemy(type);
-          this.toast(`测试刷怪：${CFG.enemies[type].name}`, 1.4);
-        }
         if (this.state === 'levelup' && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3')) {
           const idx = e.code === 'Digit1' ? 0 : e.code === 'Digit2' ? 1 : 2;
           if (this.pendingOptions[idx]) this.pickUpgrade(idx);
@@ -402,8 +381,6 @@
       this.elemPicksThisRound = 0;  // 每轮元素弹道成长选择次数（上限 2）
       this.grassDragonThisRound = false;   // 草龙每轮至多出现一次
       this.unlockedFlyers = new Set();      // 已解锁的飞行弹幕敌人（每轮 30% 概率解锁）
-      this.flyerTestIdx = 0;                // 测试快捷键 2 的刷怪循环索引
-      this.arenaTestIdx = 0;                // 测试快捷键 4 的斗兽场小怪刷怪循环索引
       this._idleAnchor = null;              // 成就：长时间不移动判定锚点（每局重置）
       // 地图专属 Boss（狮身人面像/牛魔/骨龙王）：强制概率轮内独立掷骰（未命中本轮不入池），
       // 离开强制轮后无论是否命中过，都拉平为等权普通池成员——但地图限定永久生效、可反复出场
@@ -3166,8 +3143,8 @@
           ctx.globalAlpha = a;
           ctx.font = 'bold 26px "Microsoft YaHei", sans-serif';
           let x, y, align;
-          if (t.slot === 'lt') {        // 左上：第 X 轮下方
-            align = 'left'; x = 14; y = 80;
+          if (t.slot === 'lt') {        // 左上：顶部 HUD / Boss 血条下方
+            align = 'left'; x = 14; y = 106;
           } else if (t.slot === 'rb') { // 右下角
             align = 'right'; x = CFG.W - 14; y = CFG.H - 18;
           } else {                      // 中上（默认）
