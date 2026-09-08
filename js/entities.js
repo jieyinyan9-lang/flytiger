@@ -5125,121 +5125,18 @@
     }
   }
 
-  /** 巨型骨龙王龙头：放大颅骨 + 双弯角 + 幽绿冥火眼 + 巨颚獠牙（朝 +x 方向） */
+  /** 巨型骨龙王龙头：重绘美术 assets/Boss/gulongnaodai.png（白色骨龙侧头，长吻朝 +x，背景透明）。
+   *  在“已 translate(头位置) + rotate(朝向)”坐标系内绘制。锚点/缩放经浏览器校准：
+   *  图像素 (317,300) = 颈关节原点；s = 0.275（headR=24.4 基准），随 headR 等比缩放。 */
   function dragonHeadBoneKing(ctx, d, h, t, th) {
     const r = d.headR || d.segR * 1.22;
-    const blink = 0.7 + Math.sin(t * 4) * 0.3;
-    // 后颈骨板（连接龙身）
-    ctx.fillStyle = th.edge;
-    ctx.fillRect(-r * 1.25, -r * 0.7, r * 0.5, r * 1.4);
-    ctx.fillStyle = th.belly;
-    ctx.fillRect(-r * 1.2, -r * 0.6, r * 0.4, r * 1.2);
-    // 巨型弯曲双角（骨质）
-    ctx.fillStyle = th.fin;
-    for (const dir of [-1, 1]) {
-      ctx.save();
-      ctx.translate(-r * 0.35, dir * r * 0.55);
-      ctx.rotate(dir * (0.5 + Math.sin(t * 2) * 0.02));
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.quadraticCurveTo(-r * 0.5, dir * r * 1.4, -r * 1.1, dir * r * 1.7);
-      ctx.quadraticCurveTo(-r * 0.4, dir * r * 1.2, 0, dir * 0.25);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-      ctx.fillStyle = th.belly;
-      ctx.beginPath();
-      ctx.arc(-r * 1.05, dir * r * 1.65, r * 0.12, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = th.fin;
-    }
-    // 颅骨外廓
-    ctx.fillStyle = th.edge;
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.9, -r * 0.85);
-    ctx.quadraticCurveTo(-r * 0.1, -r * 1.15, r * 0.5, -r * 0.7);
-    ctx.quadraticCurveTo(r * 0.95, -r * 0.4, r * 0.95, 0);
-    ctx.quadraticCurveTo(r * 0.95, r * 0.4, r * 0.5, r * 0.7);
-    ctx.quadraticCurveTo(-r * 0.1, r * 1.05, -r * 0.9, r * 0.85);
-    ctx.quadraticCurveTo(-r * 1.15, r * 0.2, -r * 0.9, -r * 0.85);
-    ctx.fill();
-    // 颅骨主面
-    ctx.fillStyle = th.belly;
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.8, -r * 0.72);
-    ctx.quadraticCurveTo(-r * 0.1, -r * 0.98, r * 0.42, -r * 0.6);
-    ctx.quadraticCurveTo(r * 0.82, -r * 0.32, r * 0.82, 0);
-    ctx.quadraticCurveTo(r * 0.82, r * 0.32, r * 0.42, r * 0.6);
-    ctx.quadraticCurveTo(-r * 0.1, r * 0.9, -r * 0.8, r * 0.72);
-    ctx.quadraticCurveTo(-r * 1.02, r * 0.16, -r * 0.8, -r * 0.72);
-    ctx.fill();
-    // 颅骨接缝线
-    ctx.strokeStyle = th.scale; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(-r * 0.4, -r * 0.78); ctx.lineTo(-r * 0.1, r * 0.78); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(r * 0.1, -r * 0.65); ctx.lineTo(r * 0.25, r * 0.6); ctx.stroke();
-    // 幽绿冥火眼窝
-    ctx.fillStyle = '#1a1410';
-    ctx.beginPath(); ctx.ellipse(r * 0.08, -r * 0.22, r * 0.26, r * 0.2, -0.2, 0, TAU); ctx.fill();
-    const gx = r * 0.1, gy = -r * 0.22;
-    const grd = ctx.createRadialGradient(gx, gy, 0, gx, gy, r * 0.32);
-    grd.addColorStop(0, `rgba(180,255,160,${blink})`);
-    grd.addColorStop(0.4, `rgba(74,222,128,${0.8 * blink})`);
-    grd.addColorStop(1, 'rgba(34,197,94,0)');
-    ctx.fillStyle = grd;
-    ctx.beginPath(); ctx.arc(gx, gy, r * 0.32, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#e8ffd8';
-    ctx.beginPath(); ctx.arc(gx + r * 0.04, gy - r * 0.03, r * 0.08, 0, TAU); ctx.fill();
-    // 骨质长吻
-    ctx.fillStyle = th.body;
-    ctx.beginPath();
-    ctx.moveTo(r * 0.7, -r * 0.42);
-    ctx.lineTo(r * 1.75, -r * 0.18);
-    ctx.lineTo(r * 1.85, 0);
-    ctx.lineTo(r * 1.75, r * 0.18);
-    ctx.lineTo(r * 0.7, r * 0.42);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = th.scale;
-    ctx.fillRect(r * 0.72, -1, r * 1.1, 2);
-    // 鼻洞
-    ctx.fillStyle = '#1a1410';
-    ctx.beginPath(); ctx.arc(r * 1.55, -r * 0.1, r * 0.08, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(r * 1.55, r * 0.1, r * 0.08, 0, TAU); ctx.fill();
-    // 下颚骨
-    ctx.fillStyle = th.body;
-    ctx.beginPath();
-    ctx.moveTo(r * 0.7, r * 0.34);
-    ctx.lineTo(r * 1.7, r * 0.16);
-    ctx.lineTo(r * 1.62, r * 0.34);
-    ctx.lineTo(r * 0.7, r * 0.52);
-    ctx.closePath();
-    ctx.fill();
-    // 獠牙（上颚向下、下颚向上交错）
-    ctx.fillStyle = '#ffffff';
-    for (let q = 0; q < 5; q++) {
-      const tx = r * 0.82 + q * r * 0.2;
-      ctx.beginPath();
-      ctx.moveTo(tx, r * 0.16); ctx.lineTo(tx + r * 0.07, r * 0.16); ctx.lineTo(tx + r * 0.035, r * 0.42);
-      ctx.closePath(); ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(tx + r * 0.1, r * 0.34); ctx.lineTo(tx + r * 0.17, r * 0.34); ctx.lineTo(tx + r * 0.135, r * 0.1);
-      ctx.closePath(); ctx.fill();
-    }
-    // 吻端触须骨
-    ctx.strokeStyle = th.fin; ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(r * 1.8, -r * 0.18); ctx.quadraticCurveTo(r * 2.1, -r * 0.1, r * 2.2, -r * 0.35);
-    ctx.moveTo(r * 1.8, r * 0.18); ctx.quadraticCurveTo(r * 2.1, r * 0.1, r * 2.2, r * 0.35);
-    ctx.stroke();
-    // 头冠骨刺
-    ctx.fillStyle = th.fin;
-    for (let q = 0; q < 4; q++) {
-      const cx = -r * 0.5 + q * r * 0.32;
-      ctx.beginPath();
-      ctx.moveTo(cx, -r * 0.72); ctx.lineTo(cx + r * 0.12, -r * 0.72);
-      ctx.lineTo(cx + r * 0.06, -r * (1.0 + (q === 1 || q === 2 ? 0.25 : 0)));
-      ctx.closePath(); ctx.fill();
-    }
+    const spr = (typeof Sprites !== 'undefined') && Sprites.gulongHead;
+    if (!spr || !spr.width) return;
+    const k = 0.275 * (r / 24.4);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(spr, -317 * k, -300 * k, spr.width * k, spr.height * k);
+    ctx.restore();
   }
 
   /** 机器蜈蚣龙身节：方形装甲舱 + 铜关节 + 发光核心 + 两侧机械腿 */
@@ -6298,7 +6195,8 @@
       this.flash = 0; this.hurtT = 0;
       this.t = rand(0, 10); this.animT = rand(0, TAU);
       this.dotT = 0; this.dotDps = 0; this.dotType = '';
-      this.freezeT = 0;
+      this.freezeT = 0;             // 骨龙免疫冰冻（恒为 0）
+      this.hitShake = 0;            // 受击左右摇晃计时
       const hpMul = 1 + (g.round - 1) * 0.16 + g.time * 0.0025;
       const baseHp = Math.round(40 * hpMul);
       this.maxHp = opts.hp || baseHp;       // 骨龙组血量 = 3 节血量之和
@@ -6321,6 +6219,8 @@
       this.flash = Math.max(0, this.flash - dt);
       this.hurtT = Math.max(0, this.hurtT - dt);
       this.spawnInvuln = Math.max(0, this.spawnInvuln - dt);
+      this.freezeT = 0;            // 骨龙免疫冰冻（覆盖冰弹/声波）
+      this.hitShake = Math.max(0, this.hitShake - dt);
       // 元素 DoT
       if (this.dotT > 0) {
         this.dotT -= dt;
@@ -6329,55 +6229,45 @@
           if (this.hp <= 0) { this.die(g); return; }
         }
       }
-      if (this.freezeT > 0) { this.freezeT -= dt; return; }
       const p = g.player;
-      const dx = p.x - this.x, dy = p.y - this.y;
+      const dx = this.x - p.x, dy = this.y - p.y;   // 方向：从玩家指向自己（远离）
       const d = Math.hypot(dx, dy) || 1;
       const nx = dx / d, ny = dy / d;
-      if (this.state === 'float' || this.state === 'approach') {
-        // 缓慢接近至安全距离
-        const spd = 70;
-        if (d > this.safeDist) {
-          this.x += nx * spd * dt; this.y += ny * spd * dt;
-          this.state = 'approach';
-        } else {
-          this.state = 'attack'; this.stateT = 0; this.atkT = 0.3; this.volleys = 0;
-        }
-      } else if (this.state === 'attack') {
-        // 悬停微调，仅放 2 发绿火
-        this.x += Math.sin(this.t * 3) * 18 * dt;
-        this.y += Math.cos(this.t * 2.4) * 14 * dt;
-        this.atkT -= dt;
-        if (this.atkT <= 0 && this.volleys < 1) {
-          this.volleys++;
-          const base = Math.atan2(dy, dx);
-          for (let i = 0; i < 2; i++) {
-            const a = base + (i - 0.5) * 0.16;
-            g.bullets.push(new Bullet(this.x, this.y,
-              Math.cos(a) * 320, Math.sin(a) * 320,
-              { kind: 'greenfire', r: 7, dmg: this.bulletDmg * g.atkScale, life: 4 }));
-          }
-          SFX.enemyShoot();
-        }
-        if (this.volleys >= 1) { this.state = 'reposition'; this.stateT = 0; }
-      } else if (this.state === 'reposition') {
-        // 横移后退，重寻攻击距离
-        const perp = Math.atan2(ny, -nx);
-        const dir = Math.sin(this.t * 2) > 0 ? 1 : -1;
-        const rx = Math.cos(perp) * dir, ry = Math.sin(perp) * dir;
-        this.x += (rx - nx * 0.4) * 110 * dt;
-        this.y += (ry - ny * 0.4) * 110 * dt;
-        if (this.stateT > 1.2) { this.state = 'approach'; this.stateT = 0; }
+      const safeDist = 220;   // 保持距离
+      const spd = 95;
+      // 距离 < safeDist → 远离；距离 ≥ safeDist → 悬停微动
+      if (d < safeDist) {
+        this.x += nx * spd * dt;
+        this.y += ny * spd * dt;
+      } else {
+        // 悬停时小幅漂浮，不会飞出屏幕
+        this.x += Math.sin(this.t * 2.5) * 16 * dt;
+        this.y += Math.cos(this.t * 2.1) * 12 * dt;
       }
-      // 边界钳制
+      // 持续朝角色射击（每 0.7s 一轮 2 发绿火）
+      this.atkT = (this.atkT || 0) - dt;
+      if (this.atkT <= 0) {
+        this.atkT = 0.7;
+        const base = Math.atan2(p.y - this.y, p.x - this.x);
+        for (let i = 0; i < 2; i++) {
+          const a = base + (i - 0.5) * 0.16;
+          g.bullets.push(new Bullet(this.x, this.y,
+            Math.cos(a) * 320, Math.sin(a) * 320,
+            { kind: 'greenfire', r: 7, dmg: this.bulletDmg * g.atkScale, life: 4 }));
+        }
+        SFX.enemyShoot();
+      }
+      // 边界钳制（不会到屏幕外面）
       this.x = clamp(this.x, 30, CFG.W - 30);
       this.y = clamp(this.y, 60, CFG.GROUND_Y - 40);
     }
     takeDamage(dmg, g, kb) {
       if (this.dead || this.spawnInvuln > 0) return;
       this.hp -= dmg; this.flash = 0.1; this.hurtT = 0.12;
+      this.hitShake = 0.22;            // 受击左右摇晃 0.22s
       if (kb) { this.x += kb.x * 0.02; this.y += kb.y * 0.02; }
-      burst(g, this.x, this.y, 2, ['#fff', '#4ade80'], 120, 3, 0.18);
+      // 幽绿冥火受击特效
+      burst(g, this.x, this.y, 8, ['#fff', '#bbf7d0', '#4ade80', '#166534'], 150, 4, 0.22, 80);
       SFX.hit();
       if (this.hp <= 0) this.die(g);
     }
@@ -6392,29 +6282,31 @@
       for (let i = 0; i < gemN; i++) g.gems.push(new Gem(this.x + rand(-24, 24), this.y + rand(-24, 24), 2));
     }
     render(ctx) {
+      // 受击左右摇晃偏移
+      const shake = this.hitShake > 0 ? Math.sin(this.t * 60) * 5 * (this.hitShake / 0.22) : 0;
       const r = this.radius;
       // 骨节：边→椎骨→髓腔+肋骨
       ctx.fillStyle = '#8f8a78';
-      ctx.beginPath(); ctx.arc(this.x, this.y, r + 1.5, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(this.x + shake, this.y, r + 1.5, 0, TAU); ctx.fill();
       ctx.fillStyle = '#d8d3c2';
-      ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(this.x + shake, this.y, r, 0, TAU); ctx.fill();
       ctx.fillStyle = '#b5ae9a';
-      ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(this.x + shake, this.y, r * 0.4, 0, TAU); ctx.fill();
       ctx.strokeStyle = '#b5ae9a'; ctx.lineWidth = 2; ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(this.x - r * 0.28, this.y - r * 0.15); ctx.lineTo(this.x - r * 0.9, this.y + r * 0.5);
-      ctx.moveTo(this.x + r * 0.28, this.y - r * 0.15); ctx.lineTo(this.x + r * 0.9, this.y + r * 0.5);
+      ctx.moveTo(this.x + shake - r * 0.28, this.y - r * 0.15); ctx.lineTo(this.x + shake - r * 0.9, this.y + r * 0.5);
+      ctx.moveTo(this.x + shake + r * 0.28, this.y - r * 0.15); ctx.lineTo(this.x + shake + r * 0.9, this.y + r * 0.5);
       ctx.stroke();
       // 脊刺
       ctx.fillStyle = '#c8c2ae';
       ctx.beginPath();
-      ctx.moveTo(this.x - 3, this.y - r * 0.72); ctx.lineTo(this.x + 3, this.y - r * 0.72); ctx.lineTo(this.x, this.y - r - 6);
+      ctx.moveTo(this.x + shake - 3, this.y - r * 0.72); ctx.lineTo(this.x + shake + 3, this.y - r * 0.72); ctx.lineTo(this.x + shake, this.y - r - 6);
       ctx.closePath(); ctx.fill();
       // 受击红染
       if (this.hurtT > 0) {
         ctx.globalCompositeOperation = 'source-atop';
         ctx.fillStyle = `rgba(255,40,40,${clamp(this.hurtT / 0.12, 0, 1) * 0.5})`;
-        ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(this.x + shake, this.y, r + 2, 0, TAU); ctx.fill();
         ctx.globalCompositeOperation = 'source-over';
       }
     }
