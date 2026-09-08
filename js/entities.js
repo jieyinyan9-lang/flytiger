@@ -2463,7 +2463,7 @@
         g.shake(14);
         g.flashT = 0.45; g.flashColor = '#ffd0d0';
         burst(g, this.x, this.y, 44, ['#f7941d', '#ffd93b', '#ff5252', '#fff'], 320, 7, 0.9, 140);
-        g.toast(`${(this.char && this.char.name) || '飞虎'}阵亡！剩余生命 ×${this.lives}，重生！`, 2.2);
+        g.toast(`${(this.char && this.char.name) || '飞喵'}阵亡！剩余生命 ×${this.lives}，重生！`, 2.2);
         // 回到安全位置
         this.x = clamp(this.x, 80, 260);
         this.y = CFG.H * 0.4;

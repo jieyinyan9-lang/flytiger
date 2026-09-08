@@ -197,7 +197,7 @@
     upgrades: [
       {
         id: 'life', icon: '❤', cls: 'c-life', name: '生命强化',
-        desc: '最大生命 +30 并回复 30，飞虎体型成长（上限 3 倍）',
+        desc: '最大生命 +30 并回复 30，飞喵体型成长（上限 3 倍）',
         can(p) { return true; },
         apply(p) {
           p.maxHp += 30;
@@ -251,7 +251,7 @@
       },
       {
         id: 'magnet', icon: '◎', cls: 'c-spd', name: '引力领域',
-        desc: '飞虎引力范围 +70，掉落能量会自动被吸纳（可叠加）',
+        desc: '飞喵引力范围 +70，掉落能量会自动被吸纳（可叠加）',
         can(p) { return p.magnetRange < 460; },
         apply(p) { p.magnetRange += 70; p.magnetLv++; },
         level(p) { return p.magnetLv; }
@@ -291,7 +291,7 @@
       /* —— 第三轮后出现：防护刀刃（环绕光剑） —— */
       {
         id: 'blade', icon: '†', cls: 'c-spd', name: '防护刀刃',
-        desc: '召唤一把光剑持续环绕飞虎：50% 概率格挡敌方子弹，并对接触敌人造成伤害；再次选择提升刀刃伤害',
+        desc: '召唤一把光剑持续环绕飞喵：50% 概率格挡敌方子弹，并对接触敌人造成伤害；再次选择提升刀刃伤害',
         can(p, g) { return g && g.round >= 4; },
         apply(p) {
           if (!p.blades) p.blades = 1;
@@ -316,7 +316,7 @@
       /* —— 移动速度强化 —— */
       {
         id: 'spdMove', icon: '»', cls: 'c-spd', name: '移动速度',
-        desc: '飞虎飞行速度 +12%，机动性大幅提升（最高 +60%）',
+        desc: '飞喵飞行速度 +12%，机动性大幅提升（最高 +60%）',
         can(p) { return (p.moveSpdLv || 0) < 5; },
         apply(p) { p.moveSpdLv = (p.moveSpdLv || 0) + 1; },
         level(p) { return p.moveSpdLv || 0; }
@@ -447,7 +447,7 @@
      *  colosseum 罗马角斗场为特殊地图：不参与随机抽取（仅主界面主动选择进入），
      *  死亡复活不会离开角斗场、其它地图死亡也不会随机进来 */
     maps: [
-      { id: 'grassland', name: '飞虎草原', icon: '🌿' },
+      { id: 'grassland', name: '飞喵草原', icon: '🌿' },
       { id: 'desert',    name: '沙漠',       icon: '🏜️', obs: ['cactusT', 'cactusM', 'cactusL'] },
       { id: 'snow',      name: '雪地',       icon: '❄️', obs: ['iceT', 'iceM', 'iceL'] },
       { id: 'volcano',   name: '火焰山',     icon: '🌋', obs: ['vrockT', 'vrockM', 'vrockL'], crater: true },

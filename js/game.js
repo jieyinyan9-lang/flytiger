@@ -788,7 +788,7 @@
     /* ---------------- 死亡演出（黑气 + 死法文本） ---------------- */
     /** 按击杀者归因组装死法文案；归因缺失时兜底为最近的存活敌人/Boss */
     makeDeathScene(src) {
-      const charName = (this.player && this.player.char && this.player.char.name) || '飞虎';
+      const charName = (this.player && this.player.char && this.player.char.name) || '飞喵';
       let pool = null, enemyName = null;
       const pick = arr => arr[Math.floor(Math.random() * arr.length)];
       if (src && src.k === 'e') {

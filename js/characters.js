@@ -11,9 +11,9 @@
       id: 'xiaobai', name: '小白', art: 'assets/cat.png?v=20260907', face: 'assets/Role/cat.png?v=20260907', icon: '🐱',
       speedMul: 1, dmg: 10, fireMul: 1,
       kind: 'bolt', ult: 'wave',
-      tag: '飞虎',
+      tag: '飞喵',
       trait: '标准速度 · 标准伤害 · 强光波大招',
-      desc: '均衡的白猫飞虎，弹道可成长为高阶强化弹。'
+      desc: '均衡的白猫飞喵，弹道可成长为高阶强化弹。'
     },
     xiake: {
       id: 'xiake', name: '侠客', art: 'assets/Xiake.png', face: 'assets/Role/xiake.png?v=20260907', icon: '🗡️',

@@ -128,7 +128,7 @@ kbd {
 
 /* ---------- Boss 血条（像素风 + 斩击/灼烧演出） ---------- */
 #boss-hud {
-  position: absolute; top: 42px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
   width: 560px; text-align: center;
   text-shadow: 2px 2px 0 #000;
 }
