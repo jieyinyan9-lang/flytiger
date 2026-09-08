@@ -260,9 +260,11 @@ kbd {
   margin-top: -4px;
 }
 
-/* 右上角：背景音乐开关 */
+/* 右上角：背景音乐开关 + 操作模式切换（纵向排列、右对齐） */
 .menu-topright {
   position: absolute; top: 12px; right: 14px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  z-index: 20;
 }
 
 /* 备战角色醒目展示区 */
@@ -320,16 +322,16 @@ kbd {
 }
 .menu-ctrl b { color: #ffd166; }
 
-/* 操作模式选择 */
+/* 操作模式选择（右上角音乐开关下方） */
 .mode-row {
-  display: flex; align-items: center; justify-content: center; gap: 12px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
 }
 .mode-btn {
   font-family: inherit; cursor: pointer;
-  font-size: 14px; font-weight: 900; color: #b9ccea;
+  font-size: 13px; font-weight: 900; color: #b9ccea;
   background: rgba(20,30,60,.85);
-  border: 3px solid #33477a;
-  padding: 6px 16px;
+  border: 2px solid #33477a; border-radius: 4px;
+  padding: 5px 12px;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   transition: transform .08s, border-color .12s, color .12s, box-shadow .12s;
 }
@@ -367,6 +369,59 @@ kbd {
 }
 .big-btn:hover { filter: brightness(1.1); }
 .big-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #8a5a00; }
+
+/* 罗马角斗场按钮：金黄底 + 火焰燃烧感（明灭渐变 + 火舌摆动 + 橙红光晕） */
+.flame-btn {
+  position: relative;
+  z-index: 1;
+  color: #3a1500;
+  border-color: #5a1f00;
+  background:
+    radial-gradient(circle at 50% 125%, rgba(255,255,210,0.95), rgba(255,190,0,0) 55%),
+    linear-gradient(to bottom, #fff3a0 0%, #ffc02e 38%, #ff7a00 78%, #e84000 100%);
+  background-size: 100% 100%, 220% 240%;
+  box-shadow: 0 6px 0 #7a2c00, 0 10px 20px rgba(0,0,0,.5),
+    0 0 16px rgba(255,130,0,.85), 0 0 34px rgba(255,80,0,.45);
+  text-shadow: 0 1px 0 rgba(255,255,255,.45);
+  animation: flameFlicker 0.22s infinite alternate;
+}
+@keyframes flameFlicker {
+  0%   { background-position: 0 0, 0 0; filter: brightness(1); }
+  100% { background-position: 0 0, 36px -28px; filter: brightness(1.13); }
+}
+/* 按钮底边摆动的火舌 */
+.flame-btn::before {
+  content: '';
+  position: absolute; left: -8px; right: -8px; bottom: -12px; height: 30px;
+  background: radial-gradient(ellipse at center bottom,
+    #ffd23b 0%, #ff7b2e 42%, rgba(255,60,0,0) 78%);
+  filter: blur(1px);
+  z-index: -1; pointer-events: none;
+  animation: flameTongue 0.26s infinite alternate;
+}
+@keyframes flameTongue {
+  0%   { transform: scaleY(0.75) skewX(-4deg); opacity: .8; }
+  100% { transform: scaleY(1.3) skewX(5deg); opacity: 1; }
+}
+.flame-btn:active { box-shadow: 0 2px 0 #7a2c00, 0 0 12px rgba(255,130,0,.8); }
+
+/* 碎礼花覆盖层（角斗场选图/击退怪物潮时满屏飘落） */
+#confetti-layer {
+  position: absolute; inset: 0; overflow: hidden;
+  pointer-events: none; z-index: 70;
+}
+.confetti-piece {
+  position: absolute; top: -18px;
+  border-radius: 1px;
+  animation-name: confettiFall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes confettiFall {
+  0%   { transform: translate3d(0, -20px, 0) rotate(0deg); opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translate3d(var(--sway, 40px), 580px, 0) rotate(720deg); opacity: .85; }
+}
 
 .go-title {
   font-size: 52px; font-weight: 900; color: #ff5b5b;
@@ -543,3 +598,77 @@ kbd {
 .char-status-item.disabled { color: #5a6f8a; cursor: not-allowed; }
 .char-status-item.disabled:hover { background: transparent; color: #5a6f8a; }
 #char-back-btn { margin-top: 8px; flex: none; }
+
+/* ---------- 喵咪成就界面 ---------- */
+#ach-panel {
+  position: absolute; inset: 0; z-index: 45;
+  background: rgba(6, 10, 24, .96);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 10px 10px;
+  overflow: hidden;
+}
+#ach-title {
+  font-size: 24px; font-weight: 900; color: #ffe08a;
+  letter-spacing: 6px; text-shadow: 2px 2px 0 #000;
+  margin-bottom: 4px;
+}
+#ach-progress {
+  font-size: 13px; font-weight: 900; color: #6be0ff;
+  background: rgba(20,30,60,.8); border: 2px solid #33477a; border-radius: 20px;
+  padding: 3px 18px; margin-bottom: 8px; letter-spacing: 1px;
+}
+#ach-list {
+  flex: 1; width: 100%; max-width: 860px;
+  overflow-y: auto;
+  padding: 2px 8px 8px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ach-sec { display: flex; flex-direction: column; gap: 6px; }
+.ach-sec-title {
+  font-size: 15px; font-weight: 900; color: #ffd166;
+  letter-spacing: 2px; text-shadow: 1px 1px 0 #000;
+  border-left: 4px solid #ffd166;
+  padding-left: 8px;
+}
+.ach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 6px;
+}
+.ach-card {
+  display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(160deg, rgba(28, 42, 78, .85), rgba(14, 22, 46, .92));
+  border: 2px solid #33477a; border-radius: 8px;
+  padding: 8px 10px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.ach-card.locked { opacity: .62; filter: grayscale(.7); }
+.ach-card.secret.locked { opacity: .45; }
+.ach-card.unlocked {
+  border-color: #ffd166;
+  box-shadow: 0 0 10px rgba(255, 209, 102, .35);
+  background: linear-gradient(160deg, rgba(58, 48, 22, .9), rgba(30, 26, 46, .94));
+}
+.ach-icon {
+  flex: 0 0 auto; width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  background: rgba(8,12,28,.6); border: 2px solid #33477a; border-radius: 8px;
+}
+.ach-card.unlocked .ach-icon { border-color: #ffd166; }
+.ach-info { flex: 1; min-width: 0; text-align: left; }
+.ach-name {
+  font-size: 14px; font-weight: 900; color: #fff; letter-spacing: 1px;
+  text-shadow: 1px 1px 0 #000;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ach-card.unlocked .ach-name { color: #ffe9a8; }
+.ach-desc {
+  font-size: 11px; color: #b9ccea; line-height: 1.35; margin-top: 2px;
+}
+.ach-mark {
+  flex: 0 0 auto;
+  font-size: 18px; font-weight: 900; color: #6be0ff;
+  text-shadow: 0 0 8px rgba(107,224,255,.8);
+}
+#ach-back-btn { margin-top: 8px; flex: none; }

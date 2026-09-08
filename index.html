@@ -1,10 +1,10 @@
-﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>飞虎的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260908r31">
+<link rel="stylesheet" href="css/style.css?v=20260909r33">
 </head>
 <body>
 <div id="game-wrap">
@@ -80,9 +80,13 @@
 
   <!-- 开始菜单 -->
   <div id="menu">
-    <!-- 右上角：背景音乐开关 -->
+    <!-- 右上角：背景音乐开关 + 操作模式切换 -->
     <div class="menu-topright">
       <button id="menu-bgm-btn" class="audio-btn" type="button">🎵 背景音乐：开</button>
+      <div class="mode-row">
+        <button id="mode-keyboard" class="mode-btn active" type="button">⌨ 键盘模式<small>方向键 / WASD</small></button>
+        <button id="mode-mouse" class="mode-btn" type="button">🖱 鼠标模式<small>移动鼠标引导飞行</small></button>
+      </div>
     </div>
 
     <div class="title-cn">飞虎的奇妙冒险</div>
@@ -103,11 +107,8 @@
     <div class="menu-main">
       <button id="select-btn" class="big-btn" type="button">🐱 选择角色</button>
       <button id="start-btn" class="big-btn" type="button">▶ 开始游戏</button>
-      <button id="menu-map-btn" class="big-btn map-btn" type="button" title="点击切换地图">🎲 随机地图</button>
-      <div class="mode-row">
-        <button id="mode-keyboard" class="mode-btn active" type="button">⌨ 键盘模式<small>方向键 / WASD</small></button>
-        <button id="mode-mouse" class="mode-btn" type="button">🖱 鼠标模式<small>移动鼠标引导飞行</small></button>
-      </div>
+      <button id="ach-btn" class="big-btn ach-btn" type="button">🏅 喵咪成就</button>
+      <button id="menu-map-btn" class="big-btn map-btn" type="button" title="点击切换地图">🌀 多元宇宙</button>
     </div>
 
     <!-- 操作说明：左侧靠下（去掉近战/强化/轮次） -->
@@ -135,6 +136,14 @@
     <button id="char-back-btn" class="pause-btn alt" type="button">← 返回菜单</button>
   </div>
 
+  <!-- 喵咪成就 -->
+  <div id="ach-panel" class="hidden">
+    <div id="ach-title">🏅 喵咪成就</div>
+    <div id="ach-progress">已解锁 0 / 0</div>
+    <div id="ach-list"></div>
+    <button id="ach-back-btn" class="pause-btn alt" type="button">← 返回菜单</button>
+  </div>
+
   <!-- 游戏结束 -->
   <div id="gameover" class="hidden">
     <div class="go-title">飞虎陨落</div>
@@ -145,11 +154,12 @@
 
 <script src="js/sprites.js?v=20260908r38"></script>
 <script src="js/characters.js?v=20260909r67"></script>
-<script src="js/config.js?v=20260906r60"></script>
-<script src="js/audio.js?v=20260908r31"></script>
+<script src="js/config.js?v=20260909r61"></script>
+<script src="js/audio.js?v=20260909r33"></script>
 <script src="js/music.js?v=20260906r53"></script>
-<script src="js/entities.js?v=20260909r86"></script>
-<script src="js/bosses.js?v=20260909r98"></script>
-<script src="js/game.js?v=20260909r102"></script>
+<script src="js/achievements.js?v=20260909r1"></script>
+<script src="js/entities.js?v=20260909r87"></script>
+<script src="js/bosses.js?v=20260909r99"></script>
+<script src="js/game.js?v=20260909r104"></script>
 </body>
 </html>

@@ -133,6 +133,17 @@
       if (c) { tone(784, 0.12, 'square', 0.1, null, c.currentTime + 0.18); tone(1046, 0.22, 'square', 0.1, null, c.currentTime + 0.28); }
     },
     pick() { tone(1200 + Math.random() * 300, 0.06, 'sine', 0.05, 1800); },
+    /** 成就解锁：明亮钟声琶音（C-E-G-C 上行）+ 高音闪光 */
+    achievement() {
+      if (muted) return;
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((f, i) => {
+        tone(f, 0.28, 'sine', 0.11, null, i * 0.09);
+        tone(f * 2, 0.22, 'triangle', 0.05, null, i * 0.09);
+      });
+      tone(1568, 0.5, 'sine', 0.08, 2093, 0.36);
+      noiseAt(0.36, 0.5, 0.05, 'highpass', 6000, 9000);
+    },
     warn() {
       tone(440, 0.25, 'square', 0.12);
       const c = ac();
@@ -311,6 +322,28 @@
     charge() { tone(90, 0.6, 'sawtooth', 0.12, 240); tone(45, 0.6, 'square', 0.07, 110); },
     /** 鹤仙鸣叫：高亢下滑长鸣（两段） */
     sweep() { tone(1650, 0.28, 'triangle', 0.09, 1150); tone(1250, 0.34, 'triangle', 0.08, 780, 0.26); },
+    /** 罗马角斗场：观众席鼓掌欢呼——密集掌声拍点 + 人潮欢呼上涌 + "耶"人声群，约 2.8s */
+    crowdCheer() {
+      if (muted) return;
+      // 人潮欢呼底噪：带通噪声涌动（上涌 → 第二波回落）+ 高频空气嘶声
+      noiseAt(0, 1.7, 0.17, 'bandpass', 620, 1500);
+      noiseAt(0.5, 2.2, 0.1, 'bandpass', 900, 980);
+      noiseAt(0.85, 1.95, 0.13, 'bandpass', 1300, 680);
+      noiseAt(0, 2.7, 0.045, 'highpass', 3600, 5200);
+      // 掌声：72 个短促带通噪声拍点（前密后疏，频率/音量随机）
+      for (let i = 0; i < 72; i++) {
+        const t = Math.pow(Math.random(), 0.8) * 2.6;
+        noiseAt(t, 0.035 + Math.random() * 0.04, 0.04 + Math.random() * 0.05,
+          'bandpass', 1800 + Math.random() * 1400, 1200 + Math.random() * 1000);
+      }
+      // 人声"耶——"欢呼群：多组失谐锯齿/方波上扬
+      tone(330, 0.55, 'sawtooth', 0.05, 524, 0.32);
+      tone(349, 0.55, 'sawtooth', 0.045, 556, 0.42);
+      tone(294, 0.6, 'square', 0.035, 468, 0.95);
+      tone(392, 0.6, 'sawtooth', 0.05, 620, 1.05);
+      tone(262, 0.7, 'triangle', 0.04, 392, 1.65);
+      tone(440, 0.55, 'sawtooth', 0.04, 660, 1.85);
+    },
     /** 闪电链跳跃：高频噼啪 */
     zap() {
       const now = performance.now();

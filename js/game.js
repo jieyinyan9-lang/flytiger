@@ -5,7 +5,64 @@
   'use strict';
 
   const { Player, Enemy, Gem, Bullet, Particle, Rock, GrassDragon, burst, rand, randi, clamp } = window.FT;
+  const { setShooter, clearShooter } = window.FT;
   const TAU = Math.PI * 2;
+
+  /* ============================================================
+   * 死法文案：格式「{角色名}被{敌人名}{action}」
+   * action 接在敌人名之后（部分以"的/用"开头），红色大字显示
+   * ============================================================ */
+  const DEATH_LINES = {
+    enemy: {
+      eagle: ['俯冲撞穿了胸膛', '用翅膀扇下了悬崖摔死了'],
+      bat: ['群活活撞烂了脸', '缠住了脖子窒息而亡'],
+      skeleton: ['贴身炸成了碎块', '的自爆冲击波震碎了五脏六腑'],
+      demon: ['的火花弹打穿了脑门', '双发火花弹夹击烧成了灰', '悬停瞄准后一枪爆了头'],
+      skull: ['连射光弹打成了筛子', '瞄准扫射击碎了膝盖后倒地再被射穿', '持续锁定连射钉死在了墙上'],
+      archer: ['抛物线箭矢射穿了天灵盖', '冷箭射中了喉咙', '从背后一箭穿心'],
+      cannoneer: ['重型炮弹炸飞了半边身子', '连射重炮轰成了肉渣', '定点炮击直接砸成了肉饼'],
+      superboy: ['细激光切断了脖子', '激光射穿了眼窝烧进了脑子', '细激光炸毁山石后活埋了'],
+      leigong: ['纵向闪电从头顶劈成了焦炭', '双雷夹击电得连骨头都冒烟了', '落雷劈中后跳起来又挨了第二下'],
+      pig: ['火球炸成了烤全人', '双发火球爆裂后的碎片扎成了刺猬', '火球碎片崩瞎了双眼后踩空摔死'],
+      bigbat: ['S形黑飞刀削掉了天灵盖', '5发散射飞刀钉成了门板', '无敌期间撞飞后落地摔断了脖子', '飞刀割断了脚筋后被活活咬死'],
+      grassdragon: ['龙鳞刺射穿了太阳穴', '钻地时撞断了双腿后吞掉了', '分裂的小段缠住身体绞成了肉泥', '从地下破土而出顶穿了肚子'],
+      spikebird: ['10向散射羽毛弹打成了蜂窝', '羽毛弹糊了一脸窒息而亡'],
+      eyefly: ['锁定魔法弹正中眉心', '连发魔法弹轰碎了胸膛'],
+      stonebeetle: ['蓄力魔法矛贯穿了心脏', '极快魔法矛钉穿后拖行了百米'],
+      floatflower: ['12向环形刺球弹幕绞成了肉馅', '刺球弹幕从脚到头打成了筛子'],
+      stormfish: ['S形波浪风暴弹撞断了肋骨', '三发风暴弹连环命中炸成了碎片'],
+      twinsnake: ['交叉菱形弹幕切开了喉咙', '双头交替连射打成了烂泥'],
+      owl: ['追踪魔法羽毛追到天涯海角后穿心', '连续5发自机狙羽毛扎成了仙人掌']
+    },
+    boss: {
+      pigking: ['三连大火球炸上了天摔死了', '弧形扇形火焰喷成了烤乳猪', '盘旋走位时一头撞飞掉进了岩浆'],
+      thunderbehemoth: ['纵三连落雷劈成了三段', '横双道闪电切成了三截', 'X形对角斜闪电钉穿后电成灰', '半血狂暴竖雷夹击电到脑浆迸裂'],
+      samurai: ['手里剑散射割断了颈动脉', '蓄力掷出的武士刀钉穿了肚子', '蓄力冲刺斩拦腰砍成了两段'],
+      swordeagle: ['白尾扫断了脖子', '羽毛扇形齐射打成了漏勺', '旋风弹卷飞后高空坠落摔碎了', '蓄力旋转突袭冲锋撞烂了胸腔'],
+      skullking: ['瞄准连射打穿了脑壳', '扇形9连弹轰成了肉末', '12向环弹带着魂火拖尾烧穿了全身'],
+      dogking: ['狗头环形弹咬掉了脑袋', '机械狗腿夹击挤成了肉饼', '半血解体后肢体连击打碎了所有骨头', '长线光束扫过拦腰切成了两半'],
+      giantpheasant: ['高速炮弹炸飞了脑袋', '炮口散射打成了蜂窝煤', '弧形喷火烧成了焦尸', '尾部巨型追踪导弹追到炸成了碎渣'],
+      homelander: ['三束激光同时烧穿了三个洞', '贴地冲刺撞断了所有肋骨', '旋转激光扫射切成了一段一段的', '瞬移激光从背后射穿了后脑勺'],
+      bossman: ['西装巨人漂浮弹砸扁了', '召唤的军队乱刀砍成了肉泥', '半血变身破损巨头双眼激光烧化了半边身子'],
+      stranger: ['S形冲刺撞碎了头骨', '飞刀插满了全身', '巨型十字弹追击后碎裂扎穿了', '十字弹命中后被吸干了血'],
+      frogking: ['弧形跳跃砸扁了脑壳', '蓄力冲撞顶飞后撞墙撞死了', '吐舌贯穿全屏卷过去后摔断了脖子', '贴脸爪击掏出了心脏'],
+      cranesage: ['追魂羽针扎穿了眉心', '未毁的羽针加速冲刺穿颅而过', '鹤鸣声波圈震碎了耳膜和脑子', '旋羽领域卷成了碎片', '万羽天葬扎成了肉串'],
+      sphinx: ['双爪扇形石片割开了喉咙', '贴地冲击波震断了双腿后倒地摔死', '双眼扫射烧穿了胸腔', '横冲撞甩月牙刃腰斩了', '双螺旋弹幕和三组连击绞成了肉渣'],
+      niumo: ['牛角散射射穿了五脏六腑', '牛头冲撞顶碎了胸腔', '双角夹击挤成了肉饼', '追踪魔角追击后穿颅而亡', '魔王爆发齐射轰成了碎末'],
+      bonedragonking: ['钻地出土时冲撞砸烂了全身', '绿火连射烧成了骨渣', '头部碎裂后崩解的骨龙群啃食殆尽', '小骨蛇缠满全身绞断了每一根骨头']
+    }
+  };
+  /** Boss 死法池 key → 显示名 */
+  const BOSS_DEATH_NAMES = {
+    pigking: '火焰飞猪王', thunderbehemoth: '雷公巨兽', samurai: '飞天日本武士',
+    swordeagle: '咬剑鹰', skullking: '亡灵骷髅王', dogking: '飞天狗王',
+    giantpheasant: '巨型野鸡王', homelander: '祖国人', bossman: '大王',
+    stranger: '怪客', frogking: '蛙哥', cranesage: '鹤仙',
+    sphinx: '狮身人面像', niumo: '牛魔', bonedragonking: '巨型骨龙王'
+  };
+  /** 死亡演出时序（秒）：黑气涌入 2.4s → 文本逐字 → 完全显示后停留 3s（总上限 10s）→ 黑色淡出 1.6s */
+  const DEATH_FX = { BLACK_IN: 2.4, HOLD_AFTER: 3, AUTO_MAX: 10, FADE_OUT: 1.6 };
+
 
   class Game {
     constructor() {
@@ -64,6 +121,7 @@
       // 绝不能让构造函数中断——否则 reset()/主循环不启动，背景音乐与音效会全部静默
       this.onClick('start-btn', () => this.start());
       this.onClick('select-btn', () => this.openCharSelect());
+      this.onClick('ach-btn', () => { if (window.Ach) Ach.openPanel(); });
       this.onClick('restart-btn', () => this.start());
       this.onClick('pause-restart-btn', () => this.start());
       this.onClick('pause-resume-btn', () => this.togglePause());
@@ -141,6 +199,7 @@
       window.addEventListener('keydown', e => {
         if (map[e.code]) { this.keys[map[e.code]] = true; e.preventDefault(); }
         if (e.code === 'Space' || e.code === 'Enter') {
+          if (this.deathScene) { this.skipDeathScene(); e.preventDefault(); return; }
           if (this.state === 'menu' || this.state === 'gameover') this.start();
           else if (this.state === 'playing' && e.code === 'Space') this.player.tryUltimate(this);
           e.preventDefault();
@@ -152,7 +211,7 @@
         // 测试模式快捷键：B 立即触发 Boss 预警（跳过倒计时），便于反复测试
         if (e.code === 'KeyB' && this.testBoss && this.state === 'playing' &&
             !this.bossActive && this.warnT <= 0) this.bossT = 0;
-        // 调试快捷键：按 1 直接召唤巨型骨龙王（无视地图/轮次/单次限制），仅测试用
+        // 调试快捷键：按 1 直接召唤巨型骨龙王（绕过出场抽取，无视地图/轮次/概率规则），仅测试用
         if (e.code === 'Digit1' && this.state === 'playing' && !this.bossActive) {
           const BDK = (window.Bosses && window.Bosses.BoneDragonKing);
           if (BDK) this.spawnBoss(BDK);
@@ -302,11 +361,9 @@
       this.grassDragonThisRound = false;   // 草龙每轮至多出现一次
       this.unlockedFlyers = new Set();      // 已解锁的飞行弹幕敌人（每轮 30% 概率解锁）
       this.flyerTestIdx = 0;                // 测试快捷键 2 的刷怪循环索引
-      this.sphinxSpawned = false;         // 狮身人面像每局至多出现一次（沙漠专属）
-      this.niuMoSpawned = false;          // 牛魔特殊期每局至多出场一次（草原专属）
-      this.niuMoGeneric = false;          // 12 只通用 Boss 全部轮完后，牛魔转入普通池
-      this.boneDragonSpawned = false;     // 骨龙王特殊期每局至多出场一次（荒地专属）
-      this.boneDragonGeneric = false;     // 通用 Boss 全部轮完后，骨龙王转入普通池
+      this._idleAnchor = null;              // 成就：长时间不移动判定锚点（每局重置）
+      // 地图专属 Boss（狮身人面像/牛魔/骨龙王）：强制概率轮内独立掷骰（未命中本轮不入池），
+      // 离开强制轮后无论是否命中过，都拉平为等权普通池成员——但地图限定永久生效、可反复出场
       this.diffMul = 1;
       this.clouds = [];
       for (let i = 0; i < 7; i++) {
@@ -323,25 +380,32 @@
         this.crater = null; this.sea = null;
         this.bossT = 3;
       }
+      // 罗马角斗场：Boss 出现间隔减半（首场）
+      if (this.mapId === 'colosseum') {
+        this.bossT = Math.max(1, Math.round(this.bossT * CFG.map.arenaBossTimeMul));
+      }
     }
 
-    /** 地图 → 龙系主题（草龙仅草原；沙虫/黑龙/红龙/骨蛇/机器蜈蚣/深海蓝龙各属其图） */
+    /** 地图 → 龙系主题（草龙仅草原；沙虫/黑龙/红龙/骨蛇/机器蜈蚣/深海蓝龙各属其图；角斗场钢铁林立沿用机器蜈蚣） */
     static get MAP_THEME() {
-      return { grassland: 'grass', desert: 'sand', snow: 'black', volcano: 'red', wasteland: 'bone', cyber: 'mech', ocean: 'sea' };
+      return { grassland: 'grass', desert: 'sand', snow: 'black', volcano: 'red', wasteland: 'bone', cyber: 'mech', ocean: 'sea', colosseum: 'mech' };
     }
 
-    /** 地图选择按钮文案：随机 / 具体地图名 */
+    /** 地图选择按钮文案：多元宇宙（随机） / 具体地图名 */
     mapChoiceLabel() {
-      if (this.mapChoice === 'random') return '🎲 随机地图';
+      if (this.mapChoice === 'random') return '🌀 多元宇宙';
       const m = CFG.maps.find(x => x.id === this.mapChoice);
-      return m ? `${m.icon} ${m.name}` : '🎲 随机地图';
+      return m ? `${m.icon} ${m.name}` : '🌀 多元宇宙';
     }
-    /** 同步菜单地图按钮文案 */
+    /** 同步菜单地图按钮文案 + 角斗场火焰按钮态 */
     syncMapBtns() {
       const label = this.mapChoiceLabel();
-      if (this.el && this.el.menuMapBtn) this.el.menuMapBtn.textContent = label;
+      if (this.el && this.el.menuMapBtn) {
+        this.el.menuMapBtn.textContent = label;
+        this.el.menuMapBtn.classList.toggle('flame-btn', this.mapChoice === 'colosseum');
+      }
     }
-    /** 循环切换地图选择：随机 → 草原 → 沙漠 → … → 大海 → 随机 */
+    /** 循环切换地图选择：多元宇宙 → 草原 → 沙漠 → … → 角斗场 → 多元宇宙 */
     cycleMapChoice() {
       const ids = ['random'].concat(CFG.maps.map(m => m.id));
       const i = Math.max(0, ids.indexOf(this.mapChoice));
@@ -349,7 +413,9 @@
       try { localStorage.setItem('flytiger_map', this.mapChoice); } catch (e) {}
       this.syncMapBtns();
       if (this.state === 'menu') this.rollMap();   // 菜单中切换：立即预览所选地图背景
-      SFX.hit();
+      // 选到罗马角斗场：观众席一阵欢呼 + 满屏碎礼花
+      if (this.mapChoice === 'colosseum') this.arenaCelebrate();
+      else SFX.hit();
     }
 
     /**
@@ -365,11 +431,12 @@
         map = CFG.maps.find(m => m.id === this.mapChoice);
       }
       if (!map) {
-        let pool = CFG.maps.slice();
+        // 随机池：罗马角斗场永不参与随机（仅主界面主动选择进入）
+        let pool = CFG.maps.filter(m => m.id !== 'colosseum');
         if (opts.excludeOcean) pool = pool.filter(m => m.id !== 'ocean');
         if (opts.forceDiff) pool = pool.filter(m => m.id !== this.mapId);
-        if (!pool.length) pool = CFG.maps.filter(m => m.id !== this.mapId);
-        if (!pool.length) pool = CFG.maps.slice();
+        if (!pool.length) pool = CFG.maps.filter(m => m.id !== 'colosseum' && m.id !== this.mapId);
+        if (!pool.length) pool = CFG.maps.filter(m => m.id !== 'colosseum');
         map = pool[Math.floor(Math.random() * pool.length)];
       }
       this.map = map;
@@ -395,9 +462,15 @@
     }
 
     /** 死亡复活后刷新至另一张地图：清空旧地图障碍与残留龙系，保留轮次/成长/生命。
-     *  随机切换；若场上有地面类敌人，则不会切到大海（大海不出现地面类敌人） */
+     *  随机切换；若场上有地面类敌人，则不会切到大海（大海不出现地面类敌人）。
+     *  角斗场特殊规则：角斗场内死亡复活仍留在角斗场；其它地图死亡不会随机进角斗场（rollMap 已排除） */
     rerollMap() {
-      this.rollMap({ forceDiff: true, honorChoice: false, excludeOcean: this.hasGroundUnits() });
+      if (this.mapId === 'colosseum') {
+        // 角斗场：不换图，仅清空战场障碍/残留龙系
+        this.rollMap({ honorChoice: true });
+      } else {
+        this.rollMap({ forceDiff: true, honorChoice: false, excludeOcean: this.hasGroundUnits() });
+      }
       this.rocks.length = 0;
       this.rockT = 1.2;
       // 旧地图的龙系怪物随之消失，新地图的龙当轮可再次出场
@@ -406,6 +479,39 @@
       }
       this.grassDragonThisRound = false;
       this.toast(`${this.map.icon} 转移至：${this.map.name}！`, 2.6);
+    }
+
+    /** 角斗场庆祝：满屏碎礼花（DOM 覆盖层，菜单/局内均可显示）+ 观众鼓掌欢呼 */
+    arenaCelebrate() {
+      if (SFX.crowdCheer) SFX.crowdCheer();
+      try {
+        const wrap = document.getElementById('game-wrap');
+        if (wrap) {
+          let layer = document.getElementById('confetti-layer');
+          if (!layer) {
+            layer = document.createElement('div');
+            layer.id = 'confetti-layer';
+            wrap.appendChild(layer);
+          }
+          const colors = ['#ff4d4d', '#ffd93b', '#4dff88', '#4dc3ff', '#b44dff', '#ff9a3b', '#ffffff'];
+          for (let i = 0; i < 110; i++) {
+            const p = document.createElement('i');
+            p.className = 'confetti-piece';
+            const size = 6 + Math.floor(Math.random() * 8);
+            p.style.left = Math.random() * 100 + '%';
+            p.style.width = size + 'px';
+            p.style.height = (size * 1.6) + 'px';
+            p.style.background = colors[Math.floor(Math.random() * colors.length)];
+            p.style.animationDuration = (2.2 + Math.random() * 1.6) + 's';
+            p.style.animationDelay = (Math.random() * 0.8) + 's';
+            p.style.setProperty('--sway', (Math.random() * 160 - 80) + 'px');
+            p.addEventListener('animationend', () => p.remove());
+            layer.appendChild(p);
+          }
+          // 清理空层
+          setTimeout(() => { if (layer && !layer.children.length) layer.remove(); }, 5200);
+        }
+      } catch (e) {}
     }
 
     /* ---------------- 角色选择 ---------------- */
@@ -636,6 +742,7 @@
       SFX.unlock();
       this.reset();
       this.state = 'playing';
+      if (window.Ach) { Ach.beginRun(this.charId); Ach.evt('runStart', { g: this }); }
       this.el.menu.classList.add('hidden');
       this.el.gameover.classList.add('hidden');
       this.el.levelup.classList.add('hidden');
@@ -653,6 +760,7 @@
     gameOver() {
       if (this.state === 'gameover') return;
       this.state = 'gameover';
+      if (window.Ach) Ach.evt('gameOver', { g: this, src: this.lastHurtSrc });
       SFX.explode(true);
       // 死亡爆炸：大火球 + 碎石 + 屏幕闪光
       this.flashT = 0.6; this.flashColor = '#ffc078';
@@ -669,7 +777,217 @@
         `成长次数：<b>${this.totalLevels}</b> 次　　击破敌人：<b>${this.kills}</b><br>` +
         `讨伐 Boss：<b>${this.bossCount}</b> 只　　得分：<b>${this.score}</b><br>` +
         `存活时间：<b>${mins}分${secs}秒</b>`;
-      setTimeout(() => this.el.gameover.classList.remove('hidden'), 600);
+      // 死亡演出：黑气涌入 → 死法文本 → 淡出后亮出结算界面（不再直接弹结算）
+      this.deathScene = this.makeDeathScene(this.lastHurtSrc);
+    }
+
+    /* ---------------- 死亡演出（黑气 + 死法文本） ---------------- */
+    /** 按击杀者归因组装死法文案；归因缺失时兜底为最近的存活敌人/Boss */
+    makeDeathScene(src) {
+      const charName = (this.player && this.player.char && this.player.char.name) || '飞虎';
+      let pool = null, enemyName = null;
+      const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+      if (src && src.k === 'e') {
+        const def = CFG.enemies[src.key];
+        if (def && DEATH_LINES.enemy[src.key]) { pool = DEATH_LINES.enemy[src.key]; enemyName = def.name; }
+      } else if (src && src.k === 'b') {
+        if (DEATH_LINES.boss[src.key]) { pool = DEATH_LINES.boss[src.key]; enemyName = BOSS_DEATH_NAMES[src.key]; }
+      }
+      // 兜底：取离死亡位置最近的存活敌人/Boss
+      if (!pool) {
+        let best = null, bestD = Infinity;
+        for (const e of this.targets()) {
+          if (e.dead) continue;
+          const d = (e.x - this.player.x) ** 2 + (e.y - this.player.y) ** 2;
+          if (d < bestD) { bestD = d; best = e; }
+        }
+        if (best && best.dsrc) {
+          const p2 = best.dsrc.k === 'b' ? DEATH_LINES.boss[best.dsrc.key] : DEATH_LINES.enemy[best.dsrc.key];
+          if (p2) {
+            pool = p2;
+            enemyName = best.dsrc.k === 'b' ? BOSS_DEATH_NAMES[best.dsrc.key]
+              : (CFG.enemies[best.dsrc.key] && CFG.enemies[best.dsrc.key].name);
+          }
+        }
+      }
+      // 最终兜底：全场随机一条（环境击杀且屏幕无敌人时）
+      if (!pool) {
+        const all = [];
+        for (const k in DEATH_LINES.enemy) all.push({ arr: DEATH_LINES.enemy[k], name: CFG.enemies[k].name });
+        const f = all[Math.floor(Math.random() * all.length)];
+        pool = f.arr; enemyName = f.name;
+      }
+      const action = pick(pool);
+      return {
+        phase: 'black', t: 0, total: 0,
+        line1: `${charName}被${enemyName}`,
+        action,
+        smokes: [], smokeT: 0,
+        fadeT: 0, fullAt: 0
+      };
+    }
+
+    /** 死亡演出推进：黑气涌入(black) → 文本显现(text) → 停留(hold) → 黑色淡出(fade) → 结算界面 */
+    updateDeathScene(dt) {
+      this.updateFx(dt);   // 死亡爆炸粒子/震屏/闪光继续
+      const ds = this.deathScene;
+      ds.total += dt;
+      // 黑气烟雾：黑气涌入阶段从四边持续灌入，停留阶段少量余烟
+      const smokeRate = ds.phase === 'black' ? 0.03 : (ds.phase === 'fade' ? 0.5 : 0.12);
+      ds.smokeT -= dt;
+      if (ds.smokeT <= 0 && ds.phase !== 'fade') {
+        ds.smokeT = smokeRate;
+        const edge = Math.floor(Math.random() * 4);
+        let x, y, vx, vy;
+        const sp = rand(26, 70);
+        if (edge === 0) { x = rand(0, CFG.W); y = -30; vx = rand(-14, 14); vy = sp; }
+        else if (edge === 1) { x = rand(0, CFG.W); y = CFG.H + 30; vx = rand(-14, 14); vy = -sp; }
+        else if (edge === 2) { x = -30; y = rand(0, CFG.H); vx = sp; vy = rand(-14, 14); }
+        else { x = CFG.W + 30; y = rand(0, CFG.H); vx = -sp; vy = rand(-14, 14); }
+        ds.smokes.push({ x, y, vx, vy, r: rand(34, 80), grow: rand(14, 30), life: rand(1.6, 2.8), t: 0 });
+      }
+      for (const s of ds.smokes) {
+        s.t += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.r += s.grow * dt;
+      }
+      ds.smokes = ds.smokes.filter(s => s.t < s.life);
+
+      if (ds.phase === 'black') {
+        ds.t += dt;
+        if (ds.t >= DEATH_FX.BLACK_IN) { ds.phase = 'text'; ds.t = 0; }
+      } else if (ds.phase === 'text') {
+        ds.t += dt;
+        // 上行淡入(0.9s) + 红字逐字(每字 0.12s) 全部显示后进入停留
+        const fullT = 0.9 + ds.action.length * 0.12 + 0.2;
+        if (ds.t >= fullT) { ds.phase = 'hold'; ds.t = 0; ds.fullAt = ds.total; }
+      } else if (ds.phase === 'hold') {
+        ds.t += dt;
+        if (ds.t >= DEATH_FX.HOLD_AFTER || ds.total >= DEATH_FX.AUTO_MAX) ds.phase = 'fade';
+      } else if (ds.phase === 'fade') {
+        ds.fadeT += dt;
+        if (ds.fadeT >= DEATH_FX.FADE_OUT) {
+          // 黑色淡出完毕：定格画面上亮出结算界面
+          this.deathScene = null;
+          this.el.gameover.classList.remove('hidden');
+        }
+      }
+    }
+
+    /** 点击/空格跳过：仅文本完全显示后生效，直接进入淡出退场 */
+    skipDeathScene() {
+      const ds = this.deathScene;
+      if (!ds || ds.phase === 'fade') return;
+      if (ds.phase === 'hold') ds.phase = 'fade';
+    }
+
+    /** 死亡演出渲染（屏幕空间，不受震屏影响） */
+    renderDeathScene(ctx) {
+      const ds = this.deathScene;
+      if (!ds) return;
+      const D = DEATH_FX;
+      // 黑气覆盖率
+      let cov;
+      if (ds.phase === 'black') cov = ds.t / D.BLACK_IN;
+      else if (ds.phase === 'fade') cov = 1 - ds.fadeT / D.FADE_OUT;
+      else cov = 1;
+      cov = clamp(cov, 0, 1);
+      const ease = cov * cov * (3 - 2 * cov);   // smoothstep
+      ctx.save();
+      // 黑气烟雾团（深灰紫，边缘涌入）
+      for (const s of ds.smokes) {
+        const a = clamp(1 - s.t / s.life, 0, 1) * 0.5 * ease;
+        if (a <= 0.01) continue;
+        const g = ctx.createRadialGradient(s.x, s.y, s.r * 0.2, s.x, s.y, s.r);
+        g.addColorStop(0, `rgba(26,20,34,${a})`);
+        g.addColorStop(0.7, `rgba(14,10,20,${a * 0.8})`);
+        g.addColorStop(1, 'rgba(8,6,12,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill();
+      }
+      // 边缘不规则黑气条带（随覆盖率向内推进）
+      const t = ds.total;
+      const band = Math.max(6, ease * 150);
+      ctx.fillStyle = `rgba(6,4,10,${0.92 * ease})`;
+      for (let x = 0; x < CFG.W; x += 10) {
+        const jT = Math.sin(t * 5 + x * 0.05) * 10 + Math.sin(t * 9 + x * 0.11) * 7;
+        const jB = Math.sin(t * 6 + x * 0.07 + 2) * 10 + Math.sin(t * 10 + x * 0.13) * 7;
+        ctx.fillRect(x, 0, 10, band * 0.55 + jT * ease);
+        ctx.fillRect(x, CFG.H - band * 0.55 - jB * ease, 10, band * 0.55 + jB * ease);
+      }
+      for (let y = 0; y < CFG.H; y += 10) {
+        const jL = Math.sin(t * 5.5 + y * 0.06) * 10 + Math.sin(t * 9.5 + y * 0.1) * 7;
+        const jR = Math.sin(t * 6.5 + y * 0.08 + 3) * 10 + Math.sin(t * 10.5 + y * 0.12) * 7;
+        ctx.fillRect(0, y, band * 0.55 + jL * ease, 10);
+        ctx.fillRect(CFG.W - band * 0.55 - jR * ease, y, band * 0.55 + jR * ease, 10);
+      }
+      // 纯黑覆盖
+      ctx.fillStyle = `rgba(0,0,0,${0.985 * ease})`;
+      ctx.fillRect(0, 0, CFG.W, CFG.H);
+
+      // 死法文本
+      if (ds.phase !== 'black') {
+        const cx = CFG.W / 2, cy = CFG.H / 2;
+        const textA = ds.phase === 'fade' ? clamp(1 - ds.fadeT / (D.FADE_OUT * 0.6), 0, 1) : 1;
+        // 上行：白色「角色名 被 敌人名」
+        const a1in = ds.phase === 'text'
+          ? textA * clamp((ds.t - 0.15) / 0.8, 0, 1)
+          : textA;
+        ctx.save();
+        ctx.globalAlpha = a1in;
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 30px "Microsoft YaHei", sans-serif';
+        ctx.fillStyle = '#000';
+        ctx.fillText(ds.line1, cx + 2, cy - 44 + 2);
+        ctx.fillStyle = '#f2f2f2';
+        ctx.fillText(ds.line1, cx, cy - 44);
+        ctx.restore();
+        // 下行：亮红色大号具体死法，逐字弹出 + 缓慢跳动
+        const pulse = 1 + Math.sin(ds.total * 2.4) * 0.035;
+        ctx.save();
+        ctx.translate(cx, cy + 24);
+        ctx.scale(pulse, pulse);
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 46px "Microsoft YaHei", sans-serif';
+        const chars = [...ds.action];
+        const step = 0.12, start = 0.95;
+        // 先量总宽以便逐字居中
+        const widths = chars.map(ch => ctx.measureText(ch).width);
+        const totalW = widths.reduce((s, w) => s + w, 0);
+        let penX = -totalW / 2;
+        for (let i = 0; i < chars.length; i++) {
+          const ap = ds.phase === 'text'
+            ? clamp((ds.t - (start + i * step)) / 0.25, 0, 1)
+            : 1;
+          if (ap <= 0) { penX += widths[i]; continue; }
+          const pop = 0.7 + 0.3 * Math.min(1, ap * 1.6);
+          ctx.save();
+          ctx.globalAlpha = textA * ap;
+          ctx.translate(penX + widths[i] / 2, 0);
+          ctx.scale(pop, pop);
+          ctx.shadowColor = 'rgba(255,0,0,0.75)';
+          ctx.shadowBlur = 18;
+          ctx.fillStyle = '#ff2020';
+          ctx.fillText(chars[i], 0, 0);
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#ff8a80';
+          ctx.globalAlpha = textA * ap * 0.5;
+          ctx.fillText(chars[i], -1, -1);
+          ctx.restore();
+          penX += widths[i];
+        }
+        ctx.restore();
+        // 退场提示（文本完全显示后淡入）
+        if (ds.phase === 'hold') {
+          const hintA = clamp((ds.t - 0.6) / 0.8, 0, 1) * clamp(1 - ds.fadeT / 0.5, 0, 1);
+          ctx.save();
+          ctx.globalAlpha = hintA * (0.55 + Math.sin(ds.total * 3) * 0.25);
+          ctx.textAlign = 'center';
+          ctx.font = 'bold 18px "Microsoft YaHei", sans-serif';
+          ctx.fillStyle = '#cfcfcf';
+          ctx.fillText('点击屏幕或按空格继续', cx, cy + 96);
+          ctx.restore();
+        }
+      }
+      ctx.restore();
     }
 
     /* ---------------- 数值 ---------------- */
@@ -711,6 +1029,7 @@
       const cp = this.player.char && this.player.char.catchphrase;
       if (cp) this.ultBubble = { text: cp, t: 3 };
       const ult = this.player.char ? this.player.char.ult : 'wave';
+      if (window.Ach) Ach.evt('ult', { g: this, ult: ult });
       if (ult === 'slash') return this.ultSlash();
       if (ult === 'shield') return this.ultMagicShield();
       if (ult === 'soundwave') return this.ultSoundwave();
@@ -732,9 +1051,11 @@
       });
       this.bosses.forEach(b => { b.lockHp = false; });
       // 屏幕内小怪全灭
+      const killsBefore = this.kills;
       this.enemies.slice().forEach(e => {
         if (!e.dead) e.takeDamage(99999, this);
       });
+      if (window.Ach) Ach.evt('ultWaveKills', { g: this, n: this.kills - killsBefore });
       // Boss 受到 20% 最大生命伤害（入场免伤状态除外），大招无视无敌
       this.bosses.forEach(b => {
         if (!b.dead && b.state !== 'enter' && b.state !== 'trans') {
@@ -829,10 +1150,13 @@
       this.flashT = 0.35; this.flashColor = '#7fe7ff';
       this.ultWave = { r: 40, a: 1 };
       this.soundwaveT = 4;                 // 敌方子弹冻结（update 中生效）
+      let frozen = 0;
       this.enemies.forEach(e => {
         if (e.dead) return;                // 龙类（含分裂小段）也有 freezeT 支持，一并禁锢
         e.freezeT = Math.max(e.freezeT || 0, 4);
+        frozen++;
       });
+      if (window.Ach) Ach.evt('ultSoundwave', { g: this, n: frozen });
       for (let i = 0; i < 44; i++) {
         const a = rand(0, TAU);
         this.particles.push(new Particle(
@@ -974,6 +1298,7 @@
       const isNew = (u.id === 'chain' && !this.player.chainJumps) ||
                     (u.id === 'blade' && !this.player.blades);
       u.apply(this.player);
+      if (window.Ach) Ach.evt('upgrade', { g: this, id: u.id, name: u.name });
       // 弹道类成长计数（每轮上限 3 次）
       if (['way', 'tail', 'down', 'flame', 'poison', 'ice'].includes(u.id)) {
         this.wayPicksThisRound++;
@@ -1009,6 +1334,10 @@
     /* ---------------- Boss 调度 ---------------- */
     scheduleNextBoss() {
       this.bossT = rand(CFG.boss.nextMin, CFG.boss.nextMax);
+      // 罗马角斗场：Boss 出现间隔减半
+      if (this.mapId === 'colosseum') {
+        this.bossT = Math.max(1, Math.round(this.bossT * CFG.map.arenaBossTimeMul));
+      }
     }
     triggerBossWarn() {
       // 测试模式：跳过全部出场规则（地图/单次/序号/概率），强制指定 Boss 反复出现
@@ -1024,35 +1353,27 @@
           return;
         }
       }
-      // 除狮身人面像/牛魔特殊期等专属 Boss 外，所有 Boss 等权，每一轮都可能出现；
-      // 本局已出场过的 Boss 后续出场权重持续减半（bossSeen），
+      // 所有 Boss 等权，每一轮都可能出现；本局已出场过的 Boss 后续出场权重持续减半（bossSeen），
       // 直至所有非专属 Boss 全部轮过一遍后清空记录、概率恢复正常（spawnBoss 中重置）
-      // 狮身人面像：沙漠限定、每局一次、minOrd/maxOrd/forceChance
-      // 牛魔：特殊期（!niuMoGeneric）草原限定、每局一次、第2-4轮强制概率；通用期一切限制旁路
+      // 地图专属 Boss（狮身人面像/牛魔/骨龙王）：
+      //   ① 强制概率轮（forceChance 声明的序号）内独立掷骰，命中直接出场、未命中本轮不入随机池；
+      //   ② 离开强制轮后（无论强制轮内是否命中过）拉平为等权普通池成员，可反复出场，
+      //      但地图限定永久生效（狮身人面像仅沙漠、牛魔仅草原、骨龙王仅荒地）
       const ord = this.bossSpawned + 1;
-      // ordOk：显式声明 minOrd/maxOrd 的 Boss（狮身人面像/牛魔特殊期/骨龙王特殊期）受限；通用期旁路
-      const ordOk = b => {
-        if (b.cls.name === 'NiuMo' && this.niuMoGeneric) return true;
-        if (b.cls.name === 'BoneDragonKing' && this.boneDragonGeneric) return true;
-        return (b.minOrd === undefined || b.minOrd <= ord) &&
-               (b.maxOrd === undefined || ord <= b.maxOrd);
-      };
-      // map：狮身人面像仅沙漠且每局一次；牛魔特殊期仅草原且每局一次（通用期任意地图）；
-      // 骨龙王特殊期仅荒地且每局一次（通用期任意地图）；
-      // 大海不出现地面移动型 Boss（蛙哥/野鸡王）
-      const mapOk = b => {
-        if (b.cls.name === 'Sphinx') return b.map === this.mapId && !this.sphinxSpawned;
-        if (b.cls.name === 'NiuMo') return this.niuMoGeneric || (b.map === this.mapId && !this.niuMoSpawned);
-        if (b.cls.name === 'BoneDragonKing') return this.boneDragonGeneric || (b.map === this.mapId && !this.boneDragonSpawned);
-        return (b.map === undefined || b.map === this.mapId) &&
-               !(b.ground && this.mapId === 'ocean');
-      };
+      // ordOk：minOrd 之前不可出场；专属 Boss 无 maxOrd——强制轮结束后仍留在池中
+      const ordOk = b =>
+        (b.minOrd === undefined || b.minOrd <= ord) &&
+        (b.maxOrd === undefined || ord <= b.maxOrd);
+      // map：专属 Boss 永久锁定本图；大海不出现地面移动型 Boss（蛙哥/野鸡王）
+      const mapOk = b =>
+        (b.map === undefined || b.map === this.mapId) &&
+        !(b.ground && this.mapId === 'ocean');
       let pool = window.BOSS_LIST.filter(b => ordOk(b) && mapOk(b));
       if (!pool.length) {
-        // 兜底1：放宽大海地面限制等通用地图限制（专属 Boss 的地图/单次限制不可放宽，防止空池卡死）
+        // 兜底1：放宽大海地面限制等通用地图限制（专属 Boss 的地图限定不可放宽，防止空池卡死）
         pool = window.BOSS_LIST.filter(b => ordOk(b) &&
-          b.cls.name !== 'Sphinx' && !(b.cls.name === 'NiuMo' && !this.niuMoGeneric) &&
-          !(b.cls.name === 'BoneDragonKing' && !this.boneDragonGeneric));
+          b.cls.name !== 'Sphinx' && b.cls.name !== 'NiuMo' &&
+          b.cls.name !== 'BoneDragonKing');
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
       // 不连续两轮出现同一个 Boss：从最终候选池剔除上一只（池中有其他选择时才剔除）
@@ -1060,11 +1381,9 @@
         const withoutLast = pool.filter(b => b.cls.name !== this.lastBossName);
         if (withoutLast.length) pool = withoutLast;
       }
-      // forceChance：专属 Boss 在指定出场序号有独立的直接出场概率；未命中则不参与本轮随机池
-      // 牛魔/骨龙王通用期不再走强制掷骰，作为普通等权成员进入随机池
-      const forceable = b => (b.forceChance && b.forceChance[ord] !== undefined) &&
-                             !(b.cls.name === 'NiuMo' && this.niuMoGeneric) &&
-                             !(b.cls.name === 'BoneDragonKing' && this.boneDragonGeneric);
+      // forceChance：专属 Boss 在强制概率轮有独立的直接出场概率；未命中则不参与本轮随机池；
+      // 离开强制轮后 forceChance[ord] 为空，自然作为普通等权成员进入随机池
+      const forceable = b => b.forceChance && b.forceChance[ord] !== undefined;
       let pick = null;
       const forceList = pool.filter(forceable);
       for (const b of forceList) {
@@ -1095,27 +1414,17 @@
       const b = new cls(this);
       const entry = (window.BOSS_LIST || []).find(e => e.cls === cls);
       b.musicTheme = (entry && entry.music) || 'boss';   // 专属 BGM（boss/eagle/pheasant/hero）
+      if (window.Ach) Ach.evt('bossSpawn', { g: this, name: cls.name });
       this.bosses.push(b);
       this.bossSpawned++;
       this.lastBossName = cls.name;   // 记录上一只：下一轮抽取时剔除，禁止连续重复
       this.bossSeen.add(cls.name);   // 登记出场：后续抽取权重减半
-      // 所有非专属 Boss（狮身人面像、牛魔特殊期、骨龙王特殊期除外）均已轮过一遍 → 清空记录，概率恢复正常；
-      // 同时牛魔/骨龙王结束特殊期、转入普通池（任意地图等权出场）
+      // 所有非地图专属 Boss（狮身人面像/牛魔/骨龙王除外）均已轮过一遍 → 清空记录，概率恢复正常。
+      // 专属 Boss 无单次限制：强制轮后即等权留在本图普通池，仅受权重减半与不连续重复约束
       const cyclable = (window.BOSS_LIST || []).filter(e =>
         e.cls.name !== 'Sphinx' && e.cls.name !== 'NiuMo' && e.cls.name !== 'BoneDragonKing');
       if (cyclable.length && cyclable.every(e => this.bossSeen.has(e.cls.name))) {
         this.bossSeen.clear();
-        this.niuMoGeneric = true;
-        this.niuMoSpawned = false;
-        this.boneDragonGeneric = true;
-        this.boneDragonSpawned = false;
-      }
-      if (this.testBoss) {
-        // 测试模式：不登记单次出场、不转入通用池，保证指定 Boss 每轮必出且可重复
-      } else {
-        if (cls.name === 'Sphinx') this.sphinxSpawned = true;   // 狮身人面像每局至多一次
-        if (cls.name === 'NiuMo' && !this.niuMoGeneric) this.niuMoSpawned = true;   // 牛魔特殊期每局至多一次
-        if (cls.name === 'BoneDragonKing' && !this.boneDragonGeneric) this.boneDragonSpawned = true;   // 骨龙王特殊期每局至多一次
       }
       this.el.bossName.textContent = `${b.bossName}`;
       this.el.bossHud.classList.remove('hidden');
@@ -1145,11 +1454,13 @@
       const unlocked = Object.keys(CFG.enemies)
         .filter(t => (CFG.enemies[t].minBossKills || 0) === this.bossCount)
         .map(t => CFG.enemies[t].name);
-      // 怪物潮：每击败 3 个 Boss（通过第 3/6/9… 轮）触发一次，持续 30 秒，小怪数量 ×3
-      const tide = this.bossCount % 3 === 0;
+      // 怪物潮：普通地图每击败 3 个 Boss 触发一次（30 秒）；
+      // 罗马角斗场每过 1 轮（击败任意 Boss）即触发，时长 60 秒（普通地图 2 倍），小怪数量 ×3
+      const arena = this.mapId === 'colosseum';
+      const tide = arena || this.bossCount % 3 === 0;
       if (tide) {
-        this.tideT = 30;
-        this.toast(`⚠ 怪物潮来袭：小怪数量 ×3！`, 3.6);
+        this.tideT = arena ? CFG.map.arenaTideTime : 30;
+        this.toast(arena ? `⚠ 角斗场怪物潮来袭：小怪数量 ×3！坚持 ${CFG.map.arenaTideTime} 秒！` : `⚠ 怪物潮来袭：小怪数量 ×3！`, 3.6);
       }
       void unlocked;   // 解锁信息静默处理，不再弹 tips
       burst(this, this.player.x, this.player.y, 20, ['#7CFC00', '#fff', '#ffd93b'], 200, 5, 0.7);
@@ -1177,24 +1488,24 @@
     }
 
     /* ---------------- 火球爆炸 ---------------- */
-    explodeFireball(x, y, frags, fragDmg, radius) {
+    explodeFireball(x, y, frags, fragDmg, radius, src) {
       burst(this, x, y, 26, ['#ff7b2e', '#ffd23b', '#c94a1e', '#fff'], 280, 6, 0.6, 100);
       SFX.explode(false);
       this.shake(7);
-      // 分裂火焰弹
+      // 分裂火焰弹（继承原弹的击杀归因）
       for (let i = 0; i < frags; i++) {
         const a = (TAU / frags) * i + rand(-0.1, 0.1);
         this.bullets.push(new Bullet(x, y,
           Math.cos(a) * 150, Math.sin(a) * 150,
-          { kind: 'flame', r: 6, dmg: fragDmg, life: 3.2 }));
+          { kind: 'flame', r: 6, dmg: fragDmg, life: 3.2, src }));
       }
       // 玩家在爆炸范围内受伤
       const p = this.player;
-      if (Math.hypot(p.x - x, p.y - y) < radius + p.radius) p.hurt(fragDmg, this);
+      if (Math.hypot(p.x - x, p.y - y) < radius + p.radius) p.hurt(fragDmg, this, src);
     }
 
     /* ---------------- 炮弹爆炸（炮师 / 可引爆弹） ---------------- */
-    shellBlast(x, y, dmg) {
+    shellBlast(x, y, dmg, src) {
       const R = CFG.cannoneer.blastR;
       burst(this, x, y, 30, ['#ff7b2e', '#ffd23b', '#c94a1e', '#fff'], 300, 7, 0.6, 120);
       SFX.explode(false);
@@ -1202,7 +1513,7 @@
       const p = this.player;
       const d = Math.hypot(p.x - x, p.y - y);
       if (d < R + p.radius) {
-        p.hurt(Math.round(dmg * (d < R * 0.55 ? 1 : 0.6)), this);
+        p.hurt(Math.round(dmg * (d < R * 0.55 ? 1 : 0.6)), this, src);
       }
       // 爆炸波及范围内的山石一并炸毁
       for (const r of this.rocks) {
@@ -1215,20 +1526,25 @@
       burst(this, x, y, 16, ['#ff7b2e', '#ffd23b', '#fff'], 240, 5, 0.45, 80);
       SFX.explode(false);
       this.shake(5);
+      let hits = 0;
       this.targets().forEach(e => {
         if (e.segments) {
           // 草龙：爆炸范围内的露出节全部受伤
+          const wasAlive = !e.dead;
           e.aoeDamage(x, y, radius, dmg, this);
+          if (wasAlive && e.dead) hits++;
           return;
         }
         const d = Math.hypot(e.x - x, e.y - y);
         if (d < radius + e.radius) {
+          hits++;
           e.takeDamage(dmg, this, {
             x: (e.x - x) / (d || 1) * 180,
             y: (e.y - y) / (d || 1) * 180
           });
         }
       });
+      if (window.Ach && hits >= 2) Ach.evt('aoeHits', { g: this, n: hits });
     }
 
     /* ---------------- 刷怪导演 ---------------- */
@@ -1279,7 +1595,9 @@
         if (def.ground && this.mapId === 'ocean') return;           // 大海：不出现地面类敌人（弓箭手/炮师）
         if (def.oncePerRound && this.grassDragonThisRound) return;   // 草龙：每轮至多一次
         if ((def.elite || def.ground) && this.enemies.some(e => e.type === type && !e.isMini)) return;  // 精英/地面单位场上限 1（分裂小段不计）
-        for (let i = 0; i < def.weight; i++) table.push(type);
+        // 罗马角斗场：地面类敌人（弓箭手/炮师）刷出权重 ×3，明显更常见
+        const w = def.weight * (def.ground && this.mapId === 'colosseum' ? CFG.map.arenaGroundWeight : 1);
+        for (let i = 0; i < w; i++) table.push(type);
       });
       return table.length ? table[Math.floor(Math.random() * table.length)] : null;
     }
@@ -1427,7 +1745,7 @@
       SFX.explode(true);
       this.shake(9);
     }
-    /** 火山弹落地爆炸：大范围火焰伤害 + 波及障碍炸毁 */
+    /** 火山弹落地爆炸：大范围火焰伤害 + 波及障碍炸毁（火山环境伤害） */
     lavaBlast(x, y, dmg) {
       const R = CFG.map.lavaBlastR;
       burst(this, x, y, 44, ['#ff7b2e', '#ffd23b', '#c94a1e', '#fff5d0', '#fff'], 360, 8, 0.8, 150);
@@ -1435,7 +1753,7 @@
       this.shake(11);
       const p = this.player;
       const d = Math.hypot(p.x - x, p.y - y);
-      if (d < R + p.radius) p.hurt(Math.round(dmg * (d < R * 0.55 ? 1 : 0.6)), this);
+      if (d < R + p.radius) p.hurt(Math.round(dmg * (d < R * 0.55 ? 1 : 0.6)), this, { k: 'env', key: 'lava' });
       for (const r of this.rocks) {
         if (!r.dead && r.contains(x, y, R * 0.6)) r.destroy(this);
       }
@@ -1451,9 +1769,11 @@
           else this.timeScale = 1;
           this.update(dt * this.timeScale);
         } else if (this.state === 'gameover') {
-          this.updateFx(dt);   // 死亡爆炸特效继续播放
+          if (this.deathScene) this.updateDeathScene(dt);   // 死亡演出：黑气/死法文本推进
+          else this.updateFx(dt);   // 结算界面：死亡爆炸特效继续播放
         }
         this.updateMusic();    // 场景→曲目路由（菜单/小怪/怪物潮/各类Boss）
+        if (window.Ach) Ach.tick(dt);   // 成就解锁通知队列推进
         // 局外选角界面：每 10s 随机刷新角色心情语录
         if (this.state === 'menu' && this.el.charSel && !this.el.charSel.classList.contains('hidden')) {
           this.moodT -= dt;
@@ -1482,7 +1802,14 @@
       this.shakeMag = Math.max(0, this.shakeMag - dt * 30);
       if (this.flashT > 0) this.flashT = Math.max(0, this.flashT - dt);
       // 怪物潮倒计时（Boss 战/预警期间暂停，不浪费潮次）
-      if (this.tideT > 0 && !this.bossActive) this.tideT = Math.max(0, this.tideT - dt);
+      if (this.tideT > 0 && !this.bossActive) {
+        this.tideT = Math.max(0, this.tideT - dt);
+        // 角斗场：挺过怪物潮 → 观众席撒碎礼花 + 鼓掌欢呼
+        if (this.tideT === 0 && this.mapId === 'colosseum') {
+          this.arenaCelebrate();
+          this.toast('🎉 角斗场怪物潮被击退！观众欢呼！', 3);
+        }
+      }
       // 大招光波扩散
       if (this.ultWave) {
         this.ultWave.r += 2600 * dt;
@@ -1516,13 +1843,17 @@
       this.rockTick(dt);
       this.mapTick(dt);
 
-      // 实体更新
+      // 实体更新（敌人/Boss 更新期间绑定 shooter 上下文，其发射的子弹归因到自己——用于死亡死法判定）
       this.player.update(dt, this);
-      this.enemies.forEach(e => e.update(dt, this));
+      this.enemies.forEach(e => {
+        setShooter(e);
+        try { e.update(dt, this); } finally { clearShooter(); }
+      });
       this.bosses.forEach(b => {
         // 声波禁锢：Boss 行动冻结（骨龙王免疫——身体太长会被卡死）
         if (this.soundwaveT > 0 && !b.segments) return;
-        b.update(dt, this);
+        setShooter(b);
+        try { b.update(dt, this); } finally { clearShooter(); }
       });
       this.bullets.forEach(b => {
         // 声波禁锢：敌方子弹冻结原地（仍可被击爆）
@@ -1542,6 +1873,51 @@
       this.fxRings.forEach(ring => { ring.t += dt; ring.r += ring.vr * dt; });
 
       this.collisions();
+
+      // ===== 成就系统：局内帧统计 =====
+      if (window.Ach) {
+        Ach.frame(dt, this);
+        const pl = this.player;
+        let enemyBullets = 0, starBullets = 0;
+        for (const b of this.bullets) {
+          if (b.friendly) {
+            if (!b.dead && b.kind === 'star') starBullets++;
+            // 飞刀飞出屏幕/触地未命中：连击中断
+            if (b.kind === 'knife' && b.dead && !b._achKnifeSettled) {
+              b._achKnifeSettled = true;
+              if (!b._achHit) Ach.evt('knifeMiss', { g: this });
+            }
+            continue;
+          }
+          if (b.dead || b.neutralized) continue;
+          enemyBullets++;
+          // 擦弹闪避：子弹进入贴身环（未命中）计一次闪避
+          if (!b._achDodged) {
+            const d = Math.hypot(b.x - pl.x, b.y - pl.y);
+            if (d < pl.radius * 0.8 + b.r + 26) {
+              b._achDodged = true;
+              Ach.evt('dodge', { g: this });
+            }
+          }
+        }
+        // 高密度弹幕：场上 55 发以上敌方弹幕时累计存活时间
+        if (enemyBullets >= 55) Ach.evt('dense', { g: this, dt: dt });
+        // 法师：场上同时存在 12 颗以上星星弹
+        if (starBullets >= 12) Ach.evt('starField', { g: this, n: starBullets });
+        // 飞刀命中标记回填（命中后不死的穿透飞刀也算命中）
+        for (const b of this.bullets) {
+          if (b.kind === 'knife' && b.hitSet && b.hitSet.size > 0) b._achHit = true;
+        }
+        // 长时间不移动：锚点 25 秒内位移小于 12px
+        if (!this._idleAnchor) this._idleAnchor = { x: pl.x, y: pl.y, t: 0, fired: false };
+        const an = this._idleAnchor;
+        if (Math.hypot(pl.x - an.x, pl.y - an.y) > 12) {
+          an.x = pl.x; an.y = pl.y; an.t = 0;
+        } else {
+          an.t += dt;
+          if (an.t >= 25 && !an.fired) { an.fired = true; Ach.evt('idleLong', { g: this }); }
+        }
+      }
 
       // 清理
       this.enemies = this.enemies.filter(e => !e.dead);
@@ -1607,6 +1983,10 @@
           if (hitSeg >= 0 || circleHit) {
             if (!b.hitSet) b.hitSet = new Set();
             b.hitSet.add(e);
+            // 成就：侠客飞刀命中计数（同时标记已命中，避免同帧误判脱靶）
+            if (b.kind === 'knife') b._achHit = true;
+            if (window.Ach && b.kind === 'knife') Ach.evt('knifeHit', { g: this });
+            const aliveBefore = !e.dead;
             // 超猫激光串：秒杀小怪（含龙类小段全灭）；Boss 不在此列，落到下方按比例承伤
             if (b.ultraKill && !e.isBoss) {
               if (e.segments) {
@@ -1618,6 +1998,10 @@
               } else {
                 e.spawnInvuln = 0;
                 e.takeDamage(999999, this);
+                if (window.Ach) {
+                  Ach.evt('ultLaserHit', { g: this, target: e });
+                  if (aliveBefore && e.dead) Ach.evt('bulletKill', { g: this, kind: b.kind, bounced: false, ult: true });
+                }
               }
               burst(this, b.x, b.y, 16, ['#35e0ff', '#a5f3fc', '#fff'], 260, 5, 0.5);
               b.dead = true;
@@ -1626,6 +2010,7 @@
             // 激光串对 Boss：每道按最大生命 4% 承伤
             if (b.bossDmgRatio > 0 && e.isBoss) {
               e.takeDamage(e.maxHp * b.bossDmgRatio, this);
+              if (window.Ach) Ach.evt('ultLaserHit', { g: this, target: e });
               burst(this, b.x, b.y, 16, ['#35e0ff', '#fff'], 260, 5, 0.5);
               b.dead = true;
               break;
@@ -1635,6 +2020,10 @@
               e.damageSegment(hitSeg, b.dmg, this, { x: 220, y: rand(-60, 60) }, b.element || '');
             } else {
               e.takeDamage(b.dmg, this, { x: 220, y: rand(-60, 60) });
+              // 成就：子弹击杀归因（星星/烟头/反弹烟头）
+              if (window.Ach && aliveBefore && e.dead) {
+                Ach.evt('bulletKill', { g: this, kind: b.kind, bounced: !!b._achBounced, ult: false });
+              }
               // 元素弹道命中：施加 DoT / 破无敌 / 冻结
               if (b.element === 'flame') {
                 e.dotT = 3; e.dotDps = b.dmg * 0.4; e.dotType = 'flame';
@@ -1672,6 +2061,7 @@
               b.vx *= bspd; b.vy *= bspd;
               b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
               b.angle = Math.atan2(b.vy, b.vx);
+              if (b.kind === 'butt') b._achBounced = true;     // 成就：反弹烟头标记
               burst(this, b.x, b.y, 5, ['#fff', '#ff9d2e'], 150, 3, 0.25);
               SFX.melee();
             } else {
@@ -1709,6 +2099,7 @@
             b.vx *= bspd; b.vy *= bspd;
             b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
             b.angle = Math.atan2(b.vy, b.vx);
+            if (b.kind === 'butt') b._achBounced = true;     // 成就：反弹烟头标记
             burst(this, b.x, b.y, 5, ['#fff', '#caa06a'], 150, 3, 0.25);
             SFX.melee();
           } else b.dead = true;
@@ -1733,7 +2124,7 @@
             if (eb.volatile) {
               fb.dead = true;
               eb.dead = true;
-              this.shellBlast(eb.x, eb.y, eb.dmg);
+              this.shellBlast(eb.x, eb.y, eb.dmg, eb.src);
             } else {
               if (eb.hitCd > 0) continue;
               eb.hitCd = 0.08;
@@ -1745,7 +2136,7 @@
               if (eb.hp <= 0) {
                 eb.dead = true;
                 if (eb.onBreak) eb.onBreak(this, eb);
-                else this.shellBlast(eb.x, eb.y, eb.dmg);
+                else this.shellBlast(eb.x, eb.y, eb.dmg, eb.src);
               }
             }
             if (fb.dead) break;
@@ -1772,22 +2163,22 @@
           }
           if (b.kind === 'fireball') {
             b.dead = true;
-            this.explodeFireball(b.x, b.y, 12, b.dmg * 0.75, 90);
+            this.explodeFireball(b.x, b.y, 12, b.dmg * 0.75, 90, b.src);
           } else if (b.kind === 'shell') {
             b.dead = true;
-            this.shellBlast(b.x, b.y, b.dmg);
+            this.shellBlast(b.x, b.y, b.dmg, b.src);
           } else if (b.kind === 'lava') {
-            // 火山口巨大火焰弹：命中玩家即引爆
+            // 火山口巨大火焰弹：命中玩家即引爆（环境伤害）
             b.dead = true;
             this.lavaBlast(b.x, b.y, b.dmg);
           } else if (b.kind === 'missile' || b.hp > 0) {
             // 可击爆弹（导弹/漂浮战斧等 hp>0）撞到玩家：直接引爆
             b.dead = true;
-            this.shellBlast(b.x, b.y, b.dmg);
+            this.shellBlast(b.x, b.y, b.dmg, b.src);
           } else {
             b.dead = true;
             // 命中玩家回调（怪客十字弹吸血、大王斧击无敌等）：玩家无敌帧未实际命中则不触发
-            if (p.hurt(b.dmg, this) !== false && b.onPlayerHit) b.onPlayerHit(this, b);
+            if (p.hurt(b.dmg, this, b.src) !== false && b.onPlayerHit) b.onPlayerHit(this, b);
             burst(this, b.x, b.y, 6, ['#ff5252', '#fff'], 160, 4, 0.3);
           }
         }
@@ -2230,6 +2621,127 @@
         cloud: cloud('#ffffff', '#dceeff')
       };
 
+      /* —— 罗马角斗场：三层拱券石墙 + 满座欢呼观众，沙场满布斩击/炮击痕迹 —— */
+      this.bg.colosseum = {
+        sky: sky([[0, '#6fb4e0'], [0.55, '#a8d4ec'], [1, '#f3e0b8']], x => {
+          disk(x, 800, 84, 5, '#fff0b8', '#fff9e0');
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          const stone = '#c9a06a', stoneDark = '#a8845a', archCol = '#7a5a38';
+          const crowdCols = ['#c9463a', '#e8d8b8', '#8a5a34', '#4a6a9a', '#d8c9a3', '#7a3a2a', '#e8a03a', '#f0e6d2'];
+          // 远景外壁：三层拱券
+          for (let tier = 0; tier < 3; tier++) {
+            const ty = 36 + tier * 54;
+            // 石墙
+            c.fillStyle = stone;
+            c.fillRect(0, ty, w, 48);
+            c.fillStyle = stoneDark;
+            c.fillRect(0, ty, w, 4);
+            c.fillRect(0, ty + 44, w, 4);
+            // 拱门洞（下层 34px 拱券）
+            for (let ax = 6; ax < w; ax += 40) {
+              c.fillStyle = archCol;
+              c.fillRect(ax + 7, ty + 22, 22, 22);
+              c.beginPath();
+              c.arc(ax + 18, ty + 22, 11, Math.PI, 0);
+              c.fill();
+              // 拱柱
+              c.fillStyle = stone;
+              c.fillRect(ax + 2, ty + 22, 6, 22);
+              c.fillRect(ax + 28, ty + 22, 6, 22);
+              c.fillStyle = stoneDark;
+              c.fillRect(ax + 2, ty + 22, 2, 22);
+            }
+            // 拱券上方观众席：密密麻麻欢呼人潮（小人头 + 高举手臂）
+            for (let i = 0; i < 95; i++) {
+              const px = rand(0, w), py = ty + rand(6, 16);
+              c.fillStyle = crowdCols[randi(0, crowdCols.length - 1)];
+              c.fillRect(px, py, 3, 4);
+              if (Math.random() < 0.28) c.fillRect(px + (Math.random() < 0.5 ? -2 : 3), py - 3, 2, 3);
+            }
+          }
+          // 顶部旗杆战旗
+          for (let bx = 24; bx < w; bx += 96) {
+            c.fillStyle = '#5a3a2a'; c.fillRect(bx, 18, 2, 18);
+            c.fillStyle = '#c93a2a'; c.fillRect(bx + 2, 18, 16, 10);
+            c.fillStyle = '#e8c04a'; c.fillRect(bx + 8, 20, 5, 3);
+          }
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          const stone = '#b8905c', stoneDark = '#96704a', gate = '#543a24';
+          const crowdCols = ['#c9463a', '#e8d8b8', '#8a5a34', '#4a6a9a', '#d8c9a3', '#7a3a2a', '#e8a03a'];
+          // 近景竞技场围墙
+          c.fillStyle = stoneDark;
+          c.fillRect(0, 30, w, h - 30);
+          c.fillStyle = stone;
+          c.fillRect(0, 34, w, h - 34);
+          c.fillStyle = stoneDark;
+          c.fillRect(0, 34, w, 4);
+          // 墙顶观众（更近更大：人头 + 身躯 + 高举手臂）
+          for (let i = 0; i < 130; i++) {
+            const px = rand(0, w);
+            c.fillStyle = crowdCols[randi(0, crowdCols.length - 1)];
+            c.fillRect(px, 40 + rand(0, 8), 4, 6);
+            if (Math.random() < 0.32) {
+              c.fillRect(px + (Math.random() < 0.5 ? -2 : 4), 37, 2, 5);
+              c.fillRect(px + (Math.random() < 0.5 ? 0 : 2), 40 + rand(0, 8), 4, 6);
+            }
+          }
+          // 大型出战拱门 + 铁栅
+          for (let ax = -16; ax < w; ax += 112) {
+            c.fillStyle = gate;
+            c.fillRect(ax + 20, 64, 52, h - 64);
+            c.beginPath();
+            c.arc(ax + 46, 64, 26, Math.PI, 0);
+            c.fill();
+            c.fillStyle = '#2e2620';
+            for (let gx = ax + 26; gx < ax + 66; gx += 9) c.fillRect(gx, 68, 4, h - 68);
+            c.fillStyle = stone;
+            c.fillRect(ax + 14, 64, 8, h - 64);
+            c.fillRect(ax + 70, 64, 8, h - 64);
+          }
+          // 红金战旗
+          for (let bx = 40; bx < w; bx += 130) {
+            c.fillStyle = '#5a3a2a'; c.fillRect(bx, 42, 3, 30);
+            c.fillStyle = '#c93a2a'; c.fillRect(bx + 3, 42, 24, 17);
+            c.fillStyle = '#e8c04a'; c.fillRect(bx + 12, 47, 7, 5);
+          }
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          // 沙场底色
+          c.fillStyle = '#b08a52'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#c9a468'; c.fillRect(0, 0, w, 12);
+          c.fillStyle = '#96703e';
+          for (let i = 0; i < 90; i++) c.fillRect(rand(0, w), rand(14, h - 6), 6, 3);
+          // 斩击痕迹：细长暗刃痕 + 斜向高光刃边
+          for (let i = 0; i < 18; i++) {
+            const sx = rand(0, w), sy = rand(18, h - 10);
+            const ang = rand(-0.7, 0.7) + (Math.random() < 0.5 ? 0 : Math.PI);
+            const len = rand(18, 36);
+            c.save();
+            c.translate(sx, sy); c.rotate(ang);
+            c.fillStyle = '#5a3d22'; c.fillRect(-len / 2, -1.5, len, 3);
+            c.fillStyle = '#7a5a36'; c.fillRect(-len / 2, -3, len * 0.55, 1.5);
+            c.restore();
+          }
+          // 炮击焦痕：深色焦圆 + 放射裂纹 + 残火余烬
+          for (let i = 0; i < 8; i++) {
+            const sx = rand(24, w - 24), sy = rand(26, h - 10), r = rand(9, 17);
+            c.fillStyle = '#3a2818';
+            c.beginPath(); c.ellipse(sx, sy, r, r * 0.6, 0, 0, TAU); c.fill();
+            c.fillStyle = '#241710';
+            c.beginPath(); c.ellipse(sx, sy, r * 0.55, r * 0.32, 0, 0, TAU); c.fill();
+            c.fillStyle = '#5a3a22';
+            for (let k = 0; k < 5; k++) {
+              const a = (TAU / 5) * k + rand(-0.25, 0.25);
+              c.fillRect(sx + Math.cos(a) * r * 0.8, sy + Math.sin(a) * r * 0.5, 7, 2);
+            }
+            if (Math.random() < 0.65) { c.fillStyle = '#ff7b2e'; c.fillRect(sx - 2, sy - 2, 3, 3); }
+          }
+        }),
+        cloud: cloud('#ffe8c8', '#e8d0a8')
+      };
+
       // 兼容旧引用
       this.sky = this.bg.grassland.sky;
       this.mountains = this.bg.grassland.far;
@@ -2492,6 +3004,8 @@
           ctx.fillText(ub.text, bx + bw / 2, by + bh / 2 + 1);
           ctx.restore();
         }
+        // 成就解锁炫彩通知（最顶层）
+        if (window.Ach) Ach.render(ctx);
       } else {
         // 菜单展示出战角色（右下角浮空，直接绘制原图）
         const cat = (Sprites.charArt && Sprites.charArt[this.charId]) || Sprites.cat;
@@ -2589,6 +3103,9 @@
         ctx.fillRect(0, 0, CFG.W, CFG.H);
         ctx.restore();
       }
+
+      // 死亡演出（黑气涌入 + 死法文本，全屏不受震屏影响，盖在一切之上）
+      if (this.deathScene) this.renderDeathScene(ctx);
     }
   }
 

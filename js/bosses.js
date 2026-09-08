@@ -23,10 +23,20 @@
     if (a > 0) drawSpriteTinted(ctx, spr, x, y, spr.width * sx, spr.height * sy, angle || 0, '#ff1e10', a);
   }
 
+  /** Boss 类名 → 死法文案池 key（game.js DEATH_LINES） */
+  const BOSS_DSRC = {
+    PigKing: 'pigking', ThunderBehemoth: 'thunderbehemoth', Samurai: 'samurai',
+    SwordEagle: 'swordeagle', SkullKing: 'skullking', DogKing: 'dogking',
+    GiantPheasant: 'giantpheasant', Homelander: 'homelander', BossMan: 'bossman',
+    Stranger: 'stranger', FrogKing: 'frogking', CraneSage: 'cranesage',
+    Sphinx: 'sphinx', NiuMo: 'niumo', BoneDragonKing: 'bonedragonking'
+  };
+
   class Boss {
     constructor(g, contactDmg, radius) {
       this.isBoss = true;
       this.dead = false;
+      this.dsrc = { k: 'b', key: BOSS_DSRC[this.constructor.name] || 'boss' };   // 击杀者归因（死法文案）
       this.flash = 0;            // 受击闪红剩余时长（秒）
       this.lastFlashT = -999;    // 上次触发闪红的时间戳（this.t 轴），4s 冷却
       this.t = 0;
@@ -747,7 +757,7 @@
       if (!l.hit && (l.state === 'thrust' || l.state === 'hold')) {
         if (Math.hypot(p.x - tip.x, p.y - tip.y) < w + p.radius) {
           l.hit = true;
-          p.hurt(Math.round(22 * g.atkScale), g);
+          p.hurt(Math.round(22 * g.atkScale), g, this.dsrc);
           const a = Math.atan2(p.y - tip.y, p.x - tip.x);
           p.x += Math.cos(a) * 26; p.y += Math.sin(a) * 26;
         }
@@ -923,7 +933,7 @@
           while (da > Math.PI) da -= TAU;
           while (da < -Math.PI) da += TAU;
           if (Math.abs(da) < 0.55 && dist > 30) {
-            p.hurt(Math.round(8 * g.atkScale), g);
+            p.hurt(Math.round(8 * g.atkScale), g, this.dsrc);
           }
         }
         // 喷火结束时恢复
@@ -1374,8 +1384,8 @@
           Math.cos(a) * 60, Math.sin(a) * 60,
           { kind: 'axe', r: 18, dmg: 18 * g.atkScale, dmgScale: g.atkScale, life: 9,
             hp: 6, homing: true, turnRate: 0.55, color: '#e0453a', spinRate: 7 });
-        b.onBreak = (gg, bb) => gg.shellBlast(bb.x, bb.y, bb.dmg);
-        b.onExpire = (gg, bb) => gg.shellBlast(bb.x, bb.y, bb.dmg);
+        b.onBreak = (gg, bb) => gg.shellBlast(bb.x, bb.y, bb.dmg, bb.src);
+        b.onExpire = (gg, bb) => gg.shellBlast(bb.x, bb.y, bb.dmg, bb.src);
         g.bullets.push(b);
       }
       SFX.warn();
@@ -1666,7 +1676,7 @@
           const tipY = mouthY + Math.sin(this.tongueAng) * tg.len;
           if (!tg.grabbed && Lightning.distSeg(p.x, p.y, mouthX, mouthY, tipX, tipY) < 72) {
             tg.grabbed = true; tg.phase = 'back'; tg.t = 0;
-            p.hurt(Math.round(8 * g.atkScale), g);
+            p.hurt(Math.round(8 * g.atkScale), g, this.dsrc);
             g.toast('被蛙哥卷住了！', 1.2, 'lt');
             SFX.grab();
           }
@@ -2898,7 +2908,7 @@
    *  P1：牛角散射 / 牛头冲撞+360°冲击波 / 牛角回旋（绕玩家一圈回收）
    *  P2：上下夹角（悬停夹击）/ 追踪魔角（慢转向）/ 魔气缺口环（缺口旋转）/ 连续冲撞×3
    *  P3：魔角包围（四角悬停后回收）/ 旋转魔角（顺逆绕飞后切线飞出）/ 四向连续冲撞+四向弹 / 魔王爆发（扇形角弹+双眼激光+360°魔气弹）
-   * 出场规则见 game.js：草原限定、第2-4轮强制概率、2倍血量、通用Boss轮换一遍后转普通池。
+   * 出场规则见 game.js：草原永久限定、第2-4轮强制概率、2倍血量；强制轮后拉平为草原普通池等权成员（可反复出场）。
    * 魔角为 Boss 自管演员（this.horns，不入 g.bullets）；冲击波为自管外扩环（this.rings）。 */
   class NiuMo extends Boss {
     constructor(g) {
@@ -3086,7 +3096,7 @@
       for (const r of this.rings) {
         r.t += dt; r.r += r.vr * dt;
         if (!r.dealt && Math.abs(Math.hypot(p.x - r.x, p.y - r.y) - r.r) < r.band + p.radius * 0.7) {
-          r.dealt = true; p.hurt(r.dmg, g);
+          r.dealt = true; p.hurt(r.dmg, g, this.dsrc);
         }
       }
       this.rings = this.rings.filter(r => r.t < r.life && r.r < r.maxR);
@@ -3284,7 +3294,7 @@
         if (!h.dead && h.state !== 'hover' && h.hitCd <= 0 &&
             this.state !== 'trans' && this.state !== 'enter') {
           if (Math.hypot(p.x - h.x, p.y - h.y) < h.r + p.radius * 0.8) {
-            p.hurt(h.dmg, g); h.hitCd = 0.7;
+            p.hurt(h.dmg, g, this.dsrc); h.hitCd = 0.7;
             burst(g, h.x, h.y, 6, ['#ff5a4a', '#ffd23b'], 150, 4, 0.3);
           }
         }
@@ -3672,7 +3682,7 @@
    * 核心机制：本体（头）未击溃时，200 节身体全部无敌；击溃头部后身体解除无敌，
    * 逐节击杀，被击毁的身体节脱离为独立小怪（BoneDragonMini）。
    * 攻击：巨体冲撞 + 绿色拖尾火焰弹连射。
-   * 出场：仅荒地（wasteland）地图，第 2-3 轮强制高概率；通用 Boss 全部轮过后入普通池。
+   * 出场：仅荒地（wasteland）地图，第 2-3 轮强制高概率；强制轮后拉平为荒地普通池等权成员（可反复出场）。
    */
   class BoneDragonKing extends Boss {
     constructor(g) {
@@ -4251,11 +4261,14 @@
 
   window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage, Sphinx, NiuMo, BoneDragonKing };
   /**
-   * Boss 池：除狮身人面像等专属 Boss 外，所有 Boss 等权（weight 相同），每一轮都可能出现。
+   * Boss 池：所有 Boss 等权（weight 相同），每一轮都可能出现。
    * 本局已出场过的 Boss 后续抽取权重持续减半（game.js bossSeen 加权抽取）；
-   * 当所有非专属 Boss 全部轮过一遍后清空记录，概率恢复正常。
-   * ground：地面移动型（大海地图不出场）；map：地图限定（仅狮身人面像，沙漠专属，不参与轮次循环）。
-   * minOrd/maxOrd/chance/forceChance 仅狮身人面像启用时使用（保留其专属出场规则）。
+   * 当所有非地图专属 Boss 全部轮过一遍后清空记录，概率恢复正常。
+   * ground：地面移动型（大海地图不出场）；map：地图永久限定（专属 Boss 仅在本图出场）。
+   * 地图专属 Boss（狮身人面像/牛魔/骨龙王）出场规则：
+   *   minOrd 之前不出场；forceChance 声明的轮次为强制概率轮（独立掷骰，命中直接出场、
+   *   未命中本轮不入随机池）；离开强制轮后无论是否命中过，都拉平为等权普通池成员、可反复出场，
+   *   但地图限定永久生效（无 maxOrd、无每局单次限制）。
    */
   window.BOSS_LIST = [
     { cls: PigKing, weight: 3, music: 'boss' },
@@ -4270,15 +4283,16 @@
     { cls: Stranger, weight: 3, music: 'boss' },      // 怪客
     { cls: FrogKing, weight: 3, ground: true, music: 'boss' },    // 蛙哥：地面巨兽
     { cls: CraneSage, weight: 3, music: 'crane' },               // 鹤仙：五技特殊型；悲壮像素摇滚
-    // 狮身人面像：沙漠专属（map），每局至多一次；第1轮50%/第2轮70%直接出场，第3轮及以后不出场
-    { cls: Sphinx, weight: 3, minOrd: 1, maxOrd: 2, map: 'desert',
+    // 狮身人面像：沙漠永久限定（map）；第1轮50%/第2轮70%独立强制出场，
+    // 强制轮后（无论是否命中过）拉平为沙漠普通池等权成员，可反复出场
+    { cls: Sphinx, weight: 3, minOrd: 1, map: 'desert',
       forceChance: { 1: 0.5, 2: 0.7 }, music: 'sphinx' },
-    // 牛魔：特殊期仅草原（map），每局至多一次；第2轮60%/第3轮70%/第4轮80%独立强制出场
-    // 12 只通用 Boss 全部轮过一遍后转入普通池（任意地图、等权、无强制概率，game.js niuMoGeneric 控制）
-    { cls: NiuMo, weight: 3, map: 'grassland', minOrd: 2, maxOrd: 4,
+    // 牛魔：草原永久限定（map）；第2轮60%/第3轮70%/第4轮80%独立强制出场，
+    // 强制轮后（无论是否命中过）拉平为草原普通池等权成员，可反复出场
+    { cls: NiuMo, weight: 3, map: 'grassland', minOrd: 2,
       forceChance: { 2: 0.6, 3: 0.7, 4: 0.8 }, music: 'niumo' },
-    // 巨型骨龙王：荒地专属（map），每局至多一次；第2轮70%/第3轮80%独立强制出场；
-    // 通用 Boss 全部轮过后转入普通池（game.js boneDragonGeneric 控制）
+    // 巨型骨龙王：荒地永久限定（map）；第2轮70%/第3轮80%独立强制出场，
+    // 强制轮后（无论是否命中过）拉平为荒地普通池等权成员，可反复出场
     { cls: BoneDragonKing, weight: 3, map: 'wasteland', minOrd: 2,
       forceChance: { 2: 0.7, 3: 0.8 }, music: 'boss' }
   ];

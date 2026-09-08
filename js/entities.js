@@ -9,6 +9,11 @@
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
+  /* 击杀者归因：敌人/Boss 更新期间发射的弹丸/闪电/光束自动记录来源（死法文案用）。
+   * game.js 在逐个更新敌人/Boss 时 setShooter(e) → 更新完 clearShooter()。 */
+  let curShooter = null;
+  function shooterSrc() { return curShooter ? curShooter.dsrc : null; }
+
   /* 居中绘制精灵（sx/sy 为像素放大倍数） */
   function drawSprite(ctx, spr, x, y, sx, sy, angle, flash) {
     sy = sy || sx;
@@ -238,6 +243,8 @@
       this.eb = opts.eb || '';                 // 能量弹样式：leaf/eyeball/flame/spikeball/whiteorb/diamond/cone
       this.ebTrail = opts.ebTrail || 0;        // 拖尾强度：0 无（弱）/ 1 微弱（中）/ 2 清晰（强）
       this.ebPts = null;                       // 拖尾轨迹点（{x,y}[]）
+      /* —— 击杀者归因：显式 opts.src 优先，否则继承发射时刻的当前敌人/Boss —— */
+      this.src = opts.src || shooterSrc();
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -1749,6 +1756,7 @@
       this.w = w; this.dmg = dmg;
       this.t = 0; this.warn = 0.95; this.strike = 0.3;
       this.dealt = false; this.dead = false;
+      this.src = shooterSrc();               // 击杀者归因（雷公小怪/雷公巨兽）
       this.bolt = this.makeBolt();
     }
     /** 纵向落雷（柱中心 x） */
@@ -1795,7 +1803,7 @@
         burst(g, mx, my, 18, ['#ffe066', '#fff', '#7fe7ff'], 260, 5, 0.5, 200);
         const p = g.player;
         if (Lightning.distSeg(p.x, p.y, this.x1, this.y1, this.x2, this.y2) < this.w / 2 + p.radius * 0.7) {
-          p.hurt(this.dmg, g);
+          p.hurt(this.dmg, g, this.src);
         }
       }
       if (this.t > this.warn + this.strike) this.dead = true;
@@ -1849,6 +1857,7 @@
       this.t = 0; this.warn = warn || 0.7; this.active = 0.35;
       this.dealt = false; this.dead = false;
       this.rockBreak = !!rockBreak;
+      this.src = shooterSrc();               // 击杀者归因（小超人/Boss 激光）
     }
     end() {
       return { x: this.x + Math.cos(this.a) * this.len, y: this.y + Math.sin(this.a) * this.len };
@@ -1865,7 +1874,7 @@
         const cx = this.x + dx * t, cy = this.y + dy * t;
         burst(g, cx, cy, 10, ['#ff5252', '#fff', '#ffd23b'], 200, 4, 0.35);
         if (Math.hypot(p.x - cx, p.y - cy) < this.w / 2 + p.radius * 0.7) {
-          p.hurt(this.dmg, g);
+          p.hurt(this.dmg, g, this.src);
         }
         // 光束触山：沿光路采样，命中即炸毁山石
         if (this.rockBreak) {
@@ -1921,6 +1930,7 @@
       this.w = w; this.dmg = dmg;
       this.t = 0; this.warn = warn || 1.0; this.active = 0.45;
       this.dealt = false; this.dead = false;
+      this.src = shooterSrc();               // 击杀者归因（大王眼珠激光）
       this.pts = this.makePath(amp);
     }
     /** 三次贝塞尔 S 曲线：1/3、2/3 处控制点沿法向反向偏移（控制点 y 钳制在屏内，凸包保证整条曲线不出界） */
@@ -1966,7 +1976,7 @@
         this.dealt = true;
         SFX.zap(); g.shake(8);
         const p = g.player;
-        if (this.hitTest(p, 1)) p.hurt(this.dmg, g);
+        if (this.hitTest(p, 1)) p.hurt(this.dmg, g, this.src);
         // 落点冲击爆发 + 眼部发射闪光
         burst(g, this.ex, this.ey, 12, ['#ff5252', '#fff', '#ffd23b'], 220, 5, 0.4);
         burst(g, this.x, this.y, 8, ['#ff5252', '#fff'], 160, 4, 0.3);
@@ -2328,10 +2338,12 @@
     }
 
     /** 受伤：魔法护盾直接免疫；血怒期间照常受创但不会死亡（转化为弹幕增伤）。
-     *  防护罩概率减免，伤害取整；死亡时消耗生命条数。返回 false=无敌帧未命中 */
-    hurt(amount, g) {
+     *  防护罩概率减免，伤害取整；死亡时消耗生命条数。返回 false=无敌帧未命中。
+     *  src：击杀者归因 { k:'e'小怪|'b'Boss|'env'环境, key }，供死亡死法文案使用 */
+    hurt(amount, g, src) {
       if (this.invT > 0 || this.magicShieldT > 0) return false;
       let amt = Math.max(1, Math.round(amount));
+      if (src) g.lastHurtSrc = src;   // 记录最近一次伤害来源（死亡时归因）
       // 防护罩：概率触发减伤
       if (this.shieldLv > 0 && Math.random() < this.shieldChance) {
         amt = Math.max(1, Math.round(amt * (1 - this.shieldReduce)));
@@ -2351,6 +2363,7 @@
         if (this.bloodRageT > 0) { this.hp = 1; }   // 血怒期间不会死亡
         else { this.hp = 0; this.die(g); }
       }
+      if (window.Ach) window.Ach.evt('playerHurt', { g: g, amt: amt, src: src });
       return true;
     }
 
@@ -2367,6 +2380,7 @@
       if (g.state !== 'playing') return;
       if (this.lives > 0) {
         this.lives--;
+        if (window.Ach) window.Ach.evt('playerDeath', { g: g, src: g.lastHurtSrc });
         this.hp = this.maxHp;
         this.invT = 2.6;
         this.hurtFlash = 0;
@@ -2610,7 +2624,7 @@
           else burst(g, this.x + rand(-20, 20), CFG.GROUND_Y - 4, 5, ['#67bd57', '#ff7b2e', '#4f9e44'], 120, 4, 0.4, 200);
           const wasInv = this.invT;
           this.invT = 0;
-          this.hurt(isSea ? CFG.map.seaDmg : 8, g);
+          this.hurt(isSea ? CFG.map.seaDmg : 8, g, { k: 'env', key: isSea ? 'sea' : 'ground' });
           if (this.invT < wasInv && wasInv > 0) this.invT = 0.3;   // 未实际受伤时保留短无敌
         }
       } else this.groundTick = 0;
@@ -2649,7 +2663,7 @@
             this.startAutoSkill(g, e);
           } else if (!this.isMeleeing && this.invT <= 0) {
             const dmg = (e.contactDamageAt ? e.contactDamageAt(this.x, this.y) : e.contactDmg);
-            this.hurt(dmg * g.atkScale, g);
+            this.hurt(dmg * g.atkScale, g, e.dsrc);
             const a = Math.atan2(this.y - e.y, this.x - e.x);
             this.x += Math.cos(a) * 22; this.y += Math.sin(a) * 22;
           }
@@ -3051,6 +3065,7 @@
       this.def = def;
       this.name = def.name;
       this.isBoss = false;
+      this.dsrc = { k: 'e', key: type };   // 击杀者归因（骨龙小段按草龙死法池归并）
       this.dead = false;
       this.radius = def.radius;
       this.contactDmg = def.contact;
@@ -3208,7 +3223,7 @@
       g.shake(9);
       if (d < R + p.radius) {
         const dmg = this.contactDmg * g.atkScale * (d < R * 0.55 ? 1 : 0.6);
-        p.hurt(dmg, g);
+        p.hurt(dmg, g, this.dsrc);
       }
     }
 
@@ -3228,6 +3243,7 @@
       this.dead = true;
       g.kills++;
       g.score += this.def.score;
+      if (window.Ach) window.Ach.evt('enemyDie', { g: g, e: this });
       g.addRage(this.def.elite ? CFG.ultimate.rageElite : CFG.ultimate.rageNormal);
       const cols = this.deathColors();
       burst(g, this.x, this.y, this.isBoss ? 60 : 16, cols, this.isBoss ? 320 : 200, this.isBoss ? 7 : 5, 0.7, 120);
@@ -3461,7 +3477,7 @@
         Math.cos(angle) * speed, Math.sin(angle) * speed,
         { kind: 'fireball', r: r, dmg, life: 4.0 });
       fb.onExpire = (gg, b) => {
-        gg.explodeFireball(b.x, b.y, frags, dmg * 0.7, 70);
+        gg.explodeFireball(b.x, b.y, frags, dmg * 0.7, 70, b.src);
       };
       g.bullets.push(fb);
       SFX.enemyShoot();
@@ -3559,7 +3575,7 @@
       const dmg = Math.round(this.bulletDmg * g.atkScale);
       const sh = new Bullet(this.x - 14, this.y - 10, vx, vy,
         { kind: 'shell', r: 7, dmg, life: 5, grav: C.shellG, volatile: true });
-      sh.onExpire = (gg, b) => gg.shellBlast(b.x, b.y, dmg);
+      sh.onExpire = (gg, b) => gg.shellBlast(b.x, b.y, dmg, b.src);
       g.bullets.push(sh);
       SFX.enemyShoot();
     }
@@ -4216,7 +4232,7 @@
       }
       // 与飞虎碰撞：撞碎障碍！飞虎损失 30% 最大生命（走统一受伤通道：取整/防护罩/血怒/生命条数），障碍碎裂爆炸
       if (this.contains(p.x, p.y, p.radius * 0.55) && p.invT <= 0) {
-        p.hurt(Math.round(p.maxHp * 0.3), g);
+        p.hurt(Math.round(p.maxHp * 0.3), g, { k: 'env', key: 'rock' });
         // 撞击点火花
         burst(g, p.x, p.y, 18, ['#ff7b2e', '#ffd23b', '#fff5d0', '#fff'], 380, 6, 0.5, 200);
         // 障碍碎裂爆炸（大块碎石 + 火星 + 冲击环）
@@ -5474,6 +5490,7 @@
       this.def = def;
       this.name = this.th.name;
       this.isBoss = false;
+      this.dsrc = { k: 'e', key: 'grassdragon' };   // 击杀者归因（含地图主题变体与分裂小段，统一归草龙死法池）
       this.isMini = !!isMini;
       this.dead = false;
       this.groundUnit = true;    // 穿山钻地：触碰山石不坠毁
@@ -6037,6 +6054,7 @@
       this.dead = true;
       g.kills++;
       g.score += this.isMini ? 20 : 80;
+      if (window.Ach) window.Ach.evt('enemyDie', { g: g, e: this });
       g.addRage(this.isMini ? CFG.ultimate.rageNormal : CFG.ultimate.rageElite);
       burst(g, this.x, this.y, this.isMini ? 20 : 34, this.deathColors(), 280, 6, 0.7, 140);
       SFX.explode(false);
@@ -6193,6 +6211,7 @@
       opts = opts || {};
       this.type = 'bonedragonmini';
       this.isBoss = false;
+      this.dsrc = { k: 'b', key: 'bonedragonking' };   // 击杀者归因：崩解骨龙群/小骨蛇统一归骨龙王死法池
       this.dead = false;
       this.groundUnit = false;
       this.pack = !!opts.pack;              // 骨龙组：3 节合体的强化小段
@@ -6291,6 +6310,7 @@
       if (this.dead) return;
       this.dead = true;
       g.kills++; g.score += this.pack ? 40 : 15;
+      if (window.Ach) window.Ach.evt('enemyDie', { g: g, e: this });
       g.addRage(CFG.ultimate.rageNormal);
       burst(g, this.x, this.y, this.pack ? 22 : 14, ['#d8d3c2', '#4ade80', '#e8e4d8', '#fff'], 220, 5, 0.5);
       SFX.explode(false); g.shake(this.pack ? 4 : 2);
@@ -6328,5 +6348,9 @@
     }
   }
 
-  window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, GrassDragon, BoneDragonMini, DRAGON_THEMES, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, dist };
+  window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, GrassDragon, BoneDragonMini, DRAGON_THEMES, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, dist,
+    /* 击杀者归因：敌人/Boss 更新期间发射的弹丸/闪电/光束自动绑定来源 */
+    setShooter(e) { curShooter = e; },
+    clearShooter() { curShooter = null; }
+  };
 })();

@@ -416,15 +416,18 @@
       }
     },
 
-    /** 地图表：每次进入游戏随机刷新一张；阻碍特性与草地相同（撞击掉 30% 生命并碎裂 / 地面单位免疫 / 可被炮弹炸毁） */
+    /** 地图表：每次进入游戏随机刷新一张；阻碍特性与草地相同（撞击掉 30% 生命并碎裂 / 地面单位免疫 / 可被炮弹炸毁）
+     *  colosseum 罗马角斗场为特殊地图：不参与随机抽取（仅主界面主动选择进入），
+     *  死亡复活不会离开角斗场、其它地图死亡也不会随机进来 */
     maps: [
       { id: 'grassland', name: '飞虎草原', icon: '🌿' },
       { id: 'desert',    name: '沙漠',       icon: '🏜️', obs: ['cactusT', 'cactusM', 'cactusL'] },
       { id: 'snow',      name: '雪地',       icon: '❄️', obs: ['iceT', 'iceM', 'iceL'] },
       { id: 'volcano',   name: '火焰山',     icon: '🌋', obs: ['vrockT', 'vrockM', 'vrockL'], crater: true },
       { id: 'wasteland', name: '紫色荒地',   icon: '🌆', obs: ['treeT', 'treeM', 'treeL'] },
-      { id: 'cyber',     name: '赛博朋克都市', icon: '🏙️', obs: ['poleT', 'boothL', 'buildM'], scrollMul: 2 },
-      { id: 'ocean',     name: '大海',       icon: '🌊', obs: ['reefT', 'reefM', 'coralL'], sea: true }
+      { id: 'cyber',     name: '霓虹喵都',   icon: '🏙️', obs: ['poleT', 'boothL', 'buildM'], scrollMul: 2 },
+      { id: 'ocean',     name: '大海',       icon: '🌊', obs: ['reefT', 'reefM', 'coralL'], sea: true },
+      { id: 'colosseum', name: '罗马角斗场', icon: '⚔️', obs: ['spikeT', 'spikeM', 'spikeL'], arena: true }
     ],
 
     /** 地图特殊机制参数 */
@@ -440,7 +443,11 @@
       seaAmp: 6,              // 平时波浪幅度
       seaSurgeAmp: 22,        // 波动期间波浪幅度
       seaDmg: 5,              // 接触海水掉血量（很少）
-      seaTick: 0.5            // 海水掉血间隔（秒）
+      seaTick: 0.5,           // 海水掉血间隔（秒）
+      // 罗马角斗场专属规则
+      arenaBossTimeMul: 0.5,  // Boss 出现间隔减半
+      arenaGroundWeight: 3,   // 地面类小怪（弓箭手/炮师）刷出权重 ×3
+      arenaTideTime: 60       // 怪物潮时长（普通地图 30s 的 2 倍），每过 1 轮触发一次
     }
   };
 
