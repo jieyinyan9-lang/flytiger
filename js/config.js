@@ -125,6 +125,25 @@
       }
     },
 
+    /** 斧王召唤·西装斧头兵（bossOnly：仅斧王开场锁血期间召唤；高弧慢抛斧，死亡旋转飞天落地爆炸） */
+    axeMinion: {
+      count: 12,              // 开场召唤总数（一大批）
+      lockTime: 6,            // 斧王开场锁血时长（秒）
+      spawnGap: 0.38,         // 逐个错峰召唤间隔（秒）
+      walkSpd: 52,            // 地面行进步速
+      throwWind: 0.42,        // 抡斧前摇时长（秒）
+      throwCdMin: 2.6, throwCdMax: 3.6,   // 抛斧间隔（慢节奏）
+      axeSpd: 150,            // 水平参考速度（慢→飞行时间长）
+      axeG: 480,              // 抛斧重力（大→弧线高）
+      tMin: 1.1, tMax: 2.2,   // 飞行时间钳制（保证飞得高、到得慢）
+      axeR: 9,                // 斧头判定半径
+      blastR: 96,             // 死亡落地爆炸半径
+      blastDmg: 12,           // 落地爆炸伤害（低）
+      upV: 780,               // 死亡旋转飞天初速
+      deathG: 1500,           // 死亡飞行重力
+      spinSpd: 13             // 死亡自转角速度
+    },
+
     /** 闪电子弹（闪电链） */
     chain: {
       range: 180,          // 链接搜索半径
@@ -212,6 +231,12 @@
         xp: 26, score: 56, radius: 34, weight: 7, minBossKills: 4, elite: false,
         ground: true, arenaOnly: true, bomber: true, noKnockback: true,
         dynamicHp: true, fightTime: [7, 7]
+      },
+      // 斧王专属：西装斧头兵（bossOnly，仅斧王开场锁血时召唤）——低血量，高弧慢速抛斧低伤；死亡旋转飞天、落地爆炸
+      axeMinion: {
+        name: '斧头兵', hp: 26, speed: 52, contact: 8,
+        bulletDmg: 8, xp: 6, score: 14, radius: 22, weight: 0, minBossKills: 0, elite: false,
+        ground: true, bossOnly: true, noKnockback: true
       },
       superboy: {
         name: '小超人', hp: 52, speed: 105, contact: 14,

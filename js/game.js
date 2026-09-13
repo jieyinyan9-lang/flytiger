@@ -62,6 +62,12 @@
         '火油麻布点燃后活活烧成了焦炭',
         '引信火花溅到身上炸成了一团火球',
         '金属箍崩断后碎片扎穿了喉咙'
+      ],
+      axeMinion: [
+        '一斧头抡在了天灵盖上',
+        '双刃飞斧转着圈劈中了眉心',
+        '高抛的斧头落下来时削掉了脑袋',
+        '西装革履地走来，一斧头劈开了胸膛'
       ]
     },
     boss: {
@@ -916,7 +922,7 @@
       if (!pool) {
         let best = null, bestD = Infinity;
         for (const e of this.targets()) {
-          if (e.dead) continue;
+          if (e.dead || e.dying) continue;
           const d = (e.x - this.player.x) ** 2 + (e.y - this.player.y) ** 2;
           if (d < bestD) { bestD = d; best = e; }
         }
@@ -1200,6 +1206,7 @@
         if (e.type === 'grassdragon' && !e.isMini) return;
         e.spawnInvuln = 0;
       });
+      const bossLock = new Map(this.bosses.map(b => [b, b.lockHp]));   // 先快照，伤害后恢复锁血
       this.bosses.forEach(b => { b.lockHp = false; });
       // 屏幕内小怪全灭
       const killsBefore = this.kills;
@@ -1207,13 +1214,12 @@
         if (!e.dead) e.takeDamage(99999, this);
       });
       if (window.Ach) Ach.evt('ultWaveKills', { g: this, n: this.kills - killsBefore });
-      // Boss 受到 20% 最大生命伤害（入场免伤状态除外），大招无视无敌
+      // Boss 受到 20% 最大生命伤害（入场免伤状态除外），大招无视无敌；原本锁血的 Boss 伤害后恢复锁血
       this.bosses.forEach(b => {
         if (!b.dead && b.state !== 'enter' && b.state !== 'trans') {
-          const wasInv = b.lockHp;
           b.lockHp = false;
           b.takeDamage(b.maxHp * CFG.ultimate.bossDmgRatio, this);
-          if (wasInv) b.lockHp = true;  // 恢复锁血状态标记（但伤害已造成）
+          if (bossLock.get(b)) b.lockHp = true;  // 恢复锁血状态标记（但伤害已造成）
         }
       });
       // 光波放射粒子
@@ -1252,6 +1258,7 @@
         if (e.type === 'grassdragon' && !e.isMini) return;
         e.spawnInvuln = 0;
       });
+      const bossLock = new Map(this.bosses.map(b => [b, b.lockHp]));   // 先快照，伤害后恢复锁血
       this.bosses.forEach(b => { b.lockHp = false; });
       // 屏幕内小怪全灭（草龙本体改为幽焰持续灼烧）
       this.enemies.slice().forEach(e => {
@@ -1273,13 +1280,12 @@
           e.dotT = Math.max(e.dotT || 0, 3); e.dotDps = Math.max(e.dotDps || 0, 26); e.dotType = 'flame';
         }
       });
-      // Boss 受到 20% 最大生命伤害（入场免伤状态除外），大招无视无敌
+      // Boss 受到 20% 最大生命伤害（入场免伤状态除外），大招无视无敌；原本锁血的 Boss 伤害后恢复锁血
       this.bosses.forEach(b => {
         if (!b.dead && b.state !== 'enter' && b.state !== 'trans') {
-          const wasInv = b.lockHp;
           b.lockHp = false;
           b.takeDamage(b.maxHp * CFG.ultimate.bossDmgRatio, this);
-          if (wasInv) b.lockHp = true;
+          if (bossLock.get(b)) b.lockHp = true;
         }
       });
       // 鬼火粒子
@@ -1852,6 +1858,7 @@
       const table = [];
       Object.keys(CFG.enemies).forEach(type => {
         const def = CFG.enemies[type];
+        if (def.bossOnly) return;            // Boss 专属召唤怪（斧王斧头兵）：永不进入普通刷怪池
         // 月痕沙海：时间表已解锁的小怪，无视 Boss 击败数 / 飞行解锁 / 斗兽场限定三道门槛
         const stageOk = this.stageMode && this.stageUnlocked.has(type);
         if ((def.minBossKills || 0) > this.bossCount && !stageOk) return;        // 未达成 Boss 击败数：每击败1只Boss解锁1种
@@ -2424,8 +2431,8 @@
       for (const b of this.bullets) {
         if (!b.friendly || b.dead) continue;
         for (const e of this.targets()) {
-          if (e.dead) continue;
-          if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) continue;   // Boss 入场/转场免伤（子弹穿透不吞弹）
+          if (e.dead || e.dying) continue;
+          if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'summon' || e.state === 'transform')) continue;   // Boss 入场/转场/锁血召唤期免伤（子弹穿透不吞弹）
           if (b.hitSet && b.hitSet.has(e)) continue;
           // 草龙：子弹逐节命中（仅露出地面的节）
           let hitSeg = -1;
@@ -2498,7 +2505,7 @@
               }
             }
             // 闪电子弹：命中后闪电链跳跃链接附近敌人
-            if (p.chainJumps >= 1 && !e.dead) this.chainLightning(e, b.dmg);
+            if (p.chainJumps >= 1 && !e.dead && !e.dying) this.chainLightning(e, b.dmg);
             // 爆炸弹：命中即范围爆炸（不再吞弹 —— 随后正常消耗穿透/反弹次数，与穿透、反弹、贯穿激光协同）
             if (b.bombLv > 0) {
               const radius = 34 + b.bombLv * 12;
@@ -2660,8 +2667,8 @@
         // 找未链过、未死亡、在链接范围内的最近目标（草龙按露出节取点）
         let best = null, bestD = C.range, bestPt = null;
         for (const e of this.targets()) {
-          if (e.dead || linked.has(e)) continue;
-          if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) continue;   // 入场/转场免伤不链接
+          if (e.dead || e.dying || linked.has(e)) continue;
+          if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'summon' || e.state === 'transform')) continue;   // 入场/转场/锁血召唤期免伤不链接
           // 草龙：最近露出节即受击点；整龙全在地下则跳过
           const pt = e.segments ? e.nearestExposed(from.x, from.y) : { x: e.x, y: e.y };
           if (!pt) continue;

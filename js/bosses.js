@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  const { Bullet, Lightning, Beam, CurveBeam, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, Particle, BoneDragonMini, GrassDragon, DRAGON_THEMES } = window.FT;
+  const { Bullet, Lightning, Beam, CurveBeam, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, Particle, BoneDragonMini, GrassDragon, Enemy, DRAGON_THEMES } = window.FT;
   const TAU = Math.PI * 2;
 
   /** Boss 受击闪红时长（秒）与冷却（秒，含闪红持续期） */
@@ -1171,7 +1171,9 @@
       this.lockHp = false;
       this.actT = 2.4;
       this.actIdx = 0;
-      this.summoned = false;
+      // 开场锁血召唤斧头兵团
+      this.summonLeft = 0;
+      this.summonGap = 0;
       // 双手（锚点相对身体）：dawang_1.png 正面图，双手举斧在肩部两侧
       this.hands = [
         { ox: -55, oy: -6, px: 0, py: 0, tx: 0, ty: 0, state: 'idle', t: 0, fireT: 0 },
@@ -1191,12 +1193,20 @@
 
       if (this.state === 'enter') {
         this.x -= 90 * dt;
-        if (this.x <= this.hoverX) { this.state = 'fight'; this.stateT = 0; }
+        if (this.x <= this.hoverX) {
+          // 入场结束 → 开场锁血 6s，召唤一大批斧头兵
+          this.state = 'summon'; this.stateT = 0;
+          this.lockHp = true;
+          this.summonLeft = CFG.axeMinion.count;
+          this.summonGap = 0.2;
+          g.toast('斧王召唤了斧头兵团！', 2.4, 'lt');
+          SFX.warn();
+        }
         return;
       }
 
       // 半血变身（阶段1）：锁血碎裂
-      if (this.phase === 1 && this.state !== 'transform' && this.hp <= this.maxHp * 0.5) {
+      if (this.phase === 1 && this.state !== 'transform' && this.state !== 'summon' && this.hp <= this.maxHp * 0.5) {
         this.state = 'transform'; this.stateT = 0;
         this.lockHp = true;
         this.hp = Math.ceil(this.maxHp * 0.5);
@@ -1225,20 +1235,36 @@
         return;
       }
 
+      // 开场锁血召唤：悬停在右侧，错峰直接投放斧头兵（绕过普通刷怪上限），6s 后解除锁血
+      if (this.state === 'summon') {
+        this.baseY += (clamp(p.y - 40, 140, CFG.GROUND_Y - 200) - this.baseY) * dt * 1.2;
+        this.y = this.baseY + Math.sin(this.t * 1.8) * 16;
+        this.x += (this.hoverX - this.x) * dt * 1.6;
+        this.summonGap -= dt;
+        if (this.summonLeft > 0 && this.summonGap <= 0) {
+          this.summonGap = CFG.axeMinion.spawnGap;
+          this.summonLeft--;
+          g.enemies.push(new Enemy('axeMinion', g));
+          // 召唤金光：从斧王袖口洒出，落向入场方向
+          burst(g, this.x - 46, this.y + rand(-30, 40), 10,
+            ['#ffd23b', '#fff3c4', '#e8eef7', '#c62f26'], 200, 5, 0.45, -40);
+        }
+        if (this.stateT >= CFG.axeMinion.lockTime) {
+          this.state = 'fight'; this.stateT = 0;
+          this.lockHp = false;
+          this.actT = 2.4;
+          g.toast('斧头兵团列阵完毕！', 1.8, 'lt');
+          burst(g, this.x, this.y, 22, ['#ffd23b', '#fff', '#c62f26'], 260, 6, 0.55, 80);
+        }
+        return;
+      }
+
       if (this.phase === 1) {
         if (this.state === 'fight') {
           // 屏幕右侧悬停
           this.baseY += (clamp(p.y - 40, 140, CFG.GROUND_Y - 200) - this.baseY) * dt * 1.2;
           this.y = this.baseY + Math.sin(this.t * 1.8) * 16;
           this.x += (this.hoverX - this.x) * dt * 1.6;
-          // 开局召唤 5 个地面类敌人
-          if (!this.summoned) {
-            this.summoned = true;
-            for (let i = 0; i < 5; i++) {
-              setTimeout(() => { if (g.state === 'playing') g.spawnEnemy(i % 2 ? 'archer' : 'cannoneer'); }, 400 + i * 350);
-            }
-            g.toast('斧王召唤了部下！', 2, 'lt');
-          }
           this.actT -= dt;
           if (this.actT <= 0) {
             if (this.actIdx % 2 === 0) {
@@ -1367,6 +1393,13 @@
       }
     }
     takeDamage(dmg, g, kb) {
+      // 锁血（开场召唤斧头兵团 6s / 半血碎裂变身 2.4s）：免疫常规伤害；大招释放时会临时解除 lockHp 造成伤害
+      if (this.lockHp) {
+        if (Math.random() < 0.3) {
+          burst(g, this.x + rand(-60, 40), this.y + rand(-90, 90), 2, ['#ffd23b', '#fff3c4'], 140, 3, 0.2);
+        }
+        return;
+      }
       if (this.invulnT > 0) {
         // 无敌中：格挡火花，不掉血
         if (Math.random() < 0.35) {
@@ -1403,6 +1436,26 @@
         ctx.beginPath();
         ctx.ellipse(this.x, this.y, this.phase === 2 ? 178 : 150, this.phase === 2 ? 155 : 178, 0, 0, TAU);
         ctx.stroke();
+        ctx.restore();
+      }
+      // 开场召唤锁血护盾：金色脉动环 + 旋转碎点（提示常规伤害无效，大招可破）
+      if (this.lockHp && this.state === 'summon') {
+        const pk = 1 + Math.sin(this.t * 12) * 0.04;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.scale(pk, pk);
+        ctx.strokeStyle = `rgba(255,210,59,${0.55 + Math.sin(this.t * 9) * 0.25})`;
+        ctx.lineWidth = 6; ctx.lineCap = 'round';
+        ctx.shadowColor = '#ffb300'; ctx.shadowBlur = 22;
+        ctx.beginPath(); ctx.ellipse(0, 0, 150, 178, 0, 0, TAU); ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(255,243,196,0.5)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(0, 0, 158, 186, 0, 0, TAU); ctx.stroke();
+        for (let i = 0; i < 8; i++) {
+          const a = -this.t * 2.2 + i * (TAU / 8);
+          ctx.fillStyle = 'rgba(255,225,130,0.75)';
+          ctx.beginPath(); ctx.arc(Math.cos(a) * 154, Math.sin(a) * 182, 3, 0, TAU); ctx.fill();
+        }
         ctx.restore();
       }
       if (this.phase === 2) {

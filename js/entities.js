@@ -262,7 +262,7 @@
         if (d < bestD) { bestD = d; best = t; }
       };
       for (const e of g.targets()) {
-        if (e.dead) continue;
+        if (e.dead || e.dying) continue;
         if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) continue;
         if (e.segments) {
           const ne = e.nearestExposed(this.x, this.y);
@@ -2365,11 +2365,11 @@
       });
     }
 
-    /** 屏幕内最近的敌人（Boss 入场/转场期跳过） */
+    /** 屏幕内最近的敌人（Boss 入场/转场期跳过；死亡演出中的单位跳过） */
     nearestEnemy(g) {
       let best = null, bestD = Infinity;
       for (const e of g.targets()) {
-        if (e.dead) continue;
+        if (e.dead || e.dying) continue;
         if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) continue;
         const px = e.x, py = e.y;
         const d = (px - this.x) ** 2 + (py - this.y) ** 2;
@@ -2893,6 +2893,7 @@
 
       // 接触检测 → 自动近战 / 受伤（草龙按露出地面的龙身节逐节判定）
       g.targets().forEach(e => {
+        if (e.dying) return;   // 死亡演出中（斧头兵旋转飞天）不再接触
         let touch;
         if (e.segments && e.touchesPoint) touch = e.touchesPoint(this.x, this.y, this.radius);
         else touch = dist(this, e) < this.radius + (e.radius || 16) * 0.85;
@@ -3537,6 +3538,26 @@
         this.midX = CFG.W * (CFG.arena.bomb.midX || 0.5);
         this.spin = 0;
       }
+
+      /* ===== 斧王召唤：西装斧头兵（bossOnly，地面单位；行进步入→停步高弧抛斧；死亡旋转飞天落地爆炸）===== */
+      if (type === 'axeMinion') {
+        this.restY = CFG.GROUND_Y - 30;
+        this.y = this.restY;
+        this.baseY = this.restY;
+        this.x = CFG.W + 50 + rand(0, 240);    // 屏外错峰入场
+        this.spawnSide = 'right'; this.face = -1; this.enterTX = null;
+        this.state = 'walk';
+        // 按召唤序号均匀铺开站位（避免十几只叠成一团），落点铺满地面左 16%~68%
+        const slot = g.enemies.filter(e => e.type === 'axeMinion').length;
+        this.haltX = CFG.W * (0.16 + 0.52 * slot / Math.max(1, CFG.axeMinion.count - 1)) + rand(-12, 12);
+        this.atkT = rand(1.4, 2.4);
+        this.throwT = 0; this.fired = false;
+        this.air = false; this.jumpVx = 0; this.jumpVy = 0;
+        this.spin = 0; this.spinSpd = 0;
+        this.dying = false;
+        this.contactBase = def.contact;
+        this.spawnInvuln = 0.6;
+      }
     }
 
     /** 自爆骷髅：接触玩家引爆（无能量掉落，纯爆炸伤害） */
@@ -3556,7 +3577,7 @@
     }
 
     takeDamage(dmg, g, kb) {
-      if (this.dead) return;
+      if (this.dead || this.dying) return;
       if (this.spawnInvuln > 0) return;   // 出场无敌期内不受伤
       this.hp -= dmg;
       this.flash = 0.08;
@@ -3568,7 +3589,9 @@
     }
 
     die(g) {
-      if (this.dead) return;
+      if (this.dead || this.dying) return;
+      // 斧头兵：死亡演出——旋转飞天 → 落地爆炸（奖励立即结算，爆裂演出延迟）
+      if (this.type === 'axeMinion') { this.beginAxeDeath(g); return; }
       this.dead = true;
       g.kills++;
       if (typeof g.roundKills === 'number') g.roundKills++;   // 本轮刷怪段击杀（Boss 提前召唤门槛）
@@ -3613,7 +3636,8 @@
         ramFighter: ['#b8b8c0', '#8a8a96', '#e0453a', '#fff'],
         shieldSlave: ['#c89036', '#8a5e20', '#d8d8e0', '#ffd23b'],
         puppet: ['#3a2a4a', '#7a5a9a', '#c83a5a', '#ffd23b'],
-        bombPrisoner: ['#9a9aa2', '#5a5a64', '#ff7b2e', '#ffd23b', '#e0453a']
+        bombPrisoner: ['#9a9aa2', '#5a5a64', '#ff7b2e', '#ffd23b', '#e0453a'],
+        axeMinion: ['#2e333d', '#e8eef7', '#d83a30', '#ffd23b']
       }[this.type] || ['#fff', '#aaa'];
     }
 
@@ -3635,6 +3659,8 @@
     update(dt, g) {
       // 被浪客摔投中：由玩家更新位置/旋转，跳过常规 AI
       if (this.throwByPlayer) { return; }
+      // 斧头兵死亡演出：旋转飞天 → 落地爆炸（不受冻结/困惑/击退影响）
+      if (this.dying) { this.updateAxeDeath(dt, g); return; }
       this.t += dt;
       this.animT += dt;
       this.stateT += dt;
@@ -3725,6 +3751,7 @@
         case 'shieldSlave': this.aiShieldSlave(dt, g, p); break;
         case 'puppet': this.aiPuppet(dt, g, p); break;
         case 'bombPrisoner': this.aiBombPrisoner(dt, g, p); break;
+        case 'axeMinion': this.aiAxeMinion(dt, g, p); break;
       }
       // 月痕沙海：入场结束后精灵朝向玩家（单一朝向写入源；入场飞行段在上方处理）
       if (g.mapId === 'moondesert' && this.enterTX === null && g.player) {
@@ -4485,6 +4512,239 @@
       g.aoe(this.x, this.y, R, Math.round(34 * g.atkScale));   // 波及周围敌人（含空中爆炸）
     }
 
+    /** 斧头兵：地面行进步入 → 停步抡斧，朝玩家高弧线慢抛斧头（低伤） */
+    aiAxeMinion(dt, g, p) {
+      const A = CFG.axeMinion;
+      if (!this.air) { this.y = this.restY; this.kbY = 0; }
+      if (this.state === 'walk') {
+        this.x -= A.walkSpd * this.speedMul * dt;
+        this.atkT -= dt;
+        if (this.x <= this.haltX) this.state = 'idle';
+      } else if (this.state === 'idle') {
+        if (p.x < this.x - 320) this.x -= A.walkSpd * 0.5 * this.speedMul * dt;   // 玩家离得太远时缓慢逼近
+        this.atkT -= dt;
+        if (this.atkT <= 0) {
+          this.state = 'throwAnim';
+          this.throwT = A.throwWind; this.fired = false;
+          this.atkT = rand(A.throwCdMin, A.throwCdMax);
+        }
+      } else if (this.state === 'throwAnim') {
+        this.throwT -= dt;
+        // 抡到过半时松手出斧
+        if (!this.fired && this.throwT <= A.throwWind * 0.5) {
+          this.fired = true;
+          this.throwAxe(g, p);
+        }
+        if (this.throwT <= 0) this.state = 'idle';
+      }
+    }
+    /** 高弧线抛斧：飞行时间由水平距离决定（慢），大重力把斧头顶得很高 */
+    throwAxe(g, p) {
+      const A = CFG.axeMinion;
+      const x0 = this.x - 12, y0 = this.y - 28;
+      const dx = p.x - x0, dy = p.y - y0;
+      const t = clamp(Math.abs(dx) / A.axeSpd, A.tMin, A.tMax);
+      const vx = dx / t;
+      const vy = (dy - 0.5 * A.axeG * t * t) / t;
+      g.bullets.push(new Bullet(x0, y0, vx, vy,
+        { kind: 'axe', r: A.axeR, dmg: Math.round(this.bulletDmg * g.atkScale), dmgScale: g.atkScale,
+          life: 4, grav: A.axeG, spinRate: 11, color: '#cfd8e3' }));
+      SFX.javelinThrow();
+    }
+    /** 死亡：立即结算奖励，身体旋转飞向天空（延迟爆炸，期间不可被选中/受伤） */
+    beginAxeDeath(g) {
+      this.dying = true;
+      this.state = 'deathFly';
+      this.hurtT = 0; this.flash = 0;   // 死亡演出不再挂红染
+      g.kills++;
+      if (typeof g.roundKills === 'number') g.roundKills++;
+      g.score += this.def.score;
+      if (window.Ach) window.Ach.evt('enemyDie', { g: g, e: this });
+      g.addRage(CFG.ultimate.rageNormal);
+      g.gems.push(new Gem(this.x, this.y, this.xpValue || this.def.xp));
+      const A = CFG.axeMinion;
+      this.air = true;
+      this.jumpVy = -A.upV;
+      this.jumpVx = rand(-70, 70);
+      this.spin = rand(-0.4, 0.4);
+      this.spinSpd = A.spinSpd * (Math.random() < 0.5 ? -1 : 1);
+      burst(g, this.x, this.y + 8, 10, ['#2e333d', '#e8eef7', '#d83a30', '#ffd23b'], 150, 5, 0.4, 70);
+      SFX.javelinThrow();
+    }
+    /** 死亡演出物理：上升 → 重力下落（衣片拖尾）→ 落地爆炸后真正移除 */
+    updateAxeDeath(dt, g) {
+      const A = CFG.axeMinion;
+      this.jumpVy += A.deathG * dt;
+      this.x += this.jumpVx * dt;
+      this.y += this.jumpVy * dt;
+      this.x = clamp(this.x, 24, CFG.W - 24);
+      this.spin += this.spinSpd * dt;
+      if (Math.random() < 0.6) {
+        g.particles.push(new Particle(this.x + rand(-8, 8), this.y + rand(-10, 10),
+          rand(-40, 40), rand(-60, 10), rand(0.3, 0.55), rand(2, 4),
+          ['#2e333d', '#e8eef7', '#d83a30'][randi(0, 2)]));
+      }
+      if (this.jumpVy >= 0 && this.y >= this.restY) {
+        this.y = this.restY;
+        // 落地爆炸：低伤近距全额/远距六成
+        burst(g, this.x, this.restY, 34, ['#ff7b2e', '#ffd23b', '#ff3b1e', '#2e333d', '#fff'], 320, 7, 0.7, 100);
+        SFX.explode(false);
+        g.shake(7);
+        const p = g.player;
+        if (p) {
+          const d = Math.hypot(p.x - this.x, p.y - this.restY);
+          if (d < A.blastR + p.radius) {
+            p.hurt(Math.round(A.blastDmg * g.atkScale * (d < A.blastR * 0.5 ? 1 : 0.6)), g, this.dsrc);
+          }
+        }
+        this.dead = true;
+      }
+    }
+
+    /** 西装斧头兵程序化绘制（色块饱满、深色描边、面朝左；外层镜像/受伤红染由 render 统一处理） */
+    drawAxeMinion(ctx, t) {
+      const dying = this.dying;
+      const walk = !dying && this.state === 'walk';
+      const wp = t * 9;
+      const sw = walk ? Math.sin(wp) : 0;
+      const bob = walk ? Math.abs(Math.cos(wp)) * 1.6 : 0;
+      const shift = walk ? Math.sin(wp) * 2 : 0;
+      const ang = dying ? this.spin : (walk ? Math.sin(wp) * 0.05 : 0);
+      ctx.save();
+      ctx.translate(this.x + shift, this.y - bob);
+      ctx.rotate(ang);
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      // 粗肢体：先深色描边再内色
+      const limb = (x1, y1, x2, y2, w, color) => {
+        ctx.strokeStyle = '#14161b'; ctx.lineWidth = w + 2.4;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        ctx.strokeStyle = color; ctx.lineWidth = w;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      };
+      /* ---- 腿 ---- */
+      const bfx = 4 - sw * 5, ffx = -4 + sw * 5;   // 后脚/前脚 x
+      limb(4, 6, bfx, 25, 6.4, '#232830');
+      limb(-4, 6, ffx, 25, 6.4, '#2b303a');
+      /* ---- 皮鞋（朝左） ---- */
+      ctx.fillStyle = '#0c0e13';
+      ctx.fillRect(bfx - 8, 22.5, 10, 5.4);
+      ctx.fillRect(ffx - 9, 22.5, 11, 5.4);
+      /* ---- 后臂（自然摆动） ---- */
+      limb(8, -12, 8 + sw * 5, 0 + sw * 3, 5.6, '#262b34');
+      ctx.fillStyle = '#d8a87e';
+      ctx.beginPath(); ctx.arc(8 + sw * 5, 0 + sw * 3, 2.6, 0, TAU); ctx.fill();
+      /* ---- 西装外套 ---- */
+      ctx.fillStyle = '#2e333d'; ctx.strokeStyle = '#14161b'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-13, -15); ctx.lineTo(13, -15); ctx.lineTo(10.5, 8); ctx.lineTo(-10.5, 8);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#272c35';   // 右侧暗面
+      ctx.beginPath();
+      ctx.moveTo(0, -15); ctx.lineTo(13, -15); ctx.lineTo(10.5, 8); ctx.lineTo(0, 8);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#1b1f27'; ctx.fillRect(-10.5, 5.6, 21, 2.8);   // 下摆腰线
+      /* ---- 白衬衫 ---- */
+      ctx.fillStyle = '#eef2f8';
+      ctx.beginPath();
+      ctx.moveTo(-5.4, -14.4); ctx.lineTo(5.4, -14.4); ctx.lineTo(0, -3.4);
+      ctx.closePath(); ctx.fill();
+      ctx.fillRect(-2.6, -4, 5.2, 12);
+      /* ---- 西装翻领 ---- */
+      ctx.fillStyle = '#1f242c';
+      ctx.beginPath();
+      ctx.moveTo(-13, -15); ctx.lineTo(-3.4, -14.4); ctx.lineTo(-7.4, -4);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(13, -15); ctx.lineTo(3.4, -14.4); ctx.lineTo(7.4, -4);
+      ctx.closePath(); ctx.fill();
+      /* ---- 红领带 ---- */
+      ctx.fillStyle = '#c62f26';
+      ctx.fillRect(-2.2, -15, 4.4, 3.4);
+      ctx.beginPath();
+      ctx.moveTo(-2.4, -11.6); ctx.lineTo(2.4, -11.6); ctx.lineTo(3, -1.6);
+      ctx.lineTo(0, 3); ctx.lineTo(-3, -1.6);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(-1.2, -10, 1, 7);
+      /* ---- 纽扣 / 口袋巾 ---- */
+      ctx.fillStyle = '#161920';
+      ctx.beginPath(); ctx.arc(3.6, -2, 1.1, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(3.6, 3.2, 1.1, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#e8eef7'; ctx.fillRect(-9.4, -0.6, 4, 2.6);
+      /* ---- 脖子 ---- */
+      ctx.fillStyle = '#d8a87e'; ctx.fillRect(-2.6, -18.6, 5.2, 4.6);
+      /* ---- 头 ---- */
+      ctx.fillStyle = '#d8a87e';
+      ctx.beginPath(); ctx.arc(5.8, -24.4, 1.9, 0, TAU); ctx.fill(); ctx.stroke();   // 耳朵
+      ctx.fillStyle = '#e3b58c'; ctx.strokeStyle = '#14161b'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, -24.5, 6.6, 0, TAU); ctx.fill(); ctx.stroke();
+      // 后梳黑发（脸朝左，额头露在左侧）
+      ctx.fillStyle = '#16110f';
+      ctx.beginPath();
+      ctx.moveTo(-5.4, -26.2);
+      ctx.quadraticCurveTo(-4, -31.6, 2, -31.2);
+      ctx.quadraticCurveTo(7, -30.8, 6.8, -25.2);
+      ctx.lineTo(6.2, -22.4);
+      ctx.quadraticCurveTo(3, -25.4, -1, -25.6);
+      ctx.quadraticCurveTo(-3.6, -25.6, -5.4, -24.2);
+      ctx.closePath(); ctx.fill();
+      // 墨镜
+      ctx.fillStyle = '#0c0e13';
+      ctx.beginPath();
+      ctx.moveTo(-6.4, -26.6); ctx.lineTo(1.6, -26.6); ctx.lineTo(1.2, -23.6); ctx.lineTo(-5.6, -23.8);
+      ctx.closePath(); ctx.fill();
+      ctx.fillRect(1.6, -26.2, 4.8, 2.8);
+      ctx.fillStyle = 'rgba(150,190,255,0.55)'; ctx.fillRect(-5, -26, 2.2, 0.9);
+      // 嘴
+      ctx.strokeStyle = '#8a5a44'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(-5, -21.4); ctx.lineTo(-1.6, -21.2); ctx.stroke();
+      /* ---- 前臂 + 手持斧（a：0=垂在身侧，>0 向前抡起，π=头顶） ---- */
+      let a;
+      if (dying) a = 0.5;
+      else if (this.state === 'throwAnim') {
+        const wind = CFG.axeMinion.throwWind;
+        const k = clamp(1 - this.throwT / wind, 0, 1);
+        a = k < 0.5 ? 0.2 + (2.9 - 0.2) * (k / 0.5)
+                    : 2.9 + (-0.25 - 2.9) * ((k - 0.5) / 0.5);   // 举过头顶 → 顺势下劈
+      } else a = 0.18 - sw * 0.5;
+      const shX = -8, shY = -12;
+      const hx = shX - Math.sin(a) * 17, hy = shY + Math.cos(a) * 17;
+      limb(shX, shY, hx, hy, 5.4, '#2e333d');
+      ctx.fillStyle = '#e3b58c'; ctx.strokeStyle = '#14161b'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(hx, hy, 2.8, 0, TAU); ctx.fill(); ctx.stroke();
+      // 斧柄 + 双刃
+      const dx = -Math.sin(a), dy = Math.cos(a), qx = Math.cos(a), qy = Math.sin(a);
+      const p0x = hx - dx * 5, p0y = hy - dy * 5, p1x = hx + dx * 15, p1y = hy + dy * 15;
+      ctx.strokeStyle = '#14161b'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.stroke();
+      ctx.strokeStyle = '#7a4a22'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.stroke();
+      for (const s of [1, -1]) {
+        ctx.fillStyle = '#14161b';
+        ctx.beginPath();
+        ctx.moveTo(p1x + dx * 2 + qx * 2 * s, p1y + dy * 2 + qy * 2 * s);
+        ctx.lineTo(p1x + dx * 2 + qx * 11 * s, p1y + dy * 2 + qy * 11 * s);
+        ctx.lineTo(p1x - dx * 6 + qx * 9 * s, p1y - dy * 6 + qy * 9 * s);
+        ctx.lineTo(p1x - dx * 7 + qx * 2 * s, p1y - dy * 7 + qy * 2 * s);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#cdd6e2';
+        ctx.beginPath();
+        ctx.moveTo(p1x + dx * 1.2 + qx * 3 * s, p1y + dy * 1.2 + qy * 3 * s);
+        ctx.lineTo(p1x + dx * 1.2 + qx * 9.2 * s, p1y + dy * 1.2 + qy * 9.2 * s);
+        ctx.lineTo(p1x - dx * 4.6 + qx * 7.4 * s, p1y - dy * 4.6 + qy * 7.4 * s);
+        ctx.lineTo(p1x - dx * 5.2 + qx * 3 * s, p1y - dy * 5.2 + qy * 3 * s);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#f4f7fc'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(p1x + dx * 0.8 + qx * 8 * s, p1y + dy * 0.8 + qy * 8 * s);
+        ctx.lineTo(p1x - dx * 3 + qx * 6.8 * s, p1y - dy * 3 + qy * 6.8 * s);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#ffd23b';
+      ctx.beginPath(); ctx.arc(p1x, p1y, 2, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+
     /* 渲染 */
     render(ctx) {
       const flip = this.flash > 0;
@@ -4678,6 +4938,9 @@
           }
           break;
         }
+        case 'axeMinion':
+          this.drawAxeMinion(ctx, t);
+          break;
       }
       if (mirrored) ctx.restore();
       // 魔眼飞虫锁定准星：世界坐标绘制（不能随精灵镜像翻转）
