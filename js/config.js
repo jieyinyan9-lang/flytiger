@@ -542,8 +542,19 @@
       { id: 'wasteland', name: '紫色荒地',   icon: '🌆', obs: ['treeT', 'treeM', 'treeL'] },
       { id: 'cyber',     name: '霓虹喵都',   icon: '🏙️', obs: ['poleT', 'boothL', 'buildM'], scrollMul: 2 },
       { id: 'ocean',     name: '大海',       icon: '🌊', obs: ['reefT', 'reefM', 'coralL'], sea: true },
-      { id: 'colosseum', name: '罗马角斗场', icon: '⚔️', obs: ['spikeT', 'spikeM', 'spikeL'], arena: true }
+      { id: 'colosseum', name: '罗马角斗场', icon: '⚔️', obs: ['spikeT', 'spikeM', 'spikeL'], arena: true },
+      // 月痕沙海：特殊关卡（不参与随机抽取，主界面按 1 进入）；夜晚玫红沙漠、缺角月亮漏沙、金字塔与骸骨
+      { id: 'moondesert', name: '月痕沙海', icon: '🌙', obs: ['cactusT', 'cactusM', 'cactusL'], stage: true, desert: true }
     ],
+
+    /** 月痕沙海关卡参数 */
+    moondesert: {
+      duration: 360,          // 关卡总时长 6 分钟
+      waveCount: 2,           // 中途怪物潮次数
+      waveDur: 30,            // 每次怪物潮 30 秒
+      waveTime: [120, 240],   // 第 2 分钟 / 第 4 分钟触发怪物潮
+      boss: 'Sphinx'          // 最终 Boss：狮身人面像
+    },
 
     /** 地图特殊机制参数 */
     map: {

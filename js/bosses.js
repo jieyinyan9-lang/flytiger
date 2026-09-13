@@ -2158,6 +2158,12 @@
       this.hp -= dmg;
       this.hitFlash();
       if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#ff3b3b', '#ff7b2e'], 130, 3, 0.18);
+      // 月痕沙海：第三循环剩余 30% 生命时触发台词（仅一次）
+      if (g.mapId === 'moondesert' && this.cycle === 3 && !this._faceLineSaid &&
+          this.hp > 0 && this.hp <= this.maxHp * 0.3) {
+        this._faceLineSaid = true;
+        g.showDialogue('……等等。你的脸。你每天照镜子的时候，有没有觉得哪里不对？那张脸……本来不是你的。', 6);
+      }
       if (this.hp <= 0) { this.hp = 0; this.advancePhase(g, true); }
     }
 
@@ -2170,10 +2176,17 @@
         this.phase = 'p2'; this.state = 'trans'; this.stateT = 0;
         if (skipped) this.hp = this.maxHp * 0.6;
         SFX.phaseRise(); g.shake(6);
+        if (g.mapId === 'moondesert') g.showDialogue('你在跟整片沙漠打架，小猫。', 4);
       } else if (this.phase === 'p2') {
         this.phase = 'p3'; this.state = 'trans'; this.stateT = 0;
         if (skipped) this.hp = this.maxHp * 0.6;
         SFX.phaseRise(); g.shake(8);
+        if (g.mapId === 'moondesert') {
+          const line = this.cycle === 3
+            ? '把脸还来。我让你活着离开沙漠。不还——那我就自己从你身上拿。'
+            : '不错。上一个来偷东西的，连我一根爪子都没撑过。你比他强。比他也蠢。';
+          g.showDialogue(line, this.cycle === 3 ? 5.5 : 5);
+        }
       } else {
         // P3 结束
         if (this.cycle < 3) {
@@ -2185,6 +2198,12 @@
           this.contactDmg = 26;
           g.toast(`狮身人面像恢复了！（第 ${this.cycle} 循环）`, 2.6, 'lt');
           SFX.phaseRise(); g.shake(10);
+          if (g.mapId === 'moondesert') {
+            const line = this.cycle === 2
+              ? '这就完了？我在沙子底下躺了八百年，小猫。八百年，就为了等一个能让我认真起来的对手。'
+              : '好。好！我承认——你有点本事。那就这样吧。不玩了。';
+            g.showDialogue(line, 5.5);
+          }
           burst(g, this.x, this.y, 30, this.deathCols, 300, 7, 0.8, 130);
           for (let i = 0; i < 14; i++) {
             g.particles.push(new Particle(this.x + rand(-70, 70), this.y + rand(-40, 60),

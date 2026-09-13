@@ -1,10 +1,10 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>飞喵的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260909r40">
+<link rel="stylesheet" href="css/style.css?v=20260913r41">
 </head>
 <body>
 <div id="game-wrap">
@@ -88,8 +88,9 @@
 
   <!-- 开始菜单 -->
   <div id="menu">
-    <!-- 右上角：背景音乐开关 + 操作模式切换 -->
+    <!-- 右上角：仓库入口 + 背景音乐开关 + 操作模式切换 -->
     <div class="menu-topright">
+      <button id="menu-wh-btn" class="audio-btn wh-entry-btn" type="button">🎒 仓库背包</button>
       <button id="menu-bgm-btn" class="audio-btn" type="button">🎵 背景音乐：开</button>
       <div class="mode-row">
         <button id="mode-keyboard" class="mode-btn active" type="button">⌨ 键盘模式<small>方向键 / WASD</small></button>
@@ -152,22 +153,87 @@
     <button id="ach-back-btn" class="pause-btn alt" type="button">← 返回菜单</button>
   </div>
 
+  <!-- 仓库（背包）：藏品 / 文书 / 道具 -->
+  <div id="wh-panel" class="hidden">
+    <div id="wh-head">
+      <div id="wh-title">🎒 仓库</div>
+      <div class="wh-tabs">
+        <button class="wh-tab active" type="button" data-tab="coll">🏺 藏品</button>
+        <button class="wh-tab" type="button" data-tab="doc">📜 文书</button>
+        <button class="wh-tab" type="button" data-tab="item">🎁 道具</button>
+      </div>
+      <button id="wh-back-btn" class="pause-btn alt" type="button">← 返回菜单</button>
+    </div>
+    <div id="wh-body">
+      <!-- 藏品列表（20 槽位） -->
+      <div id="wh-coll-list" class="wh-view"></div>
+      <!-- 藏品详情 -->
+      <div id="wh-coll-detail" class="wh-view wh-detail hidden">
+        <div class="wh-cd-left">
+          <div id="wh-cd-canvas-box"></div>
+        </div>
+        <div class="wh-cd-right">
+          <div id="wh-cd-name"></div>
+          <div id="wh-cd-desc"></div>
+          <div class="wh-cd-meta"><b>来源</b><span id="wh-cd-source"></span></div>
+          <div class="wh-cd-meta"><b>发现者</b><span id="wh-cd-finder"></span></div>
+          <div id="wh-cd-reward"></div>
+          <div id="wh-cd-prog-txt"></div>
+          <div class="wh-prog-outer wh-cd-bar"><div id="wh-cd-prog-inner" class="wh-prog-inner"></div></div>
+          <button id="wh-invest-btn" class="wh-invest-btn" type="button"></button>
+          <button id="wh-cd-back" class="pause-btn alt" type="button">← 返回藏品列表</button>
+        </div>
+      </div>
+      <!-- 文书列表（20 槽位） -->
+      <div id="wh-doc-list" class="wh-view"></div>
+      <!-- 文书阅读器 -->
+      <div id="wh-doc-reader" class="wh-view wh-reader hidden">
+        <div class="wh-dr-head">
+          <div id="wh-dr-title"></div>
+          <div id="wh-dr-author"></div>
+        </div>
+        <div class="wh-dr-content">
+          <div id="wh-dr-art"></div>
+          <div id="wh-dr-text"></div>
+        </div>
+        <button id="wh-dr-back" class="pause-btn alt" type="button">← 返回文书列表</button>
+      </div>
+      <!-- 道具列表 -->
+      <div id="wh-item-list" class="wh-view hidden"></div>
+    </div>
+  </div>
+
   <!-- 游戏结束 -->
   <div id="gameover" class="hidden">
     <div class="go-title">飞喵陨落</div>
     <div id="go-stats" class="go-stats"></div>
     <button id="restart-btn" class="big-btn" type="button">↻ 再战一场</button>
   </div>
+
+  <!-- 月痕沙海通关奖励 -->
+  <div id="reward" class="hidden">
+    <div class="reward-inner">
+      <div class="reward-title">🏆 通关奖励 🏆</div>
+      <div class="reward-sub">你战胜了狮身人面像，从墓室中带出了……</div>
+      <div class="reward-coin">
+        <div class="coin-icon">🪙</div>
+        <div class="coin-name">古钱币</div>
+        <div class="coin-amount">× 1</div>
+      </div>
+      <div class="reward-hint" id="reward-hint">（4 秒后可点击任意位置返回主界面）</div>
+    </div>
+  </div>
 </div>
 
-<script src="js/sprites.js?v=20260909r40"></script>
-<script src="js/characters.js?v=20260913r70"></script>
-<script src="js/config.js?v=20260913r67"></script>
-<script src="js/audio.js?v=20260913r35"></script>
+<script src="js/sprites.js?v=20260914r1"></script>
+<script src="js/characters.js?v=20260914r1"></script>
+<script src="js/config.js?v=20260913r68"></script>
+<script src="js/audio.js?v=20260914r2"></script>
 <script src="js/music.js?v=20260906r53"></script>
 <script src="js/achievements.js?v=20260909r2"></script>
-<script src="js/entities.js?v=20260913r94"></script>
-<script src="js/bosses.js?v=20260909r100"></script>
-<script src="js/game.js?v=20260913r116"></script>
+<script src="js/warehouse.js?v=20260914r1"></script>
+<script src="js/entities.js?v=20260914r2"></script>
+<script src="js/bosses.js?v=20260914r2"></script>
+<script src="js/game.js?v=20260914r2"></script>
 </body>
 </html>

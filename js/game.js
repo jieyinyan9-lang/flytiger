@@ -148,13 +148,21 @@
         charSelTitle: document.getElementById('charsel-title'),
         standbyName: document.getElementById('standby-name'),
         standbyAvatar: document.getElementById('standby-avatar'),
-        standbyDetail: document.getElementById('standby-detail')
+        standbyDetail: document.getElementById('standby-detail'),
+        reward: document.getElementById('reward')
       };
       // 按钮统一走 onClick 安全绑定：元素缺失（如浏览器缓存了旧版 HTML）时仅跳过并告警，
       // 绝不能让构造函数中断——否则 reset()/主循环不启动，背景音乐与音效会全部静默
       this.onClick('start-btn', () => this.start());
       this.onClick('select-btn', () => this.openCharSelect());
       this.onClick('ach-btn', () => { if (window.Ach) Ach.openPanel(); });
+      this.onClick('menu-wh-btn', () => { if (window.WH) WH.openPanel(); });
+      // 仓库藏品圆满解锁角色：刷新选角列表 + 菜单提示（解锁音效由仓库投币链路播放）
+      if (window.WH) WH.onUnlock(id => {
+        try { this.buildCharGrid(); } catch (e) {}
+        const c = window.CHARS && window.CHARS.get(id);
+        this.toast(`🏮 新角色「${c ? c.name : id}」已加入角色选择！`, 3.2, 'lt');
+      });
       this.onClick('restart-btn', () => this.start());
       this.onClick('pause-restart-btn', () => this.start());
       this.onClick('pause-resume-btn', () => this.togglePause());
@@ -171,20 +179,25 @@
       this.onClick('mode-keyboard', () => this.setCtrlMode('keyboard'));
       this.onClick('mode-mouse', () => this.setCtrlMode('mouse'));
 
+      // 月痕沙海奖励页：点击任意位置退回主界面
+      const rewardEl = this.el.reward;
+      if (rewardEl) rewardEl.addEventListener('click', () => this.closeReward());
+
       // 地图选择偏好（'random' 或具体地图 id）：从 localStorage 恢复
       try {
         const saved = localStorage.getItem('flytiger_map');
         this.mapChoice = (saved === 'random' || (saved && CFG.maps.some(m => m.id === saved))) ? saved : 'random';
       } catch (e) { this.mapChoice = 'random'; }
 
-      // 出战角色：从 localStorage 恢复；无偏好则随机备战
+      // 出战角色：从 localStorage 恢复；无偏好或角色仍处于锁定态则随机备战（仅从已解锁角色中取）
       try {
         const sc = localStorage.getItem('flytiger_char');
-        this.charId = (sc && window.CHARS && window.CHARS.has(sc)) ? sc : null;
+        this.charId = (sc && window.CHARS && window.CHARS.has(sc) && window.CHARS.isUnlocked(sc)) ? sc : null;
       } catch (e) { this.charId = null; }
       if (!this.charId) {
-        const order = (window.CHARS && window.CHARS.ORDER) || ['xiaobai'];
-        this.charId = order[Math.floor(Math.random() * order.length)];
+        const all = (window.CHARS && window.CHARS.ORDER) || ['xiaobai'];
+        const pool = window.CHARS ? all.filter(id => window.CHARS.isUnlocked(id)) : all;
+        this.charId = pool[Math.floor(Math.random() * pool.length)] || 'xiaobai';
         try { localStorage.setItem('flytiger_char', this.charId); } catch (e) {}
       }
       // 角色状态表（id → 空闲/备战/探索/委托）；默认仅备战角色为 ready
@@ -241,6 +254,10 @@
         if (e.code === 'KeyP' && (this.state === 'playing' || this.state === 'paused')) this.togglePause();
         if (e.code === 'KeyM') this.toggleMute();
         if (e.code === 'KeyN') this.toggleBgm();
+        // 月痕沙海关卡：主界面按 1 进入
+        if ((e.code === 'Digit1' || e.key === '1') && this.state === 'menu') { this.startStage(); e.preventDefault(); return; }
+        // 奖励页：点击任意位置或按键退回主界面（4s 后可操作）
+        if (this.rewardShown && this.rewardCanClose) { this.closeReward(); e.preventDefault(); return; }
         // 测试模式快捷键：B 立即触发 Boss 预警（跳过倒计时），便于反复测试
         if (e.code === 'KeyB' && this.testBoss && this.state === 'playing' &&
             !this.bossActive && this.warnT <= 0) this.bossT = 0;
@@ -382,6 +399,16 @@
       this.grassDragonThisRound = false;   // 草龙每轮至多出现一次
       this.unlockedFlyers = new Set();      // 已解锁的飞行弹幕敌人（每轮 30% 概率解锁）
       this._idleAnchor = null;              // 成就：长时间不移动判定锚点（每局重置）
+      // 月痕沙海关卡模式状态
+      this.stageMode = false;               // 是否处于月痕沙海关卡
+      this.stageTime = 0;                   // 关卡已进行时间（秒）
+      this.stageWavesTriggered = new Set(); // 已触发的怪物潮序号
+      this.stageBossSpawned = false;        // 最终 Boss 是否已出场
+      this.shootDisabled = false;           // Boss 台词演出期间停火
+      this.letterbox = 0;                   // 上下黑边压下进度（0~1，1=完全压下）
+      this.bossIntro = null;                // Boss 入场演出状态机
+      this.dialogueBox = null;              // 当前 Boss 台词 {text, t}
+      this.rewardShown = false;             // 奖励页是否已显示
       // 地图专属 Boss（狮身人面像/牛魔/骨龙王）：强制概率轮内独立掷骰（未命中本轮不入池），
       // 离开强制轮后无论是否命中过，都拉平为等权普通池成员——但地图限定永久生效、可反复出场
       this.diffMul = 1;
@@ -451,12 +478,12 @@
         map = CFG.maps.find(m => m.id === this.mapChoice);
       }
       if (!map) {
-        // 随机池：罗马角斗场永不参与随机（仅主界面主动选择进入）
-        let pool = CFG.maps.filter(m => m.id !== 'colosseum');
+        // 随机池：罗马角斗场 / 月痕沙海 永不参与随机（仅主界面主动选择进入）
+        let pool = CFG.maps.filter(m => m.id !== 'colosseum' && m.id !== 'moondesert');
         if (opts.excludeOcean) pool = pool.filter(m => m.id !== 'ocean');
         if (opts.forceDiff) pool = pool.filter(m => m.id !== this.mapId);
-        if (!pool.length) pool = CFG.maps.filter(m => m.id !== 'colosseum' && m.id !== this.mapId);
-        if (!pool.length) pool = CFG.maps.filter(m => m.id !== 'colosseum');
+        if (!pool.length) pool = CFG.maps.filter(m => m.id !== 'colosseum' && m.id !== 'moondesert' && m.id !== this.mapId);
+        if (!pool.length) pool = CFG.maps.filter(m => m.id !== 'colosseum' && m.id !== 'moondesert');
         map = pool[Math.floor(Math.random() * pool.length)];
       }
       this.map = map;
@@ -542,15 +569,15 @@
     }
     /** 大招名称 */
     ultName(ult) {
-      return { wave: '强光波', slash: '前方大斩击', shield: '魔法护盾', soundwave: '禁锢声波', bloodrage: '血怒', lasers: '五重激光串' }[ult] || ult;
+      return { wave: '强光波', slash: '前方大斩击', shield: '魔法护盾', soundwave: '禁锢声波', bloodrage: '血怒', lasers: '五重激光串', phantom: '百鬼夜行' }[ult] || ult;
     }
     /** 自动技能（近战）名称 */
     autoSkillName(id) {
-      return { xiaobai: '爪击', xiake: '疾风突刺', mofashi: '彩虹护盾', buliang: '过肩摔', jiaodoushi: '血怒铠甲', chaoren: '巨型激光' }[id] || '爪击';
+      return { xiaobai: '爪击', xiake: '疾风突刺', mofashi: '彩虹护盾', buliang: '过肩摔', jiaodoushi: '血怒铠甲', chaoren: '巨型激光', meiying: '幽魂爪' }[id] || '爪击';
     }
     /** 自动技能图标字 */
     autoSkillIcon(id) {
-      return { xiaobai: '爪', xiake: '突', mofashi: '盾', buliang: '摔', jiaodoushi: '甲', chaoren: '激' }[id] || '爪';
+      return { xiaobai: '爪', xiake: '突', mofashi: '盾', buliang: '摔', jiaodoushi: '甲', chaoren: '激', meiying: '魅' }[id] || '爪';
     }
     /** 角色参数可读串 */
     charParams(c) {
@@ -560,6 +587,24 @@
       let s = `速度 ${spdPct(c.speedMul)} · 伤害 ${c.dmg} · 射速 ${firePct(c.fireMul || 1)}`;
       if (c.bounceBase) s += ` · 反弹 ${c.bounceBase}`;
       return s + ` ｜ 大招：${this.ultName(c.ult)}`;
+    }
+    /** 构建头像节点：程序化角色（canvas，如魅影）复制一份 canvas；其余用 Image */
+    faceNode(id) {
+      const CH = window.CHARS;
+      const c = CH && CH.get(id);
+      if (!c) return null;
+      const fm = CH.face(id);
+      if (fm instanceof HTMLCanvasElement) {
+        const cv = document.createElement('canvas');
+        cv.width = fm.width; cv.height = fm.height;
+        cv.getContext('2d').drawImage(fm, 0, 0);
+        return cv;
+      }
+      const im = new Image();
+      im.alt = c.name;
+      if (fm && fm.complete && fm.naturalWidth) im.src = fm.src;
+      else im.src = c.face || c.art;
+      return im;
     }
     /** 构建竖排横长条角色列表（前 6 个可用，其余「尚未发现此猫咪」） */
     buildCharGrid() {
@@ -575,22 +620,16 @@
         if (id) {
           const c = CH.get(id);
           const st = this.charStatus[id] || 'idle';
-          bar.className = 'char-bar' + (id === this.charId ? ' picked' : '');
+          const locked = !!c.lock && !CH.isUnlocked(id);
+          bar.className = 'char-bar' + (id === this.charId ? ' picked' : '') + (locked ? ' char-lock' : '');
           bar.dataset.id = id;
           const avatar = document.createElement('div');
           avatar.className = 'char-bar-avatar';
-          const im = new Image();
-          // 优先用 assets/Role/ 头像；回退到 art 主图
-          im.src = c.face || c.art;
-          im.alt = c.name;
-          // 若 CHARS.face 已预加载完成，直接用其（保证立即有图）
-          const fm = CH.face(id);
-          if (fm && fm.complete && fm.naturalWidth) { im.src = fm.src; }
-          avatar.appendChild(im);
+          avatar.appendChild(this.faceNode(id));
           const info = document.createElement('div');
           info.className = 'char-bar-info';
           info.innerHTML =
-            `<div class="char-bar-name">${c.name}</div>` +
+            `<div class="char-bar-name">${c.name}${locked ? ' 🔒' : ''}</div>` +
             `<div class="char-bar-intro">${c.intro || c.desc}</div>` +
             `<div class="char-bar-params">${this.charParams(c)}</div>`;
           const badge = document.createElement('div');
@@ -605,8 +644,24 @@
           bar.appendChild(info);
           bar.appendChild(badge);
           bar.appendChild(mood);
-          // 点框体任意位置 = 设为备战
-          bar.addEventListener('click', () => this.setStandby(id));
+          if (locked) {
+            // 锁定角色：紫标 + 中部遮罩提示，点击只弹提示，不可备战
+            const tag = document.createElement('div');
+            tag.className = 'char-lock-tag';
+            tag.textContent = '🔒 未解锁';
+            const mask = document.createElement('div');
+            mask.className = 'char-lock-mask';
+            mask.textContent = '藏品「黑人财神雕像」圆满后加入';
+            bar.appendChild(tag);
+            bar.appendChild(mask);
+            bar.addEventListener('click', () => {
+              this.toast('🔒「' + c.name + '」尚未解锁：仓库供奉黑人财神雕像至圆满即可加入', 3);
+              try { SFX.hit(); } catch (e) {}
+            });
+          } else {
+            // 点框体任意位置 = 设为备战
+            bar.addEventListener('click', () => this.setStandby(id));
+          }
           this._statusBadges[id] = badge;
           this._moodEls[id] = mood;
         } else {
@@ -674,6 +729,12 @@
     setStandby(id) {
       const CH = window.CHARS;
       if (!CH || !CH.has(id)) return;
+      if (!CH.isUnlocked(id)) {
+        const c = CH.get(id);
+        this.toast('🔒「' + c.name + '」尚未解锁：仓库供奉黑人财神雕像至圆满即可加入', 3);
+        try { SFX.hit(); } catch (e) {}
+        return;
+      }
       this.charId = id;
       CH.ORDER.forEach(oid => { this.charStatus[oid] = (oid === id) ? 'ready' : 'idle'; });
       try { localStorage.setItem('flytiger_char', id); } catch (e) {}
@@ -699,15 +760,11 @@
       const c = window.CHARS && window.CHARS.get(this.charId);
       if (!c) return;
       if (this.el.standbyName) this.el.standbyName.textContent = `${c.icon} ${c.name}`;
-      // 头像
+      // 头像（程序化角色为 canvas 克隆，其余为 Image）
       if (this.el.standbyAvatar) {
         this.el.standbyAvatar.innerHTML = '';
-        const im = new Image();
-        im.src = c.face || c.art;
-        im.alt = c.name;
-        const fm = window.CHARS.face(this.charId);
-        if (fm && fm.complete && fm.naturalWidth) im.src = fm.src;
-        this.el.standbyAvatar.appendChild(im);
+        const node = this.faceNode(this.charId);
+        if (node) this.el.standbyAvatar.appendChild(node);
       }
       // 能力 / 大招 / 自动技能
       if (this.el.standbyDetail) {
@@ -759,7 +816,17 @@
         return;
       }
       SFX.unlock();
+      const wasStage = this.stageMode;
       this.reset();
+      this.stageMode = wasStage;
+      if (this.stageMode) {
+        // 月痕沙海关卡：锁定地图、玩家出生在屏幕中线
+        const m = CFG.maps.find(x => x.id === 'moondesert');
+        this.map = m; this.mapId = 'moondesert';
+        this.crater = null; this.sea = null;
+        this.player.x = CFG.W / 2;
+        this.player.y = CFG.H / 2;
+      }
       this.state = 'playing';
       if (window.Ach) { Ach.beginRun(this.charId); Ach.evt('runStart', { g: this }); }
       this.el.menu.classList.add('hidden');
@@ -770,10 +837,20 @@
       this.el.hud.classList.remove('hidden');
       this.el.bossHud.classList.add('hidden');
       this.syncBgmBtn();     // HUD 首次显示：音乐按钮文案与实际开关状态对齐
-      this.toast(`${this.map.icon} ${this.map.name} · 第 1 轮战斗开始！`, 2.8);
-      const c = window.CHARS && window.CHARS.get(this.charId);
-      if (c) this.toast(`${c.icon} ${c.name} 参战！`, 2.6);
+      if (this.stageMode) {
+        this.toast('🌙 月痕沙海 · 6 分钟生存战，击败狮身人面像！', 3.2);
+      } else {
+        this.toast(`${this.map.icon} ${this.map.name} · 第 1 轮战斗开始！`, 2.8);
+        const c = window.CHARS && window.CHARS.get(this.charId);
+        if (c) this.toast(`${c.icon} ${c.name} 参战！`, 2.6);
+      }
       if (this.testBoss) this.toast(`🧪 测试模式：强制 ${this.testBoss} 反复出场（B 键立即召唤）`, 3.2);
+    }
+
+    /** 从主界面进入月痕沙海关卡（按 1 键触发） */
+    startStage() {
+      this.stageMode = true;
+      this.start();
     }
 
     gameOver() {
@@ -1054,6 +1131,7 @@
       if (ult === 'soundwave') return this.ultSoundwave();
       if (ult === 'bloodrage') return this.ultBloodrage();
       if (ult === 'lasers') return this.ultLasers();
+      if (ult === 'phantom') return this.ultPhantom();
       return this.ultWaveBlast();
     }
 
@@ -1094,6 +1172,72 @@
           Math.random() < 0.5 ? '#ffffff' : '#ffd93b'));
       }
       this.toast('★ 强光波爆发！★', 1.8);
+    }
+
+    /** [魅影] 百鬼夜行 —— 群鬼破匣横扫全屏：小怪全灭，对 Boss 造成 20% 最大生命伤害 */
+    ultPhantom() {
+      const p = this.player;
+      SFX.ultimate();
+      this.shake(17);
+      this.flashT = 0.45; this.flashColor = '#c99bff';
+      const x0 = p.x, y0 = p.y;
+      // 鬼群演出：每只鬼从角色身上向各自方向飘掠，带正弦幽魂轨迹
+      const ghosts = [];
+      const N = 16;
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * TAU + rand(-0.12, 0.12);
+        ghosts.push({
+          a, spd: rand(520, 820), dist: 0,
+          size: rand(13, 22), ph: rand(0, TAU),
+          magenta: Math.random() < 0.28
+        });
+      }
+      this.phantomFx = { x: x0, y: y0, t: 0.95, max: 0.95, r: 30, ghosts };
+      // 大招破解无敌：清除所有敌人出场无敌 + Boss 锁血（草龙本体免疫大招，保留其出场无敌）
+      this.enemies.forEach(e => {
+        if (e.type === 'grassdragon' && !e.isMini) return;
+        e.spawnInvuln = 0;
+      });
+      this.bosses.forEach(b => { b.lockHp = false; });
+      // 屏幕内小怪全灭（草龙本体改为幽焰持续灼烧）
+      this.enemies.slice().forEach(e => {
+        if (e.dead) return;
+        if (e.type === 'grassdragon' && !e.isMini) {
+          e.dotT = 4; e.dotDps = 42 * this.atkScale; e.dotType = 'flame';
+          e.spawnInvuln = 0;
+          return;
+        }
+        e.takeDamage(99999, this);
+      });
+      // 草龙分裂小段：幽焰灼烧 + 重伤
+      this.enemies.slice().forEach(e => {
+        if (e.dead || !e.segments || !e.isMini) return;
+        for (let i = 0; i < e.segments.length; i++) {
+          const s = e.segments[i];
+          if (s.dead) continue;
+          e.damageSegment(i, 32, this, null, '');
+          e.dotT = Math.max(e.dotT || 0, 3); e.dotDps = Math.max(e.dotDps || 0, 26); e.dotType = 'flame';
+        }
+      });
+      // Boss 受到 20% 最大生命伤害（入场免伤状态除外），大招无视无敌
+      this.bosses.forEach(b => {
+        if (!b.dead && b.state !== 'enter' && b.state !== 'trans') {
+          const wasInv = b.lockHp;
+          b.lockHp = false;
+          b.takeDamage(b.maxHp * CFG.ultimate.bossDmgRatio, this);
+          if (wasInv) b.lockHp = true;
+        }
+      });
+      // 鬼火粒子
+      for (let i = 0; i < 52; i++) {
+        const a = rand(0, TAU);
+        this.particles.push(new Particle(
+          x0, y0,
+          Math.cos(a) * rand(260, 720), Math.sin(a) * rand(260, 720),
+          rand(0.35, 0.8), rand(3, 7),
+          Math.random() < 0.5 ? '#b57bff' : (Math.random() < 0.5 ? '#ff7bd5' : '#8ff0ff')));
+      }
+      this.toast('👻 百鬼夜行！', 1.8);
     }
 
     /** [侠客] 前方大斩击：大范围剑气斩，秒杀接触小怪、直接摧毁障碍、龙类持续灼烧 */
@@ -1510,6 +1654,10 @@
         this.xpNeed = CFG.xpNeed(this.totalLevels);
         this.openLevelup();
       }
+      // 月痕沙海关卡：击败最终 Boss → 弹出奖励页
+      if (this.stageMode) {
+        this.showReward();
+      }
     }
 
     /* ---------------- 火球爆炸 ---------------- */
@@ -1628,8 +1776,132 @@
       return table.length ? table[Math.floor(Math.random() * table.length)] : null;
     }
 
+    /* ---------------- 月痕沙海关卡 ---------------- */
+    stageTick(dt) {
+      if (this.bossIntro) { this.updateBossIntro(dt); return; }
+      this.stageTime += dt;
+      const cfg = CFG.moondesert;
+      // 中途怪物潮：第 2 / 4 分钟各一次，每次 30 秒
+      cfg.waveTime.forEach((wt, idx) => {
+        if (!this.stageWavesTriggered.has(idx) && this.stageTime >= wt) {
+          this.stageWavesTriggered.add(idx);
+          this.tideT = cfg.waveDur;
+          this.toast(`⚠ 月痕沙海怪物潮来袭：小怪数量 ×3！坚持 ${cfg.waveDur} 秒！`, 3.2);
+          SFX.warn();
+        }
+      });
+      // 6 分钟到点：召唤最终 Boss 狮身人面像（带专属入场演出）
+      if (!this.stageBossSpawned && this.stageTime >= cfg.duration && !this.bossActive && this.warnT <= 0) {
+        this.stageBossSpawned = true;
+        this.tideT = 0;
+        this.enemies.forEach(e => e.dead = true);   // 清场小怪
+        this.bullets.forEach(b => { if (!b.friendly) b.neutralize(); });
+        this.startBossIntro();
+      }
+      // 台词计时
+      if (this.dialogueBox) {
+        this.dialogueBox.t -= dt;
+        if (this.dialogueBox.t <= 0) this.dialogueBox = null;
+      }
+    }
+
+    /** Boss 入场演出：黑边压下 → 停火 → 感叹号 → Boss 从右入场 → 台词1 → 玩家左移 → 台词2 → 黑边收回 */
+    startBossIntro() {
+      this.shootDisabled = true;
+      this.bossIntro = { phase: 'bars', t: 0 };
+    }
+    updateBossIntro(dt) {
+      const bi = this.bossIntro;
+      if (!bi) return;
+      bi.t += dt;
+      if (bi.phase === 'bars') {
+        // 黑边压下（0.8s）
+        this.letterbox = Math.min(1, this.letterbox + dt / 0.8);
+        if (bi.t > 0.9) {
+          bi.phase = 'line1'; bi.t = 0;
+          this.showDialogue('又一个来翻我东西的。上一个——算了，你站的地方就是上一个。', 4.5);
+          // 玩家身边弹出感叹号
+          this.bossIntro.mark = true;
+        }
+      } else if (bi.phase === 'line1') {
+        // 玩家自动左移到屏幕左侧
+        const p = this.player;
+        p.x += (120 - p.x) * Math.min(1, dt * 2.0);
+        if (bi.t > 4.2) {
+          bi.phase = 'line2'; bi.t = 0;
+          this.showDialogue('别动。你脚上沾着灰，老灰，地底深处那种。你去过我的墓室。你看见了吧？那个空着的地方。', 5.5);
+        }
+      } else if (bi.phase === 'line2') {
+        const p = this.player;
+        p.x += (120 - p.x) * Math.min(1, dt * 1.5);
+        if (bi.t > 5.2) {
+          // 黑边收回，恢复射击，生成 Boss
+          this.letterbox = Math.max(0, this.letterbox - dt / 0.6);
+          if (this.letterbox <= 0) {
+            this.letterbox = 0;
+            this.shootDisabled = false;
+            this.bossIntro = null;
+            this.dialogueBox = null;
+            this.spawnStageBoss();
+          }
+        }
+      }
+    }
+
+    /** 生成关卡最终 Boss（狮身人面像）并播放专属 BGM */
+    spawnStageBoss() {
+      const entry = (window.BOSS_LIST || []).find(e => e.cls.name === 'Sphinx');
+      if (!entry) return;
+      const b = new entry.cls(this);
+      b.musicTheme = entry.music || 'sphinx';
+      b.x = CFG.W + 120; b.y = 150;   // 从屏幕右侧入场
+      b.state = 'enter';
+      this.bosses.push(b);
+      this.bossSpawned++;
+      this.lastBossName = 'Sphinx';
+      this.el.bossName.textContent = `${b.bossName}`;
+      this.el.bossHud.classList.remove('hidden');
+      this.resetBossBarFx();
+      this.toast(`${b.bossName} 出现！`, 2, 'lt');
+      SFX.bossRoar();
+      this.shake(6);
+    }
+
+    /** 显示 Boss 台词（底部对白框） */
+    showDialogue(text, dur) {
+      this.dialogueBox = { text, t: dur || 4, max: dur || 4 };
+    }
+
+    /** 关卡通关奖励页 */
+    showReward() {
+      this.rewardShown = true;
+      this.rewardCanClose = false;
+      this.rewardT = 0;
+      this.state = 'reward';
+      if (this.el.reward) {
+        this.el.reward.classList.remove('hidden');
+      }
+      // 延迟 0.5s 播放惊喜音效
+      setTimeout(() => { if (SFX.rewardSurprise) SFX.rewardSurprise(); }, 500);
+      // 4 秒后允许点击/按键关闭
+      setTimeout(() => { this.rewardCanClose = true; }, 4000);
+    }
+    closeReward() {
+      if (!this.rewardCanClose) return;
+      this.rewardShown = false;
+      this.rewardCanClose = false;
+      this.stageMode = false;
+      if (this.el.reward) this.el.reward.classList.add('hidden');
+      // 退回主界面
+      this.state = 'menu';
+      this.el.hud.classList.add('hidden');
+      this.el.bossHud.classList.add('hidden');
+      this.el.menu.classList.remove('hidden');
+      this.rollMap();
+    }
+
     spawnTick(dt) {
-      if (this.bossActive) return;      // Boss 战不刷普通怪
+      if (this.bossActive || this.bossIntro) return;      // Boss 战/入场演出不刷普通怪
       this.spawnT -= dt;
       if (this.spawnT > 0 || this.enemies.length >= this.enemyCap()) return;
       const interval = clamp(2.2 - (this.round - 1) * 0.12 - this.time * 0.003, 0.8, 2.2);
@@ -1827,6 +2099,8 @@
       this.scrollX += dt * 110 * (this.map.scrollMul || 1);
       this.shakeMag = Math.max(0, this.shakeMag - dt * 30);
       if (this.flashT > 0) this.flashT = Math.max(0, this.flashT - dt);
+      // 月痕沙海关卡模式计时与流程
+      if (this.stageMode && this.state === 'playing') this.stageTick(dt);
       // 怪物潮倒计时（Boss 战/预警期间暂停，不浪费潮次）
       if (this.tideT > 0 && !this.bossActive) {
         this.tideT = Math.max(0, this.tideT - dt);
@@ -1845,6 +2119,14 @@
       // 声波禁锢 / 斩击特效计时
       if (this.soundwaveT > 0) this.soundwaveT -= dt;
       if (this.slashFx) { this.slashFx.t -= dt; if (this.slashFx.t <= 0) this.slashFx = null; }
+      // 百鬼夜行特效：紫环扩散 + 群鬼飘掠
+      if (this.phantomFx) {
+        const fx = this.phantomFx;
+        fx.t -= dt;
+        fx.r += 1500 * dt;
+        for (let i = 0; i < fx.ghosts.length; i++) fx.ghosts[i].dist += fx.ghosts[i].spd * dt;
+        if (fx.t <= 0) this.phantomFx = null;
+      }
 
       // 云
       this.clouds.forEach(c => {
@@ -1860,7 +2142,7 @@
           this.spawnBoss(this.pendingBoss);
           this.pendingBoss = null;
         }
-      } else if (!this.bossActive) {
+      } else if (!this.bossActive && !this.stageMode) {
         this.bossT -= dt;
         if (this.bossT <= 0) this.triggerBossWarn();
       }
@@ -2945,6 +3227,128 @@
         cloud: cloud('#ffe8c8', '#e8d0a8')
       };
 
+      /* —— 月痕沙海：夜晚玫红沙漠、缺角巨月漏沙、金字塔、河流、骸骨、炊烟火光 —— */
+      this.bg.moondesert = {
+        sky: sky([[0, '#3a1a3e'], [0.4, '#7a2e5e'], [0.75, '#c04a6e'], [1, '#e88a6a']], x => {
+          // 星点
+          x.fillStyle = '#fff';
+          for (let i = 0; i < 60; i++) {
+            const sx = rand(0, CFG.W), sy = rand(20, 220);
+            const sz = Math.random() < 0.85 ? 1 : 2;
+            x.fillRect(sx, sy, sz, sz);
+          }
+          // 硕大的缺角月亮（右上），缺口往外漏沙
+          const mx = 760, my = 110, mr = 52;
+          x.fillStyle = '#f5ecd0';
+          x.beginPath(); x.arc(mx, my, mr, 0, TAU); x.fill();
+          x.fillStyle = '#e8dcb4';
+          for (let i = 0; i < 6; i++) {
+            x.beginPath(); x.arc(mx + rand(-20, 20), my + rand(-20, 20), rand(4, 10), 0, TAU); x.fill();
+          }
+          // 缺角（月牙形缺口，朝向左下）
+          x.fillStyle = '#5a2050';   // 与夜空同色，营造缺角
+          x.beginPath();
+          x.arc(mx - 22, my + 18, mr * 0.92, 0, TAU);
+          x.fill();
+          // 缺口漏沙：金棕色沙粒瀑布
+          for (let i = 0; i < 70; i++) {
+            const sx = mx - 28 + rand(-14, 6);
+            const sy = my + 22 + rand(0, 200);
+            x.fillStyle = Math.random() < 0.5 ? '#e8c06a' : '#d4a04a';
+            x.fillRect(sx, sy, 2, 2);
+          }
+          // 月光晕
+          x.fillStyle = 'rgba(245,236,208,0.12)';
+          x.beginPath(); x.arc(mx, my, mr + 24, 0, TAU); x.fill();
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          // 远处金字塔群（三座，剪影）
+          const pyr = [[120, 180, 150], [300, 185, 110], [420, 178, 90]];
+          pyr.forEach(([px, py, pw]) => {
+            c.fillStyle = '#5a2a5a';
+            c.beginPath(); c.moveTo(px - pw / 2, py); c.lineTo(px, py - 90); c.lineTo(px + pw / 2, py); c.closePath(); c.fill();
+            // 右侧受光面
+            c.fillStyle = '#7a3a6a';
+            c.beginPath(); c.moveTo(px, py - 90); c.lineTo(px + pw / 2, py); c.lineTo(px + pw * 0.18, py); c.closePath(); c.fill();
+          });
+          // 河流：远处蜿蜒蓝带
+          c.fillStyle = '#4a6ab0';
+          c.beginPath();
+          c.moveTo(0, 150);
+          c.bezierCurveTo(120, 120, 200, 170, 320, 140);
+          c.bezierCurveTo(400, 125, 440, 160, 480, 150);
+          c.lineTo(480, 162);
+          c.bezierCurveTo(400, 172, 320, 152, 200, 182);
+          c.bezierCurveTo(120, 192, 60, 158, 0, 162);
+          c.closePath(); c.fill();
+          c.fillStyle = '#6a8ad0';
+          c.beginPath();
+          c.moveTo(0, 152);
+          c.bezierCurveTo(120, 122, 200, 172, 320, 142);
+          c.bezierCurveTo(400, 127, 440, 162, 480, 152);
+          c.lineTo(480, 156);
+          c.bezierCurveTo(400, 131, 320, 146, 200, 176);
+          c.bezierCurveTo(120, 186, 60, 156, 0, 156);
+          c.closePath(); c.fill();
+          // 零星火光（远处营地）
+          for (let i = 0; i < 10; i++) {
+            const fx = rand(20, w - 20), fy = rand(160, 195);
+            c.fillStyle = '#ff7b2e'; c.fillRect(fx, fy, 3, 3);
+            c.fillStyle = '#ffd23b'; c.fillRect(fx + 1, fy - 2, 1, 2);
+          }
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          // 中景沙丘剪影
+          bumps(c, w, h, [[0, 75], [80, 40], [180, 70], [280, 35], [380, 65], [480, 50]], '#7a3560');
+          c.fillStyle = '#8a4570';
+          for (let i = 0; i < 30; i++) c.fillRect(rand(0, w), rand(45, 100), 8, 2);
+          // 炊烟（几缕上升烟柱）
+          for (let i = 0; i < 4; i++) {
+            const sx = 60 + i * 110;
+            for (let j = 0; j < 14; j++) {
+              const sy = 60 - j * 4 + rand(-2, 2);
+              c.fillStyle = `rgba(180,170,200,${0.35 - j * 0.02})`;
+              c.fillRect(sx + rand(-3, 3), sy, 6, 4);
+            }
+            // 烟柱底部火堆
+            c.fillStyle = '#ff7b2e'; c.fillRect(sx - 2, 70, 6, 5);
+            c.fillStyle = '#ffd23b'; c.fillRect(sx, 68, 2, 3);
+          }
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          // 沙地底色（夜晚偏紫）
+          c.fillStyle = '#8a5a6a'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#a06a7a'; c.fillRect(0, 0, w, 12);
+          c.fillStyle = '#6a4050';
+          for (let i = 0; i < 50; i++) c.fillRect(rand(0, w), rand(14, 40), 10, 2);
+          c.fillStyle = '#9a6070';
+          for (let i = 0; i < 30; i++) c.fillRect(rand(0, w), rand(30, h - 8), 5, 4);
+          // 地面骸骨（散落的头骨与肋骨）
+          for (let i = 0; i < 5; i++) {
+            const bx = rand(20, w - 20), by = rand(30, h - 12);
+            // 头骨
+            c.fillStyle = '#e8dcc0';
+            c.fillRect(bx, by, 10, 8);
+            c.fillRect(bx + 1, by - 3, 8, 3);
+            c.fillStyle = '#3a2a3a';
+            c.fillRect(bx + 2, by + 2, 2, 2); c.fillRect(bx + 6, by + 2, 2, 2);
+            c.fillRect(bx + 4, by + 5, 2, 2);
+            // 肋骨（偶尔）
+            if (Math.random() < 0.5) {
+              c.fillStyle = '#d8ccb0';
+              for (let k = 0; k < 4; k++) c.fillRect(bx + 12 + k * 3, by + 1, 2, 6);
+            }
+          }
+          // 零星火光余烬
+          for (let i = 0; i < 8; i++) {
+            const fx = rand(0, w), fy = rand(10, h - 6);
+            c.fillStyle = Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b';
+            c.fillRect(fx, fy, 2, 2);
+          }
+        }),
+        cloud: cloud('#d8c0e0', '#b89cc8')
+      };
+
       // 兼容旧引用
       this.sky = this.bg.grassland.sky;
       this.mountains = this.bg.grassland.far;
@@ -3140,6 +3544,49 @@
           ctx.restore();
           ctx.globalAlpha = 1;
         }
+        // 魅影大招：百鬼夜行（扩散紫环 + 十六鬼火飘掠）
+        if (this.phantomFx) {
+          const fx = this.phantomFx;
+          const pr = clamp(fx.t / fx.max, 0, 1);
+          // 扩散鬼门环
+          ctx.save();
+          ctx.globalAlpha = pr * 0.8;
+          ctx.strokeStyle = '#8b55e0'; ctx.lineWidth = 18 * pr + 3;
+          ctx.beginPath(); ctx.arc(fx.x, fx.y, fx.r, 0, TAU); ctx.stroke();
+          ctx.strokeStyle = '#ff7bd5'; ctx.lineWidth = 6 * pr + 1.5;
+          ctx.beginPath(); ctx.arc(fx.x, fx.y, fx.r * 0.82, 0, TAU); ctx.stroke();
+          ctx.restore();
+          // 群鬼：沿放射方向飘掠、垂直方向正弦游荡
+          fx.ghosts.forEach(g => {
+            const wob = Math.sin(fx.t * 10 + g.ph) * 16;
+            const gx = fx.x + Math.cos(g.a) * g.dist + Math.cos(g.a + Math.PI / 2) * wob;
+            const gy = fx.y + Math.sin(g.a) * g.dist + Math.sin(g.a + Math.PI / 2) * wob;
+            const s = g.size * (0.8 + pr * 0.4);
+            ctx.save();
+            ctx.translate(gx, gy);
+            ctx.rotate(g.a);
+            ctx.globalAlpha = Math.min(1, pr * 1.7) * 0.92;
+            ctx.shadowColor = 'rgba(168,116,255,.9)'; ctx.shadowBlur = 12;
+            // 鬼火拖尾
+            ctx.fillStyle = g.magenta ? '#ff7bd5' : '#8b55e0';
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.4, -s * 0.72);
+            ctx.quadraticCurveTo(-s * 1.9, 0, -s * 0.4, s * 0.72);
+            ctx.closePath(); ctx.fill();
+            // 鬼头
+            ctx.fillStyle = g.magenta ? '#c0509c' : '#6d3fd0';
+            ctx.beginPath(); ctx.arc(0, 0, s, 0, TAU); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#d8c2ff';
+            ctx.beginPath(); ctx.arc(-s * 0.12, -s * 0.12, s * 0.58, 0, TAU); ctx.fill();
+            // 鬼脸：双眼
+            ctx.fillStyle = '#1a0b33';
+            ctx.fillRect(s * 0.02, -s * 0.34, s * 0.24, s * 0.32);
+            ctx.fillRect(s * 0.38, -s * 0.28, s * 0.24, s * 0.32);
+            ctx.restore();
+          });
+          ctx.globalAlpha = 1;
+        }
         // Toast（按 slot 分位置渲染）
         this.toasts.forEach(t => {
           const a = clamp(t.t / 0.5, 0, 1);
@@ -3231,9 +3678,10 @@
           ctx.fillText('未找到 assets/cat.png，请放入白猫图片', CFG.W - 260, CFG.H - 120);
           ctx.restore();
         }
-        // 菜单左上角：备战角色头像（assets/Role/）—— 方形边框、放大、清晰
+        // 菜单左上角：备战角色头像（assets/Role/ 或程序化 canvas）—— 方形边框、放大、清晰
         const faceImg = (Sprites.charFace && Sprites.charFace[this.charId]) || null;
-        if (faceImg && faceImg.complete && faceImg.naturalWidth) {
+        const faceReady = faceImg && (faceImg instanceof HTMLCanvasElement || (faceImg.complete && faceImg.naturalWidth));
+        if (faceReady) {
           const bob2 = Math.sin(performance.now() / 420) * 4;
           const sz = 120;
           const cx = 82, cy = 82 + bob2;
@@ -3248,7 +3696,7 @@
           ctx.beginPath();
           ctx.rect(cx - sz / 2, cy - sz / 2, sz, sz);
           ctx.clip();
-          const fw = faceImg.naturalWidth, fh = faceImg.naturalHeight;
+          const fw = faceImg.naturalWidth || faceImg.width, fh = faceImg.naturalHeight || faceImg.height;
           const r = Math.max(sz / fw, sz / fh);
           const dw = fw * r, dh = fh * r;
           ctx.drawImage(faceImg, cx - dw / 2, cy - dh / 2, dw, dh);
@@ -3304,6 +3752,67 @@
         ctx.globalAlpha = Math.min(0.85, this.flashT / 0.5) * 0.85;
         ctx.fillStyle = this.flashColor || '#fff';
         ctx.fillRect(0, 0, CFG.W, CFG.H);
+        ctx.restore();
+      }
+
+      // 月痕沙海：上下黑边（Boss 入场演出）
+      if (this.letterbox > 0.01) {
+        const bh = Math.round((CFG.H * 0.22) * this.letterbox);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, CFG.W, bh);
+        ctx.fillRect(0, CFG.H - bh, CFG.W, bh);
+      }
+      // 玩家头顶感叹号（Boss 入场提示）
+      if (this.bossIntro && this.bossIntro.mark && this.player) {
+        const t = performance.now() / 1000;
+        const yy = this.player.y - this.player.radius - 30 + Math.sin(t * 8) * 3;
+        ctx.save();
+        ctx.font = 'bold 36px "Microsoft YaHei", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#000';
+        ctx.fillText('!', this.player.x + 1, yy + 1);
+        ctx.fillStyle = '#ff3b3b';
+        ctx.fillText('!', this.player.x, yy);
+        ctx.restore();
+      }
+      // Boss 台词框（底部居中）
+      if (this.dialogueBox) {
+        const d = this.dialogueBox;
+        const a = clamp(Math.min(d.t, d.max - d.t) / 0.4, 0, 1);
+        ctx.save();
+        ctx.globalAlpha = a;
+        const padX = 28, padY = 16;
+        ctx.font = '20px "Microsoft YaHei", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const tw = ctx.measureText(d.text).width;
+        const bw = Math.min(CFG.W - 80, tw + padX * 2);
+        const bh2 = 20 + padY * 2;
+        const bx = (CFG.W - bw) / 2;
+        const by = CFG.H - bh2 - 70;
+        // 半透明黑底 + 金框
+        ctx.fillStyle = 'rgba(20,10,30,0.88)';
+        ctx.fillRect(bx, by, bw, bh2);
+        ctx.strokeStyle = '#e8c06a'; ctx.lineWidth = 2;
+        ctx.strokeRect(bx + 1, by + 1, bw - 2, bh2 - 2);
+        ctx.fillStyle = '#fff5d0';
+        // 文本自动换行（按宽度切分）
+        const maxW = bw - padX * 2;
+        if (tw <= maxW) {
+          ctx.fillText(d.text, CFG.W / 2, by + bh2 / 2);
+        } else {
+          // 简单按字符切分两行
+          const chars = d.text.split('');
+          let line1 = '', line2 = '', cur = '';
+          for (const ch of chars) {
+            const test = cur + ch;
+            if (ctx.measureText(test).width > maxW / 2 && !line2) { line2 = ch; cur = test; }
+            else cur = test;
+          }
+          // 简化：前半/后半
+          const half = Math.ceil(chars.length / 2);
+          ctx.fillText(chars.slice(0, half).join(''), CFG.W / 2, by + bh2 / 2 - 11);
+          ctx.fillText(chars.slice(half).join(''), CFG.W / 2, by + bh2 / 2 + 11);
+        }
         ctx.restore();
       }
 

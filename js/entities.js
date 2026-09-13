@@ -927,6 +927,53 @@
         ctx.restore();
         return;
       }
+      if (k === 'soul' && this.friendly) {
+        // 魅影幽魂弹：朝飞行方向的鬼脸鬼火（鬼火尾焰 + 双眼 + 口）；最终形态幽冥鬼王（鬼角 + 强辉光）
+        const a = Math.atan2(this.vy, this.vx);
+        const r = this.r * (1 + Math.sin(this.t * 10) * 0.08);
+        const gmax = this.gmax;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(a);
+        ctx.shadowColor = 'rgba(168,116,255,0.9)';
+        ctx.shadowBlur = gmax ? 16 : 10;
+        // 鬼火尾焰（身后，随帧伸缩）
+        const flick = 1 + Math.sin(this.t * 18) * 0.15;
+        ctx.fillStyle = gmax ? '#c39bff' : '#8b55e0';
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.4, -r * 0.72);
+        ctx.quadraticCurveTo(-r * 2.1 * flick, 0, -r * 0.4, r * 0.72);
+        ctx.closePath(); ctx.fill();
+        // 鬼火尾尖品红
+        ctx.fillStyle = 'rgba(255,123,213,0.75)';
+        ctx.beginPath();
+        ctx.moveTo(-r * 1.2 * flick, -r * 0.3);
+        ctx.quadraticCurveTo(-r * 2.0 * flick, 0, -r * 1.2 * flick, r * 0.3);
+        ctx.closePath(); ctx.fill();
+        // 幽魂头
+        ctx.fillStyle = gmax ? '#b57bff' : '#6d3fd0';
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = gmax ? '#d8c2ff' : '#b79af0';
+        ctx.beginPath(); ctx.arc(-r * 0.12, -r * 0.12, r * 0.6, 0, TAU); ctx.fill();
+        // 鬼脸：双眼 + 嘴
+        ctx.fillStyle = '#1a0b33';
+        ctx.fillRect(r * 0.02, -r * 0.36, r * 0.26, r * 0.36);
+        ctx.fillRect(r * 0.4, -r * 0.3, r * 0.26, r * 0.36);
+        ctx.fillRect(r * 0.28, r * 0.16, r * 0.16, r * 0.22);
+        // 最终形态：幽冥鬼王双鬼角
+        if (gmax) {
+          ctx.fillStyle = '#e9d5ff';
+          ctx.beginPath();
+          ctx.moveTo(-r * 0.25, -r * 0.85); ctx.lineTo(-r * 0.05, -r * 0.85); ctx.lineTo(-r * 0.12, -r * 1.35);
+          ctx.closePath(); ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(r * 0.3, -r * 0.85); ctx.lineTo(r * 0.5, -r * 0.85); ctx.lineTo(r * 0.42, -r * 1.3);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+        return;
+      }
       if (k === 'butt') {
         // 浪客烟头：白身橙红燃头；最终形态烈焰火把（木柄 + 大火苗）
         const a = Math.atan2(this.vy, this.vx);
@@ -2518,11 +2565,17 @@
         g.flashT = 0.45; g.flashColor = '#ffd0d0';
         burst(g, this.x, this.y, 44, ['#f7941d', '#ffd93b', '#ff5252', '#fff'], 320, 7, 0.9, 140);
         g.toast(`${(this.char && this.char.name) || '飞喵'}阵亡！剩余生命 ×${this.lives}，重生！`, 2.2);
-        // 回到安全位置
-        this.x = clamp(this.x, 80, 260);
-        this.y = CFG.H * 0.4;
-        // 复活后转移至另一张地图
-        if (g.rerollMap) g.rerollMap();
+        // 月痕沙海关卡：原地（出生位置）复活，不切换地图
+        if (g.mapId === 'moondesert') {
+          this.x = CFG.W / 2;
+          this.y = CFG.H / 2;
+        } else {
+          // 回到安全位置
+          this.x = clamp(this.x, 80, 260);
+          this.y = CFG.H * 0.4;
+          // 复活后转移至另一张地图
+          if (g.rerollMap) g.rerollMap();
+        }
       } else {
         g.gameOver();
       }
@@ -2577,6 +2630,8 @@
       }
       // 被标枪击落：禁用飞行输入（失控）
       if (this.downT > 0) { mx = 0; my = 0; }
+      // Boss 入场演出：禁用玩家输入（由演出逻辑自动移动）
+      if (g.bossIntro) { mx = 0; my = 0; }
       // 护罩存在期间移速加成（护罩强化 Lv5/Lv8）
       const shieldSpd = (this.shieldActive && this.shieldDef && this.shieldDef.spd) ? this.shieldDef.spd : 0;
       const spd = CFG.player.speed * (this.speedMul || 1) * (1 + (this.sizeMul - 1) * 0.08)
@@ -2803,8 +2858,8 @@
         }
       }
 
-      // 自动射击（近战期间停火；射速按角色射速倍率）
-      if (!this.isMeleeing) {
+      // 自动射击（近战期间停火；射速按角色射速倍率；Boss 台词演出期间全局停火）
+      if (!this.isMeleeing && !g.shootDisabled) {
         this.fireT -= dt;
         if (this.fireT <= 0) {
           this.fireT = this.fireInt || CFG.player.fireInterval;
@@ -2915,6 +2970,18 @@
           opts.trailLite = true;
         }
         return new Bullet(x, y, vx, vy, opts);
+      }
+      if (kind === 'soul') {
+        // 魅影幽魂弹：飘忽前进（正弦摆动）+ 穿透；最终形态幽冥鬼王（大体型、穿透 4 体、紫色拖尾）
+        return new Bullet(x, y, vx, vy, {
+          kind: 'soul', friendly: true, dmg,
+          r: (6 + slv * 2) * bscale, glv, gmax,
+          sine: { amp: 0.32 + glv * 0.05, freq: 6.5, phase: rand(0, TAU) },
+          pierce: gmax ? 4 : 1 + Math.min(2, glv),
+          spinRate: 8,
+          trailCols: gmax && FIN ? FIN.trail : null, trailLite: true,
+          bombLv: this.bombLv
+        });
       }
       // 兜底：普通弹
       return new Bullet(x, y, vx, vy, { kind: 'bolt', friendly: true, dmg, r: 4 * bscale });
@@ -3272,7 +3339,11 @@
       this.hp = this.maxHp;
       this.speedMul = 1 + (round - 1) * 0.03 + Math.min(0.25, g.time * 0.001);
 
-      this.x = CFG.W + 50;
+      // 月痕沙海关卡：敌人从左右两侧随机刷出；其余地图固定从右侧入场
+      const stage = g.mapId === 'moondesert';
+      const fromLeft = stage && Math.random() < 0.5;
+      this.spawnSide = fromLeft ? 'left' : 'right';
+      this.x = fromLeft ? -50 : CFG.W + 50;
       this.y = rand(CFG.TOP_Y + 40, CFG.GROUND_Y - 60);
       this.state = 'enter';
       this.stateT = 0;
@@ -3577,6 +3648,13 @@
 
       // 减速（护罩破碎冲击波）：行动节奏降至 45%（计时器仍按真实时间流逝，不影响击退）
       if (this.slowT > 0) { this.slowT -= dt; dt *= 0.45; }
+
+      // 月痕沙海：从左侧入场的敌人先向右飞入屏幕，再交由各 AI 接管
+      if (g.mapId === 'moondesert' && this.spawnSide === 'left' && this.x < 150) {
+        this.x += 280 * dt;
+        this.y += Math.sin(this.t * 3) * 30 * dt;
+        return;
+      }
 
       const p = g.player;
       switch (this.type) {

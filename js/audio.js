@@ -35,7 +35,7 @@
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol || 0.1, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(sfxBus);
+    o.connect(g); g.connect(c.destination);
     o.start(t); o.stop(t + dur + 0.02);
   }
 
@@ -183,6 +183,24 @@
       const c = ac();
       if (c) tone(330, 0.35, 'square', 0.12, null, c.currentTime + 0.3);
     },
+    /** 月痕沙海通关惊喜音效：上扬琶音 + 金币叮咚 + 爆发闪光 */
+    rewardSurprise() {
+      if (muted) return;
+      const c = ac();
+      const t0 = c ? c.currentTime : 0;
+      // 上行琶音 C-E-G-C-E（惊喜感）
+      const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+      notes.forEach((f, i) => {
+        tone(f, 0.32, 'triangle', 0.12, null, t0 + i * 0.1);
+        tone(f * 2, 0.2, 'sine', 0.05, null, t0 + i * 0.1);
+      });
+      // 金币叮咚（金属质感）
+      tone(1568, 0.18, 'square', 0.07, 2093, t0 + 0.55);
+      tone(2093, 0.22, 'square', 0.06, 2637, t0 + 0.72);
+      // 爆发闪光
+      noiseAt(t0 + 0.5, 0.3, 0.08, 'highpass', 5000, 8000);
+      tone(784, 0.6, 'sine', 0.08, 1568, t0 + 0.5);
+    },
     /** Boss 预警警报：三轮递进汽笛（音高/音量/亮度逐轮升高）+ 低鼓重击，配合 2.6s 预警 */
     bossWarn() {
       if (muted) return;
@@ -246,7 +264,7 @@
       const echo = c.createDelay(0.6); echo.delayTime.value = 0.17;
       const fb = c.createGain(); fb.gain.value = 0.34;
       const wet = c.createGain(); wet.gain.value = 0.38;
-      echo.connect(fb); fb.connect(echo); echo.connect(wet); wet.connect(sfxBus);
+      echo.connect(fb); fb.connect(echo); echo.connect(wet); wet.connect(c.destination);
 
       // 一声万人齐吼"好！"：多个失谐锯齿/方波"人声"经带通共鸣腔，起扬后降调
       const shout = (t, base) => {
@@ -257,7 +275,7 @@
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.68);
         const bp = c.createBiquadFilter();
         bp.type = 'bandpass'; bp.frequency.value = 850; bp.Q.value = 0.7;
-        g.connect(bp); bp.connect(sfxBus); bp.connect(echo);
+        g.connect(bp); bp.connect(c.destination); bp.connect(echo);
         for (let i = 0; i < 8; i++) {
           const o = c.createOscillator();
           o.type = i % 3 ? 'sawtooth' : 'square';
@@ -311,7 +329,7 @@
       sg.gain.exponentialRampToValueAtTime(0.3, now + 0.5);
       sg.gain.setValueAtTime(0.3, now + 2.1);
       sg.gain.exponentialRampToValueAtTime(0.0001, now + 3.0);
-      sub.connect(sg); sg.connect(sfxBus);
+      sub.connect(sg); sg.connect(c.destination);
       sub.start(now); sub.stop(now + 3.0);
       // 兽性嘶吼：锯齿 + 7.5Hz 痛苦颤音，持续下滑
       const roar = c.createOscillator(); roar.type = 'sawtooth';
