@@ -980,8 +980,8 @@ kbd {
 #wh-dr-art {
   flex: 0 0 auto;
   padding: 8px;
-  background: #f2f2f2; border: 3px solid #ffd166; border-radius: 6px;
-  box-shadow: 0 0 16px rgba(255,209,102,.3);
+  background: #0d0a1e; border: 3px solid #ffd166; border-radius: 6px;
+  box-shadow: 0 0 16px rgba(255,209,102,.3), 0 0 26px rgba(120,90,220,.25);
   height: fit-content;
 }
 #wh-dr-art canvas { width: 320px; height: 240px; image-rendering: pixelated; display: block; }

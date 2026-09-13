@@ -25,7 +25,7 @@
     },
     mofashi: {
       id: 'mofashi', name: '法师', art: 'assets/MoFaShi.png', face: 'assets/Role/mofashi.png?v=20260907', icon: '✨',
-      speedMul: 0.8, dmg: 8, fireMul: 1.8,
+      speedMul: 0.8, dmg: 7, fireMul: 1.4,
       kind: 'star', ult: 'shield',
       tag: '星辉法师',
       trait: '速度 -20% · 星星 S 形弹道（命中分裂）· 魔法护盾',
@@ -54,6 +54,15 @@
       tag: '超能少年',
       trait: '速度 +50% · 矩形激光块 · 五重追踪激光串',
       desc: '超能少年猫，发射矩形激光块；子弹可成长为贯穿全屏的粗激光。大招发射 5 道追踪激光串。'
+    },
+    meiying: {
+      id: 'meiying', name: '魅影', art: 'assets/MeiYing.png?v=20260914', face: 'assets/Role/meiying.png?v=20260914', icon: '👻',
+      speedMul: 1.35, dmg: 9, fireMul: 0.9,
+      kind: 'soul', ult: 'phantom', lock: true,
+      ultDisplayName: '百鬼夜行',
+      tag: '幽冥魅影',
+      trait: '速度 +35% · 射速 +10% · 幽魂弹（飘忽穿透）· 百鬼夜行',
+      desc: '自黑人财神雕像的金光中现身的幽灵飞喵。幽魂弹飘忽前进且可穿透敌人，子弹可成长为幽冥鬼王。大招唤出百鬼夜行横扫全屏。'
     }
   };
 
@@ -274,12 +283,30 @@
         '这一战，我要用我最帅的姿势赢下来。否则，宁可不赢。',
         '打完收工。今天的状态，应该能上全服热门吧？肯定能！'
       ]
+    },
+    meiying: {
+      intro: '没人知道它在那尊黑人财神雕像里沉睡了多久。古钱币一枚枚嵌入，金光一点点苏醒——第五枚落下时，幽魂凝成猫形，幽冥之风随之漫出。它的幽魂弹穿过一切阻挡，大招「百鬼夜行」一起，整片战场都成了它的冥府。',
+      catchphrase: '嘘……鬼来了。',
+      moods: [
+        '我死过一次。是那尊神像，又把我吐了回来。',
+        '金光？呵，那是我欠财神的房租，总得还。',
+        '穿过你的子弹，再穿过你。别紧张，不疼的。',
+        '嘘——闭上眼睛，数三个数。一、二……算啦。',
+        '活猫看得见我的身子，死猫看得见我的影子。',
+        '别碰我的墨镜。上次碰它的人，现在还在沼泽里冒泡。',
+        '百鬼夜行那天，月亮都是紫色的。',
+        '古钱币别乱花。每一枚，都在替我续命。',
+        '我飘着走不是耍帅，是脚……不太记得着地的感觉了。',
+        '别怕，我不吃鱼干。我只吃——算了，你不想知道。',
+        '那只吐宝鼠认得我。它说，我们都是被供起来的东西。',
+        '夜里别回头。跟在你身后的，不一定是我的尾巴。'
+      ]
     }
   };
   // 将文本资料合并进角色对象（c.intro / c.catchphrase / c.moods 直接可用）
   Object.keys(list).forEach(id => { if (TEXT[id]) Object.assign(list[id], TEXT[id]); });
 
-  const ORDER = ['xiaobai', 'xiake', 'mofashi', 'buliang', 'jiaodoushi', 'chaoren'];
+  const ORDER = ['xiaobai', 'xiake', 'mofashi', 'buliang', 'jiaodoushi', 'chaoren', 'meiying'];
   const SLOTS = 30;   // 预留 30 个角色槽位（未制作显示问号）
 
   /** 预加载全部角色美术资源 → Sprites.charArt（id → Image） */
@@ -287,6 +314,7 @@
   const charFace = {};   // 选角/主菜单头像（assets/Role/）
   ORDER.forEach(id => {
     const c = list[id];
+    if (c.art && c.art[0] === '$') return;   // 程序化素材占位（当前无）
     const im = new Image();
     im.onload = () => { c.img = im; };
     im.onerror = () => { console.warn('[Chars] 缺少角色素材: ' + c.art); };
@@ -302,6 +330,13 @@
 
   function get(id) { return list[id] || null; }
   function has(id) { return !!list[id]; }
+  /** 角色是否已解锁（lock 标记角色由仓库系统 WH 管理，如魅影=黑人财神雕像圆满） */
+  function isUnlocked(id) {
+    const c = list[id];
+    if (!c) return false;
+    if (!c.lock) return true;
+    return window.WH ? WH.isCharUnlocked(id) : false;
+  }
   function art(id) {
     const c = get(id);
     return c && c.img ? c.img : null;
@@ -324,11 +359,12 @@
     mofashi: { name: '彩虹大星', trail: ['#ff5252', '#ffd93b', '#35e0ff', '#a78bfa', '#4ade80'] },
     buliang: { name: '烈焰火把', trail: ['#ff2a0a', '#ff9d2e', '#ffd23b', '#fff5d0'] },
     jiaodoushi: { name: '巨大战斧', trail: ['#fff', '#ffd23b', '#ff9d2e', '#b8c2cc'] },
-    chaoren: { name: '贯穿粗激光', trail: ['#35e0ff', '#a5f3fc', '#ffffff', '#7fe7ff'] }
+    chaoren: { name: '贯穿粗激光', trail: ['#35e0ff', '#a5f3fc', '#ffffff', '#7fe7ff'] },
+    meiying: { name: '幽冥鬼王', trail: ['#b57bff', '#d8c2ff', '#ff7bd5', '#8ff0ff'] }
   };
   const GROW_NAME = {
     xiake: '飞刀成长', mofashi: '星辰成长', buliang: '燃烧成长',
-    jiaodoushi: '战盾成长', chaoren: '激光成长'
+    jiaodoushi: '战盾成长', chaoren: '激光成长', meiying: '幽魂成长'
   };
 
   /**
@@ -360,5 +396,5 @@
     };
   }
 
-  window.CHARS = { list, ORDER, SLOTS, get, has, art, face, randMood, bulletUpgrade, FINAL };
+  window.CHARS = { list, ORDER, SLOTS, get, has, isUnlocked, art, face, randMood, bulletUpgrade, FINAL };
 })();
