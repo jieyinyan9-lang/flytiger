@@ -2230,6 +2230,8 @@
       this.moveSpdLv = 0;
       // 受伤闪红
       this.hurtFlash = 0;
+      // 生命强化体型成长时：中心"心脏"高亮倒计时
+      this.heartFlash = 0;
 
       // 角色自动技能状态（触发条件/冷却与小白爪击一致：接触敌人触发、3 秒冷却）
       this.autoSkill = null;          // 'dash'|'shield'|'throw'|'armor'|'laser'|null
@@ -2612,6 +2614,7 @@
       this.wingT += dt;
       this.invT = Math.max(0, this.invT - dt);
       this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+      this.heartFlash = Math.max(0, this.heartFlash - dt);
       this.shieldFlash = Math.max(0, this.shieldFlash - dt);
       this.downT = Math.max(0, this.downT - dt);   // 击落状态倒计时
       // 护罩激活倒计时：超时未破碎则静默消散
@@ -2667,7 +2670,7 @@
         this.vx = mx * spd; this.vy = my * spd;
       }
       this.x += this.vx * dt; this.y += this.vy * dt;
-      this.radius = CFG.player.radius * (0.75 + this.sizeMul * 0.25);
+      this.radius = CFG.player.radius;   // 碰撞体固定：生命强化只放大视觉体型，不放大受击判定
       this.x = clamp(this.x, 40, CFG.W - 60);
       // 危险地面高度：大海为波动海平面（g.groundYAt），其余地图为固定地面
       const isSea = !!(g.map && g.map.sea);
@@ -3100,6 +3103,25 @@
         }
       }
       ctx.globalAlpha = 1;
+
+      // 生命强化成长瞬间：中心"心脏"按心跳节奏高亮两下（体型变大但碰撞体不变的提示）
+      if (this.heartFlash > 0) {
+        const HEART_T = 0.7;
+        const k = 1 - this.heartFlash / HEART_T;                 // 进度 0→1
+        const beat = Math.pow(Math.max(0, Math.sin(k * Math.PI * 2)), 2);   // 两次搏动
+        const fade = clamp(this.heartFlash / HEART_T, 0, 1);     // 末段淡出
+        const r = 4 + beat * 7;
+        ctx.save();
+        const grd = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r * 2.6);
+        grd.addColorStop(0, `rgba(255,96,136,${0.85 * fade})`);
+        grd.addColorStop(0.5, `rgba(255,40,92,${0.32 * fade})`);
+        grd.addColorStop(1, 'rgba(255,40,92,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 2.6, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(255,238,244,${0.95 * fade})`;
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
 
       // 法师魔法护盾：紫色旋转魔法罩（无敌）
       if (this.magicShieldT > 0) {

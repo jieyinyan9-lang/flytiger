@@ -290,7 +290,10 @@
         apply(p) {
           p.maxHp += 30;
           p.hp = Math.min(p.maxHp, p.hp + 30);
-          if (p.sizeMul < 3.0) p.sizeMul = Math.min(3.0, +(p.sizeMul + 0.12).toFixed(2));
+          if (p.sizeMul < 3.0) {
+            p.sizeMul = Math.min(3.0, +(p.sizeMul + 0.12).toFixed(2));
+            p.heartFlash = 0.7;   // 体型变大瞬间：中心心脏高亮（碰撞体不随之变大）
+          }
           p.lifeLv++;
         },
         level(p) { return p.lifeLv; }

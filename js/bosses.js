@@ -281,7 +281,7 @@
   /* ================ B1. 飞天日本武士（特殊机制） ================ */
   class Samurai extends Boss {
     constructor(g) {
-      super(g, 26, 46);
+      super(g, 26, 58);   // 体积扩大：接触碰撞半径 46→58，配合立绘 0.58→0.74
       this.bossName = '飞天日本武士';
       this.title = '特殊机制型';
       this.hoverX = 690;
@@ -379,9 +379,9 @@
           ctx.stroke();
           ctx.restore();
         }
-        drawBossSprite(ctx, Sprites.samuraiL, this.x, this.y, 0.58, 0.58, 0, 0.5);
+        drawBossSprite(ctx, Sprites.samuraiL, this.x, this.y, 0.74, 0.74, 0, 0.5);
       } else {
-        drawBossSprite(ctx, Sprites.samuraiL, this.x, this.y, 0.58, 0.58, angle, this.flash);
+        drawBossSprite(ctx, Sprites.samuraiL, this.x, this.y, 0.74, 0.74, angle, this.flash);
       }
     }
   }
