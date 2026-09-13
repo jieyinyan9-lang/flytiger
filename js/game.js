@@ -2471,22 +2471,26 @@
               if (window.Ach && aliveBefore && e.dead) {
                 Ach.evt('bulletKill', { g: this, kind: b.kind, bounced: !!b._achBounced, ult: false });
               }
-              // 元素弹道命中：施加 DoT / 破无敌 / 冻结
+              // 元素弹道命中：施加 DoT / 破无敌 / 冻结（系数吃元素精通等级，同元素可叠层）
               if (b.element === 'flame') {
-                e.dotT = 3; e.dotDps = b.dmg * 0.4; e.dotType = 'flame';
+                this.applyElement(e, 'flame', b.dmg, b.elemPow);
                 if (e.spawnInvuln > 0) e.invulnBreakT = 1;   // 火焰：1s 后破无敌
               } else if (b.element === 'poison') {
-                e.dotT = 6; e.dotDps = b.dmg * 0.25; e.dotType = 'poison';
+                this.applyElement(e, 'poison', b.dmg, b.elemPow);
                 if (e.spawnInvuln > 0) e.invulnBreakT = 3;   // 毒液：3s 后破无敌
               } else if (b.element === 'ice') {
-                e.dotT = 2; e.dotDps = b.dmg * 0.3; e.dotType = 'ice';
-                e.freezeT = 4;                                // 寒冰：冻结 4s
+                this.applyElement(e, 'ice', b.dmg, b.elemPow);
                 if (e.spawnInvuln > 0) e.invulnBreakT = 0.5; // 寒冰也破无敌
               }
               // 法师魔法护盾期间击中敌人：困惑并下坠 2s
               if (p.magicShieldT > 0) { e.confuseT = 2; e.confuseVy = 0; }
-              // 烟头/火把命中点燃：持续燃烧 DoT
-              if (b.burnOnHit) { e.dotT = Math.max(e.dotT || 0, 2.5); e.dotDps = Math.max(e.dotDps || 0, b.dmg * 0.45); e.dotType = 'flame'; }
+              // 烟头/火把命中点燃：持续燃烧 DoT（不参与精通叠层，仅在无火异常时占位 1 层）
+              if (b.burnOnHit) {
+                e.dotT = Math.max(e.dotT || 0, 2.5);
+                e.dotDps = Math.max(e.dotDps || 0, b.dmg * 0.45);
+                e.dotType = 'flame';
+                if (!e.dotStack) e.dotStack = 1;
+              }
             }
             // 闪电子弹：命中后闪电链跳跃链接附近敌人
             if (p.chainJumps >= 1 && !e.dead) this.chainLightning(e, b.dmg);
