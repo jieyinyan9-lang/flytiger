@@ -25,7 +25,7 @@
     },
     mofashi: {
       id: 'mofashi', name: '法师', art: 'assets/MoFaShi.png', face: 'assets/Role/mofashi.png?v=20260907', icon: '✨',
-      speedMul: 0.8, dmg: 7, fireMul: 1.4,
+      speedMul: 0.8, dmg: 8, fireMul: 1.8,
       kind: 'star', ult: 'shield',
       tag: '星辉法师',
       trait: '速度 -20% · 星星 S 形弹道（命中分裂）· 魔法护盾',
@@ -33,7 +33,7 @@
     },
     buliang: {
       id: 'buliang', name: '浪客', art: 'assets/BuLiang.png', face: 'assets/Role/buliangshaonian.png?v=20260907', icon: '🚬',
-      speedMul: 1.3, dmg: 6, fireMul: 1.6, bulletSpd: 0.5,
+      speedMul: 1.3, dmg: 7, fireMul: 2.0, bulletSpd: 0.5,
       kind: 'butt', ult: 'soundwave', bounceBase: 1,
       tag: '桀骜不良',
       trait: '速度 +30% · 烟头反弹 + 燃烧 · 声波禁锢',
