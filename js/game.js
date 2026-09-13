@@ -398,7 +398,7 @@
       this.bossT = rand(CFG.boss.firstMin, CFG.boss.firstMax);
       this.warnT = 0;
       this.pendingBoss = null;
-      this.pendingBossMusic = null;   // 预警中 Boss 对应曲目（boss/eagle/pheasant/hero）
+      this.pendingBossMusic = null;   // 预警中 Boss 对应曲目（boss-1/boss-2/各 Boss 专属曲目）
       this.shakeMag = 0;
       this.timeScale = 1;
       this.slowmoT = 0;
@@ -856,6 +856,7 @@
         this.el.warn.classList.add('hidden');
         this.el.levelup.classList.add('hidden');
         this.state = 'menu';
+        this.shakeMag = 0;        // 局内退出到菜单：立即停止震屏
       }
       this.buildCharGrid();
       this.moodT = 10;   // 进入选角即开始 10s 倒计时
@@ -863,7 +864,7 @@
         this.el.charSelTitle.textContent = fromPause ? '重新选择出战角色' : '选择出战角色';
       }
       if (this.el.charSel) this.el.charSel.classList.remove('hidden');
-      if (window.Music) Music.play('casual');
+      if (window.Music) Music.play('bgm-zhujiemian');
     }
     /** 关闭角色选择界面（返回菜单） */
     closeCharSelect() {
@@ -1641,7 +1642,7 @@
         if (!pick) pick = p2[p2.length - 1];   // 浮点兜底
       }
       this.pendingBoss = pick.cls;
-      this.pendingBossMusic = pick.music || 'boss';   // 预警期即切到该 Boss 专属曲目
+      this.pendingBossMusic = pick.music || 'boss-1';   // 预警期即切到该 Boss 专属曲目
       this.warnT = CFG.boss.warnTime;
       this.el.warnSub.textContent = '强大的气息逼近了！';
       this.el.warn.classList.remove('hidden');
@@ -1650,7 +1651,7 @@
     spawnBoss(cls) {
       const b = new cls(this);
       const entry = (window.BOSS_LIST || []).find(e => e.cls === cls);
-      b.musicTheme = (entry && entry.music) || 'boss';   // 专属 BGM（boss/eagle/pheasant/hero）
+      b.musicTheme = (entry && entry.music) || 'boss-1';   // 专属 BGM（boss-1/boss-2/各 Boss 专属曲目）
       if (window.Ach) Ach.evt('bossSpawn', { g: this, name: cls.name });
       this.bosses.push(b);
       this.bossSpawned++;
@@ -1667,7 +1668,7 @@
       this.el.bossHud.classList.remove('hidden');
       this.resetBossBarFx();   // 新 Boss：血条满状态，清空斩击/灼烧残留
       this.toast(`${b.bossName} 出现！`, 2, 'lt');
-      if (b.musicTheme === 'imperial') SFX.bossArmy();   // 大王登场：万军齐吼"好！好！好！" + 战鼓号角
+      if (b.musicTheme === 'boss-fuwang') SFX.bossArmy();   // 大王登场：万军齐吼"好！好！好！" + 战鼓号角
       else SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
       this.shake(6);
     }
@@ -1960,7 +1961,7 @@
       const entry = (window.BOSS_LIST || []).find(e => e.cls.name === 'Sphinx');
       if (!entry) return;
       const b = new entry.cls(this);
-      b.musicTheme = entry.music || 'sphinx';
+      b.musicTheme = entry.music || 'boss-shishenrenmian';
       b.x = CFG.W + 120; b.y = 150;   // 从屏幕右侧入场
       b.state = 'enter';
       b.cinematicHold = true;         // 入场演出期间只滑入悬停，不开火；演出结束放行
@@ -1986,6 +1987,7 @@
       this.rewardCanClose = false;
       this.rewardT = 0;
       this.state = 'reward';
+      this.shakeMag = 0;        // 通关瞬间清掉死亡爆炸等残留震屏，奖励页不抖动
       if (this.el.reward) {
         this.el.reward.classList.remove('hidden');
       }
@@ -2004,6 +2006,7 @@
       if (window.MISSIONS) { try { MISSIONS.notifyStageCleared(); } catch (e) {} }
       // 退回主界面
       this.state = 'menu';
+      this.shakeMag = 0;        // 回主界面：立即停止一切残留震屏
       this.el.hud.classList.add('hidden');
       this.el.bossHud.classList.add('hidden');
       this.el.menu.classList.remove('hidden');
@@ -2177,8 +2180,18 @@
           else this.timeScale = 1;
           this.update(dt * this.timeScale);
         } else if (this.state === 'gameover') {
-          if (this.deathScene) this.updateDeathScene(dt);   // 死亡演出：黑气/死法文本推进
-          else this.updateFx(dt);   // 结算界面：死亡爆炸特效继续播放
+          if (this.deathScene) {
+            this.updateDeathScene(dt);   // 死亡演出：黑气/死法文本推进
+            // 死亡演出本身不衰减震屏，这里补衰减，防止震屏值冻结后画面一直抖
+            this.shakeMag = Math.max(0, this.shakeMag - dt * 30);
+            if (this.flashT > 0) this.flashT = Math.max(0, this.flashT - dt);
+          } else {
+            this.updateFx(dt);   // 结算界面：死亡爆炸特效继续播放
+          }
+        } else {
+          // 菜单 / 奖励 / 升级 / 暂停：只衰减残留的震屏与闪光，避免跨状态冻结导致主界面持续震动
+          this.shakeMag = Math.max(0, this.shakeMag - dt * 30);
+          if (this.flashT > 0) this.flashT = Math.max(0, this.flashT - dt);
         }
         this.updateMusic();    // 场景→曲目路由（菜单/小怪/怪物潮/各类Boss）
         if (window.Ach) Ach.tick(dt);   // 成就解锁通知队列推进
@@ -3535,7 +3548,9 @@
     render() {
       const ctx = this.ctx;
       ctx.save();
-      if (this.shakeMag > 0.2) {
+      // 震屏仅作用于战斗 / Boss 预警 / 死亡结算；菜单/奖励/升级/暂停不抖动（否则残留震屏值会让主界面持续震动）
+      const shakeState = this.state === 'playing' || this.state === 'warn' || this.state === 'gameover';
+      if (shakeState && this.shakeMag > 0.2) {
         ctx.translate(rand(-this.shakeMag, this.shakeMag) * 0.5, rand(-this.shakeMag, this.shakeMag) * 0.5);
       }
 
