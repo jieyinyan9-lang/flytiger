@@ -95,7 +95,8 @@
     collProgress: { caishen: 0 },   // 藏品 id -> 0~100
     docRead: {},                    // 文书 id -> 阅读时间戳
     items: { luckstar: 1, clover: 1, coin: 5, ticket: 1 },
-    chars: { meiying: false }       // 解锁的角色
+    chars: { meiying: false },      // 解锁的角色
+    fish: 0                         // 小鱼干（委托结算货币）
   });
   let saved = defaultData();
   function load() {
@@ -108,6 +109,7 @@
           saved.docRead = Object.assign({}, d.docRead);
           saved.items = Object.assign(defaultData().items, d.items || {});
           saved.chars = Object.assign(defaultData().chars, d.chars || {});
+          saved.fish = Math.max(0, (d.fish | 0) || 0);   // 小鱼干：整数、非负
         }
       }
     } catch (e) { /* 存档损坏：静默使用默认值 */ }
@@ -135,6 +137,20 @@
   function markRead(id) {
     if (!saved.docRead[id]) { saved.docRead[id] = Date.now(); save(); }
   }
+  /* ---------------- 小鱼干（委托货币） ---------------- */
+  function fish() { return saved.fish | 0; }
+  function addFish(n) {
+    saved.fish = Math.max(0, saved.fish + Math.floor(n || 0));
+    save();
+    return saved.fish;
+  }
+  function spendFish(n) {
+    const v = Math.floor(n || 0);
+    if (saved.fish < v) return false;
+    saved.fish -= v; save();
+    return true;
+  }
+
   function isCharUnlocked(id) { return !!saved.chars[id]; }
   function unlockChar(id) {
     if (saved.chars[id]) return;
@@ -962,6 +978,7 @@
   window.WH = {
     openPanel, closePanel,
     collProgress, itemCount, addItem, removeItem,
+    fish, addFish, spendFish,
     isRead, isCharUnlocked, unlockChar, onUnlock,
     investCoin,
     COLLS, DOCS, ITEMS,

@@ -157,6 +157,18 @@
       this.onClick('select-btn', () => this.openCharSelect());
       this.onClick('ach-btn', () => { if (window.Ach) Ach.openPanel(); });
       this.onClick('menu-wh-btn', () => { if (window.WH) WH.openPanel(); });
+      // 任务委托 / 秘境发现入口
+      this.onClick('menu-mission-btn', () => { if (window.MISSIONS) MISSIONS.openPanel(); });
+      this.onClick('menu-discover-btn', () => { if (window.MISSIONS) MISSIONS.openDiscover(); });
+      if (window.MISSIONS) {
+        // 派遣/归来：刷新选角状态；若备战猫被派出则自动改派
+        MISSIONS.onCharDirty(() => this.syncMissionStatuses());
+        // 发现面板启动特殊关：前哨遭遇复用月痕沙海关卡
+        MISSIONS.onLaunchStage(s => {
+          if (s && s.launch === 'moondesert') { MISSIONS.notifyLaunched(s.id); this.startStage(); }
+        });
+        MISSIONS.refreshDots();
+      }
       // 仓库藏品圆满解锁角色：刷新选角列表 + 菜单提示（解锁音效由仓库投币链路播放）
       if (window.WH) WH.onUnlock(id => {
         try { this.buildCharGrid(); } catch (e) {}
@@ -203,6 +215,8 @@
       // 角色状态表（id → 空闲/备战/探索/委托）；默认仅备战角色为 ready
       this.charStatus = {};
       if (window.CHARS) window.CHARS.ORDER.forEach(id => { this.charStatus[id] = (id === this.charId) ? 'ready' : 'idle'; });
+      // 委托中的猫咪（跨局持久化）覆盖状态；备战猫被派出时自动改派
+      this.syncMissionStatuses();
       this.moodT = 0;                 // 心情刷新计时（局外每 10s 刷新一次）
       this.ultBubble = null;          // 大招气泡 { text, t }
       this.syncStandbyName();
@@ -246,6 +260,7 @@
         if (map[e.code]) { this.keys[map[e.code]] = true; e.preventDefault(); }
         if (e.code === 'Space' || e.code === 'Enter') {
           if (this.deathScene) { this.skipDeathScene(); e.preventDefault(); return; }
+          if (this.settleOpen) { e.preventDefault(); return; }   // 委托结算浮层打开期间禁用重开
           if (this.state === 'menu' || this.state === 'gameover') this.start();
           else if (this.state === 'playing' && e.code === 'Space') this.player.tryUltimate(this);
           e.preventDefault();
@@ -623,7 +638,8 @@
           const c = CH.get(id);
           const st = this.charStatus[id] || 'idle';
           const locked = !!c.lock && !CH.isUnlocked(id);
-          bar.className = 'char-bar' + (id === this.charId ? ' picked' : '') + (locked ? ' char-lock' : '');
+          const busy = !locked && !!(window.MISSIONS && MISSIONS.isBusy(id));   // 委托中
+          bar.className = 'char-bar' + (id === this.charId ? ' picked' : '') + (locked ? ' char-lock' : '') + (busy ? ' on-mission' : '');
           bar.dataset.id = id;
           const avatar = document.createElement('div');
           avatar.className = 'char-bar-avatar';
@@ -635,10 +651,17 @@
             `<div class="char-bar-intro">${c.intro || c.desc}</div>` +
             `<div class="char-bar-params">${this.charParams(c)}</div>`;
           const badge = document.createElement('div');
-          badge.className = 'char-status ' + st;
-          badge.textContent = this.statusLabel(st);
-          badge.title = '点击查看其它状态';
-          badge.addEventListener('click', (e) => { e.stopPropagation(); this.openStatusMenu(id, badge); });
+          badge.className = 'char-status ' + (busy ? 'mission' : st);
+          badge.textContent = busy ? (window.MISSIONS.busyLabel(id) || '委托中') : this.statusLabel(st);
+          badge.title = busy ? '正在执行委托，归来前无法备战' : '点击查看其它状态';
+          if (busy) {
+            badge.addEventListener('click', (e) => {
+              e.stopPropagation();
+              this.toast('📜「' + c.name + '」正在执行委托，归来前无法选为备战', 2.4);
+            });
+          } else {
+            badge.addEventListener('click', (e) => { e.stopPropagation(); this.openStatusMenu(id, badge); });
+          }
           const mood = document.createElement('div');
           mood.className = 'char-mood';
           mood.textContent = CH.randMood(id);
@@ -658,6 +681,12 @@
             bar.appendChild(mask);
             bar.addEventListener('click', () => {
               this.toast('🔒「' + c.name + '」尚未解锁：仓库供奉黑人财神雕像至圆满即可加入', 3);
+              try { SFX.hit(); } catch (e) {}
+            });
+          } else if (busy) {
+            // 委托中：不可备战
+            bar.addEventListener('click', () => {
+              this.toast('📜「' + c.name + '」正在执行委托，归来前无法选为备战（剩余轮数见徽章）', 2.6);
               try { SFX.hit(); } catch (e) {}
             });
           } else {
@@ -737,8 +766,14 @@
         try { SFX.hit(); } catch (e) {}
         return;
       }
+      if (window.MISSIONS && MISSIONS.isBusy(id)) {
+        const c = CH.get(id);
+        this.toast('📜「' + c.name + '」正在执行委托，归来前无法选为备战', 2.6);
+        try { SFX.hit(); } catch (e) {}
+        return;
+      }
       this.charId = id;
-      CH.ORDER.forEach(oid => { this.charStatus[oid] = (oid === id) ? 'ready' : 'idle'; });
+      CH.ORDER.forEach(oid => { this.charStatus[oid] = ((window.MISSIONS && MISSIONS.isBusy(oid)) ? 'mission' : (oid === id ? 'ready' : 'idle')); });
       try { localStorage.setItem('flytiger_char', id); } catch (e) {}
       // 刷新所有徽章与选中态
       CH.ORDER.forEach(oid => {
@@ -749,11 +784,38 @@
       this.syncStandbyName();
       SFX.levelup();   // 叮
     }
+    /** 委托系统联动：同步委托中状态；若备战猫被派出，自动改派一只空闲已解锁猫（至少留 1 只备战由派遣侧保证） */
+    syncMissionStatuses() {
+      const CH = window.CHARS;
+      if (!CH || !window.MISSIONS) return;
+      const M = window.MISSIONS;
+      CH.ORDER.forEach(id => {
+        this.charStatus[id] = M.isBusy(id) ? 'mission' : (id === this.charId ? 'ready' : 'idle');
+      });
+      if (M.isBusy(this.charId)) {
+        const free = CH.ORDER.filter(id => CH.isUnlocked(id) && !M.isBusy(id));
+        if (free.length) {
+          this.charId = free[0];
+          try { localStorage.setItem('flytiger_char', this.charId); } catch (e) {}
+          CH.ORDER.forEach(id => { this.charStatus[id] = M.isBusy(id) ? 'mission' : (id === this.charId ? 'ready' : 'idle'); });
+          this.syncStandbyName();
+          const c = CH.get(this.charId);
+          this.toast('📜 备战角色已派出执行委托，自动改派「' + (c ? c.name : this.charId) + '」备战', 3);
+        }
+      }
+      try { this.buildCharGrid(); } catch (e) {}
+      M.refreshDots();
+    }
     /** 刷新单个角色状态徽章 */
     refreshStatusBadge(id) {
       const b = this._statusBadges && this._statusBadges[id];
       if (!b) return;
       const st = this.charStatus[id] || 'idle';
+      if (st === 'mission' && window.MISSIONS && MISSIONS.isBusy(id)) {
+        b.className = 'char-status mission';
+        b.textContent = MISSIONS.busyLabel(id) || '委托中';
+        return;
+      }
       b.className = 'char-status ' + st;
       b.textContent = this.statusLabel(st);
     }
@@ -858,6 +920,8 @@
     gameOver() {
       if (this.state === 'gameover') return;
       this.state = 'gameover';
+      // 本次从发现面板进入的特殊关未通关：取消通关标记关联
+      if (window.MISSIONS) { try { MISSIONS.notifyLaunched(null); } catch (e) {} }
       if (window.Ach) Ach.evt('gameOver', { g: this, src: this.lastHurtSrc });
       SFX.explode(true);
       // 死亡爆炸：大火球 + 碎石 + 屏幕闪光
@@ -963,9 +1027,17 @@
       } else if (ds.phase === 'fade') {
         ds.fadeT += dt;
         if (ds.fadeT >= DEATH_FX.FADE_OUT) {
-          // 黑色淡出完毕：定格画面上亮出结算界面
+          // 黑色淡出完毕：有已完成委托先弹委托结算（多任务可翻页/跳过），关闭后再亮出普通结算
           this.deathScene = null;
-          this.el.gameover.classList.remove('hidden');
+          if (window.MISSIONS && MISSIONS.hasPending()) {
+            this.settleOpen = true;
+            MISSIONS.showSettlement(() => {
+              this.settleOpen = false;
+              this.el.gameover.classList.remove('hidden');
+            });
+          } else {
+            this.el.gameover.classList.remove('hidden');
+          }
         }
       }
     }
@@ -1656,6 +1728,10 @@
         this.xpNeed = CFG.xpNeed(this.totalLevels);
         this.openLevelup();
       }
+      // 任务委托：击败 1 只 Boss = 全局推进 1 轮（进行中委托据此结算/超时）
+      if (window.MISSIONS) {
+        try { MISSIONS.advanceRound(); } catch (e) {}
+      }
       // 月痕沙海关卡：击败最终 Boss → 弹出奖励页
       if (this.stageMode) {
         this.showReward();
@@ -1828,23 +1904,28 @@
       }
     }
 
-    /** Boss 入场演出：黑边压下 → 停火 → 感叹号 → Boss 从右入场 → 台词1 → 玩家左移 → 台词2 → 黑边收回 */
+    /** Boss 入场演出：黑边压下 → 感叹号 → Boss 从右入场+台词1 → 玩家左移+台词2 → 黑边收回 */
     startBossIntro() {
       this.shootDisabled = true;
-      this.bossIntro = { phase: 'bars', t: 0 };
+      this.bossIntro = { phase: 'bars', t: 0, mark: false };
     }
     updateBossIntro(dt) {
       const bi = this.bossIntro;
       if (!bi) return;
       bi.t += dt;
+      // 台词计时在演出期间也要走（否则渐入透明度恒为 0，台词全程不可见）
+      if (this.dialogueBox) {
+        this.dialogueBox.t -= dt;
+        if (this.dialogueBox.t <= 0) this.dialogueBox = null;
+      }
       if (bi.phase === 'bars') {
         // 黑边压下（0.8s）
         this.letterbox = Math.min(1, this.letterbox + dt / 0.8);
         if (bi.t > 0.9) {
           bi.phase = 'line1'; bi.t = 0;
+          bi.mark = true;                          // 玩家身边弹出感叹号
+          this.spawnStageBoss();                   // Boss 从屏幕右侧入场（cinematicHold：只滑入不开火）
           this.showDialogue('又一个来翻我东西的。上一个——算了，你站的地方就是上一个。', 4.5);
-          // 玩家身边弹出感叹号
-          this.bossIntro.mark = true;
         }
       } else if (bi.phase === 'line1') {
         // 玩家自动左移到屏幕左侧
@@ -1858,15 +1939,18 @@
         const p = this.player;
         p.x += (120 - p.x) * Math.min(1, dt * 1.5);
         if (bi.t > 5.2) {
-          // 黑边收回，恢复射击，生成 Boss
-          this.letterbox = Math.max(0, this.letterbox - dt / 0.6);
-          if (this.letterbox <= 0) {
-            this.letterbox = 0;
-            this.shootDisabled = false;
-            this.bossIntro = null;
-            this.dialogueBox = null;
-            this.spawnStageBoss();
-          }
+          bi.phase = 'out'; bi.t = 0;
+          const b = this.bosses[0];
+          if (b) b.cinematicHold = false;          // 放行：Boss 滑向中场，正式开打
+        }
+      } else if (bi.phase === 'out') {
+        // 黑边收回，恢复射击
+        this.letterbox = Math.max(0, this.letterbox - dt / 0.6);
+        if (this.letterbox <= 0) {
+          this.letterbox = 0;
+          this.shootDisabled = false;
+          this.bossIntro = null;
+          this.dialogueBox = null;
         }
       }
     }
@@ -1879,6 +1963,7 @@
       b.musicTheme = entry.music || 'sphinx';
       b.x = CFG.W + 120; b.y = 150;   // 从屏幕右侧入场
       b.state = 'enter';
+      b.cinematicHold = true;         // 入场演出期间只滑入悬停，不开火；演出结束放行
       this.bosses.push(b);
       this.bossSpawned++;
       this.lastBossName = 'Sphinx';
@@ -1915,6 +2000,8 @@
       this.rewardCanClose = false;
       this.stageMode = false;
       if (this.el.reward) this.el.reward.classList.add('hidden');
+      // 特殊关通关：通知任务系统（发现面板移除卡片、限时任务永久关闭）
+      if (window.MISSIONS) { try { MISSIONS.notifyStageCleared(); } catch (e) {} }
       // 退回主界面
       this.state = 'menu';
       this.el.hud.classList.add('hidden');

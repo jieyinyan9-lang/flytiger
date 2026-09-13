@@ -2078,6 +2078,14 @@
       this._lastX = this.x;
 
       if (this.state === 'enter') {
+        if (this.cinematicHold) {
+          // 入场演出中：只从右侧滑入到右侧悬停点，不转阶段、不开火
+          const hx = CFG.W * 0.78, hy = 150;
+          this.x += (hx - this.x) * Math.min(1, dt * 1.8);
+          this.y += (hy - this.y) * Math.min(1, dt * 1.8);
+          this.updateDebris(dt);
+          return;
+        }
         const tx = CFG.W / 2, ty = 150;
         this.x += (tx - this.x) * Math.min(1, dt * 2.2);
         this.y += (ty - this.y) * Math.min(1, dt * 2.2);

@@ -844,11 +844,29 @@
           ctx.restore();
           break;
         }
-        /* 皮影客：竖直上投的小飞刀（尖刃 + 短柄），沿飞行方向 */
+        /* 皮影客：竖直上投的飞刀（尖刃 + 短柄，沿飞行方向），加大刃身 + 白色拖尾 */
         case 'dart': {
           ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
-          ctx.fillStyle = '#cfd4de';
+          // 白色拖尾：沿来向（-x）4 段渐细渐隐光带
+          for (let i = 1; i <= 4; i++) {
+            const k = i / 4;
+            ctx.globalAlpha = 0.4 * (1 - k);
+            ctx.fillStyle = '#ffffff';
+            const tl = r * (1.0 + i * 1.25);
+            const tw = r * 0.34 * (1 - k * 0.55);
+            ctx.beginPath();
+            ctx.moveTo(-r * 0.25, -tw);
+            ctx.lineTo(-r * 0.25 - tl, 0);
+            ctx.lineTo(-r * 0.25, tw);
+            ctx.closePath(); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          ctx.scale(1.4, 1.4);   // 刃身整体放大 1.4 倍
+          ctx.fillStyle = '#e8ecf4';
           ctx.beginPath(); ctx.moveTo(r * 1.4, 0); ctx.lineTo(-r * 0.5, -r * 0.36); ctx.lineTo(-r * 0.2, 0); ctx.lineTo(-r * 0.5, r * 0.36); ctx.closePath(); ctx.fill();
+          // 刃面白色高光芯
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.moveTo(r * 1.1, 0); ctx.lineTo(-r * 0.2, -r * 0.12); ctx.lineTo(-r * 0.05, 0); ctx.lineTo(-r * 0.2, r * 0.12); ctx.closePath(); ctx.fill();
           ctx.strokeStyle = '#5a6070'; ctx.lineWidth = 1;
           ctx.beginPath(); ctx.moveTo(r * 1.4, 0); ctx.lineTo(-r * 0.5, -r * 0.36); ctx.moveTo(r * 1.4, 0); ctx.lineTo(-r * 0.5, r * 0.36); ctx.stroke();
           ctx.fillStyle = '#6a4a24'; ctx.fillRect(-r * 1.0, -r * 0.13, r * 0.55, r * 0.26);  // 短柄

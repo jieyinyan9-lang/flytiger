@@ -88,9 +88,9 @@
         walkSpd: 92,
         sprintSpd: 250,     // 锁定助跑速度
         windup: 0.55,       // 起跳前助跑/下蹲时长
-        leapUpV: 560,       // 起跳垂直初速
+        leapUpV: 700,       // 起跳垂直初速（更高：apex≈163px）
         grav: 1500,         // 跳跃重力
-        leapSpd: 210,       // 空中水平速度（慢、可预判）
+        leapSpd: 260,       // 空中水平速度（跨距≈243px，慢而可预判）
         leapDmg: 30         // 空中撞击高额伤害
       },
       // 盾奴
@@ -108,7 +108,7 @@
         groundOff: 70,      // 在地面上方活动的高度偏移
         knifeCd: 0.55,      // 朝上投飞刀间隔
         knifeSpd: 430,      // 飞刀上投速度
-        knifeR: 7
+        knifeR: 10          // 飞刀判定（更大）
       },
       // 自爆囚
       bomb: {
@@ -276,7 +276,7 @@
       owl: {
         name: '预言猫头鹰', hp: 125, speed: 78, contact: 16,
         bulletDmg: 13, xp: 24, score: 55, radius: 26, weight: 6, minBossKills: 4, elite: true,
-        flyer: true, flyerTier: 'strong',
+        flyer: true, flyerTier: 'strong', noKnockback: true,
         dynamicHp: true, fightTime: [18, 18]
       }
     },

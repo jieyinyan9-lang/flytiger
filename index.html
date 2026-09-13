@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>飞喵的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260914r2">
+<link rel="stylesheet" href="css/style.css?v=20260914r3">
 </head>
 <body>
 <div id="game-wrap">
@@ -88,9 +88,11 @@
 
   <!-- 开始菜单 -->
   <div id="menu">
-    <!-- 右上角：仓库入口 + 背景音乐开关 + 操作模式切换 -->
+    <!-- 右上角：仓库入口 + 任务委托 + 秘境发现 + 背景音乐开关 + 操作模式切换 -->
     <div class="menu-topright">
       <button id="menu-wh-btn" class="audio-btn wh-entry-btn" type="button">🎒 仓库背包</button>
+      <button id="menu-mission-btn" class="audio-btn ms-entry-btn" type="button">📜 任务委托</button>
+      <button id="menu-discover-btn" class="audio-btn dv-entry-btn" type="button">🧭 发现<span class="entry-dot"></span></button>
       <button id="menu-bgm-btn" class="audio-btn" type="button">🎵 背景音乐：开</button>
       <div class="mode-row">
         <button id="mode-keyboard" class="mode-btn active" type="button">⌨ 键盘模式<small>方向键 / WASD</small></button>
@@ -203,6 +205,40 @@
     </div>
   </div>
 
+  <!-- 任务委托 -->
+  <div id="ms-panel" class="hidden">
+    <div id="ms-head">
+      <div id="ms-title">📜 任务委托</div>
+      <div id="ms-fish">🐟 小鱼干 0</div>
+      <button id="ms-back-btn" class="pause-btn alt" type="button">← 返回菜单</button>
+    </div>
+    <div id="ms-body">
+      <div id="ms-list"></div>
+      <div id="ms-detail"></div>
+    </div>
+  </div>
+
+  <!-- 秘境发现 -->
+  <div id="dv-panel" class="hidden">
+    <div id="dv-head">
+      <div id="dv-title">🧭 发现</div>
+      <button id="dv-back-btn" class="pause-btn alt" type="button">← 返回菜单</button>
+    </div>
+    <div id="dv-grid"></div>
+  </div>
+
+  <!-- 阵亡委托结算 -->
+  <div id="ms-settle" class="hidden">
+    <div class="ms-settle-box">
+      <div class="ms-settle-top">
+        <span id="mss-count">委托结果 1/1</span>
+        <span id="mss-skip" role="button">跳过全部</span>
+      </div>
+      <div id="mss-body"></div>
+      <button id="mss-next" class="pause-btn" type="button">下一个</button>
+    </div>
+  </div>
+
   <!-- 游戏结束 -->
   <div id="gameover" class="hidden">
     <div class="go-title">飞喵陨落</div>
@@ -227,13 +263,14 @@
 
 <script src="js/sprites.js?v=20260914r2"></script>
 <script src="js/characters.js?v=20260914r2"></script>
-<script src="js/config.js?v=20260914r4"></script>
+<script src="js/config.js?v=20260914r5"></script>
 <script src="js/audio.js?v=20260914r2"></script>
 <script src="js/music.js?v=20260906r53"></script>
 <script src="js/achievements.js?v=20260909r2"></script>
-<script src="js/warehouse.js?v=20260914r3"></script>
-<script src="js/entities.js?v=20260914r3"></script>
-<script src="js/bosses.js?v=20260914r2"></script>
-<script src="js/game.js?v=20260914r5"></script>
+<script src="js/warehouse.js?v=20260914r4"></script>
+<script src="js/missions.js?v=20260914r1"></script>
+<script src="js/entities.js?v=20260914r4"></script>
+<script src="js/bosses.js?v=20260914r3"></script>
+<script src="js/game.js?v=20260914r7"></script>
 </body>
 </html>
