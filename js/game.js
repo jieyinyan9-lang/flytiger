@@ -86,7 +86,7 @@
   const BOSS_DEATH_NAMES = {
     pigking: '火焰飞猪王', thunderbehemoth: '雷公巨兽', samurai: '飞天日本武士',
     swordeagle: '咬剑鹰', skullking: '亡灵骷髅王', dogking: '飞天狗王',
-    giantpheasant: '巨型野鸡王', homelander: '祖国人', bossman: '大王',
+    giantpheasant: '火鸡王', homelander: '怒星使', bossman: '斧王',
     stranger: '怪客', frogking: '蛙哥', cranesage: '鹤仙',
     sphinx: '狮身人面像', niumo: '牛魔', bonedragonking: '巨型骨龙王'
   };

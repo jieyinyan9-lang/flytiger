@@ -818,12 +818,12 @@
     }
   }
 
-  /* ================ C3. 巨型野鸡（地面突击：撞毁障碍 + 直射/散射/追踪导弹） ================
+  /* ================ C3. 火鸡王（地面突击：撞毁障碍 + 直射/散射/追踪导弹） ================
    * 仅地面移动、巡逻范围小；身体与弹道都会炸毁山石障碍 */
   class GiantPheasant extends Boss {
     constructor(g) {
       super(g, 30, 96);
-      this.bossName = '巨型野鸡王';
+      this.bossName = '火鸡王';
       this.title = '地面突击型';
       this.x = CFG.W + 120;
       this.y = CFG.GROUND_Y - 88;
@@ -946,7 +946,7 @@
         this.flameBreathT -= dt;
         if (this.flameBreathT <= 0) {
           this.flameDur = 2.8;   // 持续喷火 2.8 秒
-          g.toast('🔥 野鸡王喷火！', 1.5, 'lt');
+          g.toast('🔥 火鸡王喷火！', 1.5, 'lt');
           g.shake(5);
         }
       }
@@ -973,12 +973,12 @@
     }
   }
 
-  /* ================ D1. 祖国人（特殊机制：3 束激光扫射 / 落地冲刺 / 慢速旋转激光） ================
+  /* ================ D1. 怒星使（特殊机制：3 束激光扫射 / 落地冲刺 / 慢速旋转激光） ================
    * 激光遇障碍炸碎山石；旋转激光整局最多 3 次，自转速度很慢 */
   class Homelander extends Boss {
     constructor(g) {
       super(g, 28, 80);
-      this.bossName = '祖国人';
+      this.bossName = '怒星使';
       this.title = '特殊机制型';
       this.hoverX = 660;
       this.atkT = 1.8;
@@ -1018,12 +1018,12 @@
             this.rotA = Math.atan2(p.y - this.y, p.x - this.x);
             this.spinFire = 0.25;
             SFX.phaseRise();   // 危险招式提示：旋转扫射蓄力
-            g.toast(`祖国人开始旋转扫射！（${this.spinUsed}/3）`, 1.8, 'lt');
+            g.toast(`怒星使开始旋转扫射！（${this.spinUsed}/3）`, 1.8, 'lt');
           } else if (roll < 0.42) {
             // 瞬移激光：原地闪烁后瞬移至玩家下方，朝上释放垂直激光
             this.state = 'teleOut'; this.stateT = 0;
             SFX.bossCharge();
-            g.toast('祖国人瞬移了！', 1.4, 'lt');
+            g.toast('怒星使瞬移了！', 1.4, 'lt');
           } else if (roll < 0.66) {
             // 落地冲刺
             this.state = 'land'; this.stateT = 0;
@@ -1160,11 +1160,11 @@
     }
   }
 
-  /* ================ D2. 大王（两阶段：西装巨人召唤/双手射击/漂浮弹 → 半血碎裂变身巨头） ================ */
+  /* ================ D2. 斧王（两阶段：西装巨人召唤/双手射击/漂浮弹 → 半血碎裂变身巨头） ================ */
   class BossMan extends Boss {
     constructor(g) {
       super(g, 32, 120);
-      this.bossName = '大王';
+      this.bossName = '斧王';
       this.title = '特殊机制型';
       this.hoverX = CFG.W - 190;
       this.phase = 1;
@@ -1203,7 +1203,7 @@
         this.hands.forEach(h => { h.state = 'idle'; h.t = 0; });
         g.shake(16); g.flashT = 0.4; g.flashColor = '#fff';
         SFX.bossDarkTransform();   // 黑暗变身：痛苦嘶吼悲号 + 次声震动 + 能量爆裂（3秒）
-        g.toast('大王的身体碎裂了！', 2.2, 'lt');
+        g.toast('斧王的身体碎裂了！', 2.2, 'lt');
         burst(g, this.x, this.y, 44, ['#8d96a3', '#2b2f3a', '#fff', '#ffd23b'], 320, 7, 0.9, 150);
       }
 
@@ -1237,7 +1237,7 @@
             for (let i = 0; i < 5; i++) {
               setTimeout(() => { if (g.state === 'playing') g.spawnEnemy(i % 2 ? 'archer' : 'cannoneer'); }, 400 + i * 350);
             }
-            g.toast('大王召唤了部下！', 2, 'lt');
+            g.toast('斧王召唤了部下！', 2, 'lt');
           }
           this.actT -= dt;
           if (this.actT <= 0) {
@@ -1327,7 +1327,7 @@
         }
       }
     }
-    /** 双手飞出/收回：就位后朝玩家快速连射斧头弹幕（持续 5s；斧头命中玩家则大王获得无敌） */
+    /** 双手飞出/收回：就位后朝玩家快速连射斧头弹幕（持续 5s；斧头命中玩家则斧王获得无敌） */
     stepHands(dt, g) {
       const p = g.player;
       this.hands.forEach((h, i) => {
@@ -1355,13 +1355,13 @@
         }
       });
     }
-    /** 斧头命中玩家：大王获得 1s 无敌，效果可叠加 */
+    /** 斧头命中玩家：斧王获得 1s 无敌，效果可叠加 */
     grantAxeInvuln(g) {
       if (this.dead) return;
       const wasZero = this.invulnT <= 0;
       this.invulnT = Math.min(this.invulnT + 1, 8);
       if (wasZero) {
-        g.toast('大王吸收了斧击，进入无敌状态！', 1.2, 'lt');
+        g.toast('斧王吸收了斧击，进入无敌状态！', 1.2, 'lt');
         SFX.phaseRise();
         burst(g, this.x, this.y, 20, ['#9fe8ff', '#fff', '#7fd0ff'], 260, 6, 0.55, -60);
       }
