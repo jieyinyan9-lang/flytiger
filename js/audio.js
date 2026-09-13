@@ -5,19 +5,13 @@
   'use strict';
 
   let ctx = null;
-  let sfxBus = null;          // 战斗音效统一总线（整体压低音量，避免战斗时过吵）
-  const SFX_VOL = 0.5;        // 音效总线增益
   let muted = false;
   let lastShoot = 0;
 
   function ac() {
     if (!ctx) {
-      try {
-        ctx = new (window.AudioContext || window.webkitAudioContext)();
-        sfxBus = ctx.createGain();
-        sfxBus.gain.value = SFX_VOL;
-        sfxBus.connect(ctx.destination);
-      } catch (e) { ctx = null; sfxBus = null; }
+      try { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { ctx = null; }
     }
     if (ctx && ctx.state === 'suspended') ctx.resume();
     return ctx;
@@ -52,7 +46,7 @@
     const g = c.createGain();
     g.gain.setValueAtTime(vol || 0.2, c.currentTime);
     g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
-    src.connect(f); f.connect(g); g.connect(sfxBus);
+    src.connect(f); f.connect(g); g.connect(c.destination);
     src.start();
   }
 
@@ -73,7 +67,7 @@
     const g = c.createGain();
     g.gain.setValueAtTime(vol || 0.2, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f); f.connect(g); g.connect(sfxBus);
+    src.connect(f); f.connect(g); g.connect(c.destination);
     src.start(t);
   }
 
@@ -345,7 +339,7 @@
       rg.gain.exponentialRampToValueAtTime(0.22, now + 0.5);
       rg.gain.setValueAtTime(0.22, now + 2.0);
       rg.gain.exponentialRampToValueAtTime(0.0001, now + 2.6);
-      roar.connect(rf); rf.connect(rg); rg.connect(sfxBus);
+      roar.connect(rf); rf.connect(rg); rg.connect(c.destination);
       roar.start(now + 0.25); roar.stop(now + 2.6);
       lfo.start(now + 0.25); lfo.stop(now + 2.6);
       // 人性悲号：三角波哭腔三段呜咽下滑

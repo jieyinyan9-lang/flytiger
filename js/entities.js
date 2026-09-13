@@ -216,6 +216,7 @@
       this.bscale = opts.bscale || 1;          // 弹体缩放（大型导弹等）
       this.invuln = opts.invuln || 0;          // 发射后无敌时间（期间我方子弹/旋转剑无法命中）
       this.element = opts.element || '';       // 元素属性：'flame'/'poison'/'ice'（友方弹专用）
+      this.elemPow = opts.elemPow || 0;       // 元素精通等级 0-3（决定元素弹 DoT 系数/持续/冻结）
       this.color = opts.color || '';           // 自定义弹体颜色（敌方 orb 等）
       this.sineWave = opts.sine || null;       // S 形弹道：{ amp, freq, phase }（飞刀线性 S 走向）
       this.fireTrail = !!opts.fireTrail;       // 火焰弹：飞行时喷射火焰粒子拖尾 + 火焰分层渲染
@@ -2206,6 +2207,8 @@
       this.downWay = false;   // 下部向下弹道
       // 元素弹道（击败 Boss 后解锁，总最多 3 条，FIFO 替换最早获得的）
       this.elementWay = [];     // ['flame', 'poison', 'ice', ...] 顺序代表获得先后
+      // 元素精通等级（三选一成长，0-3；决定元素弹 DoT 系数/持续/冻结时长）
+      this.elemLv = { flame: 0, poison: 0, ice: 0 };
       // 闪电子弹（闪电链）
       this.chainJumps = 0;    // 链接敌人数量（0=未解锁）
       this.chainDmgLv = 0;    // 闪电伤害强化等级
@@ -2230,8 +2233,6 @@
       this.moveSpdLv = 0;
       // 受伤闪红
       this.hurtFlash = 0;
-      // 生命强化体型成长时：中心"心脏"高亮倒计时
-      this.heartFlash = 0;
 
       // 角色自动技能状态（触发条件/冷却与小白爪击一致：接触敌人触发、3 秒冷却）
       this.autoSkill = null;          // 'dash'|'shield'|'throw'|'armor'|'laser'|null
@@ -2614,7 +2615,6 @@
       this.wingT += dt;
       this.invT = Math.max(0, this.invT - dt);
       this.hurtFlash = Math.max(0, this.hurtFlash - dt);
-      this.heartFlash = Math.max(0, this.heartFlash - dt);
       this.shieldFlash = Math.max(0, this.shieldFlash - dt);
       this.downT = Math.max(0, this.downT - dt);   // 击落状态倒计时
       // 护罩激活倒计时：超时未破碎则静默消散
@@ -3064,7 +3064,7 @@
         g.bullets.push(new Bullet(
           muzzleX, muzzleY + eOffY, vx, vy,
           { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
-            pierce: 0, element: el, life: 4 }));
+            pierce: 0, element: el, life: 4, elemPow: this.elemLv[el] || 0 }));
       }
       SFX.shoot();
     }
@@ -3103,25 +3103,6 @@
         }
       }
       ctx.globalAlpha = 1;
-
-      // 生命强化成长瞬间：中心"心脏"按心跳节奏高亮两下（体型变大但碰撞体不变的提示）
-      if (this.heartFlash > 0) {
-        const HEART_T = 0.7;
-        const k = 1 - this.heartFlash / HEART_T;                 // 进度 0→1
-        const beat = Math.pow(Math.max(0, Math.sin(k * Math.PI * 2)), 2);   // 两次搏动
-        const fade = clamp(this.heartFlash / HEART_T, 0, 1);     // 末段淡出
-        const r = 4 + beat * 7;
-        ctx.save();
-        const grd = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r * 2.6);
-        grd.addColorStop(0, `rgba(255,96,136,${0.85 * fade})`);
-        grd.addColorStop(0.5, `rgba(255,40,92,${0.32 * fade})`);
-        grd.addColorStop(1, 'rgba(255,40,92,0)');
-        ctx.fillStyle = grd;
-        ctx.beginPath(); ctx.arc(this.x, this.y, r * 2.6, 0, TAU); ctx.fill();
-        ctx.fillStyle = `rgba(255,238,244,${0.95 * fade})`;
-        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
-        ctx.restore();
-      }
 
       // 法师魔法护盾：紫色旋转魔法罩（无敌）
       if (this.magicShieldT > 0) {
@@ -3363,6 +3344,7 @@
       this.dotT = 0;           // DoT 剩余时间
       this.dotDps = 0;         // 每秒伤害
       this.dotType = '';       // 'flame' / 'poison' / 'ice'
+      this.dotStack = 0;        // 同元素异常叠层（1-5，每层 DoT +12%；过期清零）
       this.invulnBreakT = 0;   // 破无敌倒计时（归零时清除 spawnInvuln）
       this.freezeT = 0;        // 冻结时间（>0 时停止行动）
       this.confuseT = 0;       // 困惑时间（法师魔法护盾命中：困惑并下坠）
@@ -3372,9 +3354,13 @@
       const round = g.round;
       const hpMul = (1 + (round - 1) * 0.16 + g.time * 0.0025) * g.diffMul;
       this.maxHp = Math.round(def.hp * hpMul);
-      // 动态血量精英（如大型蝙蝠）：按玩家当前 DPS 反推血量，保证 5-8 秒交战时长
+      // 动态血量精英（如大型蝙蝠）：以本轮参考 DPS 为锚保证 5-8 秒交战时长，
+      // 玩家实际 DPS 偏离只软追赶 45%（与 Boss 同一套参考曲线）
       if (def.dynamicHp && def.fightTime && g.playerDps) {
-        this.maxHp = Math.max(this.maxHp, Math.round(g.playerDps() * rand(def.fightTime[0], def.fightTime[1])));
+        const ord = Math.max(1, g.round);
+        const refDps = CFG.boss.refDpsAt(ord);
+        const soft = CFG.boss.hpSoftMul(g.playerDps() / refDps);
+        this.maxHp = Math.max(this.maxHp, Math.round(refDps * rand(def.fightTime[0], def.fightTime[1]) * soft));
       }
       this.hp = this.maxHp;
       this.speedMul = 1 + (round - 1) * 0.03 + Math.min(0.25, g.time * 0.001);
@@ -3585,6 +3571,7 @@
       if (this.dead) return;
       this.dead = true;
       g.kills++;
+      if (typeof g.roundKills === 'number') g.roundKills++;   // 本轮刷怪段击杀（Boss 提前召唤门槛）
       g.score += this.def.score;
       if (window.Ach) window.Ach.evt('enemyDie', { g: g, e: this });
       g.addRage(this.def.elite ? CFG.ultimate.rageElite : CFG.ultimate.rageNormal);
@@ -3663,6 +3650,9 @@
           this.hp -= tickDmg;
           this.hurtT = 0.12;
           if (this.hp <= 0) { this.die(g); return; }
+        }
+        if (this.dotT <= 0) {   // 异常过期：清空叠层与类型，便于后续重新起算
+          this.dotStack = 0; this.dotDps = 0; this.dotType = '';
         }
       }
       // 破无敌倒计时：归零时清除出场无敌

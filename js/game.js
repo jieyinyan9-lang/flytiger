@@ -298,8 +298,8 @@
 
       // 首次交互解锁音频（浏览器自动播放策略）：菜单背景音乐随手势启动
       const unlockAudio = () => { SFX.unlock(); if (window.Music) Music.unlock(); };
-      window.addEventListener('pointerdown', unlockAudio);
-      window.addEventListener('keydown', unlockAudio);
+      ['pointerdown', 'mousedown', 'touchstart', 'keydown'].forEach(ev =>
+        window.addEventListener(ev, unlockAudio));
     }
 
     toggleMute() {
@@ -343,14 +343,26 @@
       }
     }
 
-    /* ---------------- 背景音乐场景路由 ----------------
-     * casual 日常休闲（菜单/局外 + 打小怪） / tide 怪物潮 / boss 通用Boss
-     * pheasant 巨型野鸡王 / eagle 咬剑鹰 / hero 祖国人 / imperial 大王 / crane 鹤仙 */
+    /* ---------------- 背景音乐场景路由（assets/BGM 音频文件，切歌自动淡入淡出） ----------------
+     * 局外 bgm-zhujiemian；地图：明亮(草原/沙漠/大海) bgm-mingliang、阴暗(火焰山/荒地) bgm-yinan、
+     * 赛博都市 bgm-saibopengke、角斗场 bgm-jiaodouchang、月痕沙海 bgm-anheishamo；
+     * 怪物潮 bgm-guaiwuchao；Boss 各自专属曲目（见 BOSS_LIST 的 music 字段），兜底 boss-1 */
     musicScene() {
-      if (this.state === 'menu' || this.state === 'gameover') return 'casual';
-      if (this.warnT > 0) return this.pendingBossMusic || 'boss';
-      if (this.bosses.length) return this.bosses[0].musicTheme || 'boss';
-      if (this.state === 'playing') return this.isTide ? 'tide' : 'casual';
+      if (this.state === 'menu' || this.state === 'gameover') return 'bgm-zhujiemian';
+      if (this.warnT > 0) return this.pendingBossMusic || 'boss-1';
+      if (this.bosses.length) return this.bosses[0].musicTheme || 'boss-1';
+      if (this.state === 'playing') {
+        if (this.isTide) return 'bgm-guaiwuchao';
+        switch (this.mapId) {
+          case 'volcano':
+          case 'wasteland': return 'bgm-yinan';
+          case 'cyber': return 'bgm-saibopengke';
+          case 'colosseum': return 'bgm-jiaodouchang';
+          case 'moondesert': return 'bgm-anheishamo';
+          // grassland / desert / ocean 及兜底：明亮风格
+          default: return 'bgm-mingliang';
+        }
+      }
       return null;   // 三选一/暂停：保持当前曲目
     }
     updateMusic() {
@@ -395,7 +407,9 @@
       this.spawnT = 1.2;
       this.rockT = 7;
       this.tideT = 0;          // 怪物潮剩余时间（每击败 3 个 Boss 触发）
-      this.bossT = rand(CFG.boss.firstMin, CFG.boss.firstMax);
+      this.bossT = CFG.boss.roundSchedAt(1)[1];   // 首轮刷怪段硬上限 Tmax（到点强制出 Boss）
+      this.roundT = 0;         // 本轮刷怪段已进行时间（Boss 战/预警期间暂停累计）
+      this.roundKills = 0;      // 本轮刷怪段累计击杀数（达 K 门槛且过 Tmin 即可提前召唤）
       this.warnT = 0;
       this.pendingBoss = null;
       this.pendingBossMusic = null;   // 预警中 Boss 对应曲目（boss-1/boss-2/各 Boss 专属曲目）
@@ -650,18 +664,11 @@
             `<div class="char-bar-name">${c.name}${locked ? ' 🔒' : ''}</div>` +
             `<div class="char-bar-intro">${c.intro || c.desc}</div>` +
             `<div class="char-bar-params">${this.charParams(c)}</div>`;
+          // 右上角状态徽章：仅展示状态，不可点击（点击穿透到角色框，由框体统一处理备战/提示）
           const badge = document.createElement('div');
           badge.className = 'char-status ' + (busy ? 'mission' : st);
           badge.textContent = busy ? (window.MISSIONS.busyLabel(id) || '委托中') : this.statusLabel(st);
-          badge.title = busy ? '正在执行委托，归来前无法备战' : '点击查看其它状态';
-          if (busy) {
-            badge.addEventListener('click', (e) => {
-              e.stopPropagation();
-              this.toast('📜「' + c.name + '」正在执行委托，归来前无法选为备战', 2.4);
-            });
-          } else {
-            badge.addEventListener('click', (e) => { e.stopPropagation(); this.openStatusMenu(id, badge); });
-          }
+          badge.title = busy ? '正在执行委托，归来前无法备战' : '';
           const mood = document.createElement('div');
           mood.className = 'char-mood';
           mood.textContent = CH.randMood(id);
@@ -702,60 +709,6 @@
         grid.appendChild(bar);
       }
     }
-    /** 点击状态徽章：弹出选项菜单（探索/委托 均提示未实装） */
-    openStatusMenu(id, anchor) {
-      // 单一实例：先关旧菜单
-      this.closeStatusMenu();
-      const menu = document.createElement('div');
-      menu.id = 'char-status-menu';
-      menu.className = 'char-status-menu';
-      const opts = [
-        { key: 'ready', label: '备战', enabled: true },
-        { key: 'explore', label: '探索', enabled: false },
-        { key: 'mission', label: '委托', enabled: false }
-      ];
-      opts.forEach(o => {
-        const it = document.createElement('div');
-        it.className = 'char-status-item' + (o.enabled ? '' : ' disabled');
-        it.textContent = o.label;
-        it.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.closeStatusMenu();
-          if (o.key === 'ready') this.setStandby(id);
-          else this.toast('功能尚未完成，敬请期待', 2.2);
-        });
-        menu.appendChild(it);
-      });
-      // fixed 定位附加到 body，避免被 overflow 裁剪
-      const rect = anchor.getBoundingClientRect();
-      const MENU_W = 140, MENU_H = opts.length * 30 + 6;
-      // 菜单右边缘对齐徽章右边缘，向左展开
-      let left = rect.right - MENU_W;
-      if (left < 6) left = 6;
-      if (left + MENU_W > window.innerWidth - 6) left = window.innerWidth - MENU_W - 6;
-      // 下方优先，不够则上方
-      let top = rect.bottom + 4;
-      if (top + MENU_H > window.innerHeight - 6) top = rect.top - MENU_H - 4;
-      if (top < 6) top = 6;
-      menu.style.position = 'fixed';
-      menu.style.left = left + 'px';
-      menu.style.top = top + 'px';
-      document.body.appendChild(menu);
-      this._statusMenu = menu;
-      // 点外部关闭
-      setTimeout(() => {
-        const onDoc = (ev) => {
-          if (!menu.contains(ev.target)) { this.closeStatusMenu(); document.removeEventListener('click', onDoc, true); }
-        };
-        document.addEventListener('click', onDoc, true);
-      }, 0);
-    }
-    /** 关闭状态选项菜单 */
-    closeStatusMenu() {
-      if (this._statusMenu) { this._statusMenu.remove(); this._statusMenu = null; }
-    }
-    /** @deprecated 旧轮转接口，保留兼容 */
-    cycleCharStatus(id) { this.openStatusMenu(id, this._statusBadges && this._statusBadges[id]); }
     /** 设为备战角色：叮一声 + 边框发光，其余清回空闲 */
     setStandby(id) {
       const CH = window.CHARS;
@@ -1167,8 +1120,31 @@
       const base = 1 + this.time * 0.0015 + (this.round - 1) * 0.05;
       return this.bossActive ? base * (1 + this.bossSpawned * CFG.boss.atkGrow) : base;
     }
-    bossHpMul() {
-      return (1 + this.bossSpawned * CFG.boss.hpGrow) * (1 + (this.round - 1) * CFG.boss.roundHpMul);
+    /**
+     * Boss / 动态血精英的血量软追赶系数。
+     * 以参考 DPS 曲线为锚：玩家实际 DPS 偏离参考值时，血量只追赶 45%，
+     * 堆成长带来的击杀加速收益归玩家（旧公式 1:1 反推会让成长完全无感）。
+     */
+    hpSoftMul(ord) {
+      return CFG.boss.hpSoftMul(this.playerDps() / CFG.boss.refDpsAt(ord));
+    }
+    /**
+     * 元素弹命中结算：DoT 系数/持续/冻结吃元素精通等级（CFG.elementMaster）。
+     * 同元素重复命中 → 叠层（上限 5，每层 DoT +12%）并刷新持续；不同元素 → 覆盖。
+     * @param pow 子弹携带的元素精通等级（b.elemPow，0-3）
+     */
+    applyElement(e, type, hitDmg, pow) {
+      const m = CFG.elementMaster[type];
+      if (!m) return;
+      const lv = Math.max(0, Math.min(3, pow | 0));
+      const stack = (e.dotType === type && e.dotT > 0) ? Math.min(5, (e.dotStack || 1) + 1) : 1;
+      e.dotStack = stack;
+      e.dotType = type;
+      e.dotT = m.durBase + m.durPerLv * lv;
+      e.dotDps = hitDmg * (m.dpsBase + m.dpsPerLv * lv) * (1 + 0.12 * (stack - 1));
+      if (type === 'ice') {
+        e.freezeT = Math.max(e.freezeT || 0, m.freezeBase + m.freezePerLv * lv);
+      }
     }
     targets() { return this.enemies.concat(this.bosses); }
 
@@ -1477,6 +1453,27 @@
     }
 
     /* ---------------- 三选一强化 ---------------- */
+    /** 卡池选项权重：按玩家当前短板投放（缺什么给什么），拿到后形成正反馈；
+     *  guaranteed 强制项不经过此加权。所有规则只调权重不做硬过滤，保留随机性与惊喜感 */
+    upgradeWeight(u) {
+      const p = this.player;
+      let w = 1;
+      const hpRatio = p.maxHp > 0 ? p.hp / p.maxHp : 1;
+      // 残血且续航差：生存类权重提高
+      if (['life', 'heal', 'shield', 'shieldC', 'shieldR', 'lifeUp'].includes(u.id) && hpRatio < 0.45) w *= 2.6;
+      // 理论 DPS 低于本轮参考值 80%：攻击强化优先
+      if (u.id === 'atk' && this.playerDps() < CFG.boss.refDpsAt(this.round) * 0.8) w *= 1.7;
+      // 弹道数低于"轮次推荐"（1+round，封顶7）：新炮管 / 弹道优先
+      if (['way', 'tail', 'down'].includes(u.id) && p.bulletCount < Math.min(7, this.round + 1)) w *= 1.8;
+      // 还没有任何元素弹道：优先开元素维度（元素精通卡 P3 也在此加权）
+      if (['flame', 'poison', 'ice'].includes(u.id) && p.elementWay.length === 0) w *= 1.6;
+      if (u.id === 'flameM' && p.elementWay.includes('flame')) w *= 1.5;
+      if (u.id === 'poisonM' && p.elementWay.includes('poison')) w *= 1.5;
+      if (u.id === 'iceM' && p.elementWay.includes('ice')) w *= 1.5;
+      // 已有体系的连贯强化：闪电链 / 刀刃系
+      if (u.id === 'chainN' || u.id === 'bladeN' || u.id === 'bladeL') w *= 1.5;
+      return w;
+    }
     openLevelup() {
       this.state = 'levelup';
       SFX.levelup();
@@ -1507,7 +1504,13 @@
         opts.push(u);
       });
       while (opts.length < 3 && pool.length) {
-        const i = Math.floor(Math.random() * pool.length);
+        // 缺口加权抽样（权重见 upgradeWeight）：残血给生存、DPS 落后给攻击/炮管、缺元素给元素
+        let total = 0;
+        const weights = pool.map(u => { const w = this.upgradeWeight(u); total += w; return w; });
+        let roll = Math.random() * total;
+        let i = 0;
+        for (; i < weights.length; i++) { roll -= weights[i]; if (roll <= 0) break; }
+        if (i >= pool.length) i = pool.length - 1;
         opts.push(pool.splice(i, 1)[0]);
       }
       this.pendingOptions = opts;
@@ -1517,7 +1520,7 @@
         const isGuaranteed = guaranteed.includes(u);
         card.className = 'lu-card ' + u.cls + (isGuaranteed ? ' lu-recommend' : '');
         const lv = u.level(this.player);
-        const descText = typeof u.desc === 'function' ? u.desc(this.player) : u.desc;
+        const descText = typeof u.desc === 'function' ? u.desc(this.player, this) : u.desc;
         card.innerHTML =
           `<div class="card-key">${i + 1}</div>` +
           (isGuaranteed ? '<div class="card-rec">★ 推荐</div>' : '') +
@@ -1571,11 +1574,14 @@
 
     /* ---------------- Boss 调度 ---------------- */
     scheduleNextBoss() {
-      this.bossT = rand(CFG.boss.nextMin, CFG.boss.nextMax);
-      // 罗马角斗场：Boss 出现间隔减半
+      // bossT = 本轮刷怪段硬上限 Tmax；满足 Tmin + 击杀门槛 K 时主循环会提前触发
+      this.bossT = CFG.boss.roundSchedAt(this.round)[1];
+      // 罗马角斗场：Boss 出现间隔减半（硬上限同步缩短）
       if (this.mapId === 'colosseum') {
         this.bossT = Math.max(1, Math.round(this.bossT * CFG.map.arenaBossTimeMul));
       }
+      this.roundT = 0;
+      this.roundKills = 0;
     }
     triggerBossWarn() {
       // 测试模式：跳过全部出场规则（地图/单次/序号/概率），强制指定 Boss 反复出现
@@ -1583,7 +1589,7 @@
         const entry = (window.BOSS_LIST || []).find(e => e.cls.name === this.testBoss);
         if (entry) {
           this.pendingBoss = entry.cls;
-          this.pendingBossMusic = entry.music || 'boss';
+          this.pendingBossMusic = entry.music || 'boss-1';
           this.warnT = CFG.boss.warnTime;
           this.el.warnSub.textContent = '强大的气息逼近了！';
           this.el.warn.classList.remove('hidden');
@@ -2267,7 +2273,14 @@
         }
       } else if (!this.bossActive && !this.stageMode) {
         this.bossT -= dt;
-        if (this.bossT <= 0) this.triggerBossWarn();
+        this.roundT += dt;
+        if (this.bossT <= 0) {
+          this.triggerBossWarn();   // 硬上限 Tmax：强制召唤，防空转
+        } else if (!this.testBoss) {
+          // 双条件：刷怪段 ≥ Tmin 且本轮击杀达 K → 提前召唤（清怪越快，Boss 来得越早）
+          const sch = CFG.boss.roundSchedAt(this.round);
+          if (this.roundT >= sch[0] && this.roundKills >= sch[2]) this.triggerBossWarn();
+        }
       }
 
       this.spawnTick(dt);

@@ -25,9 +25,11 @@
       maxSizeMul: 3.0       // 生命强化最大体型
     },
 
-    /** 升级所需能量：无冷却锁，改为数值门槛递增 —— 线性 + 二次项，每次成长越来越难 */
+    /** 升级所需能量：无冷却锁，数值门槛递增 —— 前紧后松曲线。
+     *  前 3 级 40/49/60（首只 Boss 前约可升 3 次，避免开局快速成型）；
+     *  累计到 23 级约 5800 经验，对齐一局（约 10 轮）可获取的能量，全程成长 22~25 次。 */
     xpNeed(level) {
-      return 14 + Math.floor(level * 4.5 + level * level * 0.35);
+      return 40 + Math.floor(level * 9 + level * level * 0.55);
     },
 
     /** 轮次规则：击败 1 个 Boss = 通过 1 轮（round = bossCount + 1，见 game.js） */
@@ -292,7 +294,6 @@
           p.hp = Math.min(p.maxHp, p.hp + 30);
           if (p.sizeMul < 3.0) {
             p.sizeMul = Math.min(3.0, +(p.sizeMul + 0.12).toFixed(2));
-            p.heartFlash = 0.7;   // 体型变大瞬间：中心心脏高亮（碰撞体不随之变大）
           }
           p.lifeLv++;
         },
@@ -300,15 +301,22 @@
       },
       {
         id: 'atk', icon: '⚔', cls: 'c-atk', name: '攻击强化',
-        desc: '子弹伤害 +6，击杀效率提升',
-        can() { return true; },
+        desc: '子弹伤害 +6，击杀效率提升（上限 12 级）',
+        can(p) { return (p.atkLv || 0) < 12; },
         apply(p) { p.dmg += 6; p.atkLv++; },
         level(p) { return p.atkLv; }
       },
       {
         id: 'way', icon: '※', cls: 'c-way', name: '弹道强化',
-        desc: '子弹数量 +1，形成散射 / 多方向弹幕（上限 20 发）',
-        can(p) { return p.bulletCount < 20; },
+        desc(p, g) {
+          const cap = g ? this.wayCap(g.round) : 20;
+          return `子弹数量 +1，形成散射 / 多方向弹幕（本轮上限 ${cap} 发，最终上限 20 发）`;
+        },
+        wayCap(round) { return round <= 4 ? 7 : (round <= 7 ? 12 : 20); },
+        can(p, g) {
+          const cap = g ? this.wayCap(g.round) : 20;   // 无游戏上下文（如外部预览）时按最终上限
+          return p.bulletCount < cap;
+        },
         apply(p) { p.bulletCount++; p.wayLv++; },
         level(p) { return p.wayLv; }
       },
@@ -321,15 +329,24 @@
       },
       {
         id: 'tier', icon: '✦', cls: 'c-tier', name: '子弹升级', charOnly: 'xiaobai',
-        desc: '普通弹升级为高阶强化弹：更大、更亮、附带穿透（共 3 阶）',
-        can(p) { return p.bulletTier < 3; },
+        desc: '普通弹升级为高阶强化弹：更大、更亮、附带穿透（3 阶，分别在第 1/3/5 轮出现）',
+        can(p, g) {
+          if (p.bulletTier >= 3) return false;
+          // 下一阶要求轮次：1阶第1轮、2阶第3轮、3阶第5轮
+          const needRound = p.bulletTier === 0 ? 1 : (p.bulletTier === 1 ? 3 : 5);
+          return !g || g.round >= needRound;
+        },
         apply(p) { p.bulletTier++; p.tierLv++; p.dmg += 4; },
         level(p) { return p.tierLv; }
       },
       {
         id: 'bomb', icon: '✺', cls: 'c-bomb', name: '爆炸弹',
-        desc: '子弹命中后爆炸，对周围敌人造成范围伤害（范围/伤害递增）',
-        can(p) { return p.bombLv < 6; },
+        desc: '子弹命中后爆炸，对周围敌人造成范围伤害（范围/伤害递增；第 2 轮起每轮可升 1 阶，共 6 阶）',
+        can(p, g) {
+          if (p.bombLv >= 6) return false;
+          // 第 bombLv 阶需在第 (2+bombLv) 轮才出现：2/3/4/5/6/7 轮各 1 阶
+          return !g || g.round >= 2 + p.bombLv;
+        },
         apply(p) { p.bombLv++; },
         level(p) { return p.bombLv; }
       },
@@ -508,6 +525,40 @@
         },
         level(p) { return p.elementWay.filter(x => x === 'ice').length; },
         guaranteed(p, g) { return g.round >= 4 && p.elementWay.indexOf('ice') < 0; }
+      },
+      /* —— 元素精通（需先拥有对应元素弹道；异常流 build 的独立成长线） —— */
+      {
+        id: 'flameM', icon: '🔥', cls: 'c-atk', name: '烈焰精通',
+        desc(p) {
+          const lv = p.elemLv.flame || 0;
+          const pct = Math.round((0.40 + 0.15 * lv) * 100);
+          return `火焰异常强化 ${lv}/3：灼烧秒伤提升至子弹伤害的 ${pct}%，持续 ${3 + 0.5 * lv}s；重复命中可叠层（最多5层）`;
+        },
+        can(p) { return p.elementWay.indexOf('flame') >= 0 && (p.elemLv.flame || 0) < 3; },
+        apply(p) { p.elemLv.flame = (p.elemLv.flame || 0) + 1; },
+        level(p) { return p.elemLv.flame || 0; }
+      },
+      {
+        id: 'poisonM', icon: '☠', cls: 'c-atk', name: '剧毒精通',
+        desc(p) {
+          const lv = p.elemLv.poison || 0;
+          const pct = Math.round((0.25 + 0.10 * lv) * 100);
+          return `毒液异常强化 ${lv}/3：中毒秒伤提升至子弹伤害的 ${pct}%，持续 ${6 + lv}s；重复命中可叠层（最多5层）`;
+        },
+        can(p) { return p.elementWay.indexOf('poison') >= 0 && (p.elemLv.poison || 0) < 3; },
+        apply(p) { p.elemLv.poison = (p.elemLv.poison || 0) + 1; },
+        level(p) { return p.elemLv.poison || 0; }
+      },
+      {
+        id: 'iceM', icon: '❄', cls: 'c-spd', name: '寒冰精通',
+        desc(p) {
+          const lv = p.elemLv.ice || 0;
+          const pct = Math.round((0.30 + 0.10 * lv) * 100);
+          return `寒冰异常强化 ${lv}/3：冰晶秒伤提升至子弹伤害的 ${pct}%，冻结延长至 ${4 + 0.5 * lv}s；重复命中可叠层（最多5层）`;
+        },
+        can(p) { return p.elementWay.indexOf('ice') >= 0 && (p.elemLv.ice || 0) < 3; },
+        apply(p) { p.elemLv.ice = (p.elemLv.ice || 0) + 1; },
+        level(p) { return p.elemLv.ice || 0; }
       }
     ],
 
@@ -524,14 +575,62 @@
       warnTime: 2.6,
       firstMin: 38, firstMax: 60,      // 首个 Boss 出现时间（秒）
       nextMin: 45, nextMax: 75,       // 后续 Boss 间隔
-      hpGrow: 0.05,                   // 每次 Boss 生命 +5%
       atkGrow: 0.05,                  // 每次 Boss 攻击 +5%
-      roundHpMul: 0.09,               // 每轮额外血量系数
-      /** 第 ord 只 Boss 的目标交战时长（秒）：35/40/45/50，第 5 只起 52s，之后每只 +2s，上限 80s */
+      /** 第 ord 只 Boss 的目标交战时长（秒）：30s 起步，每只 +3.2s，58s 封顶 */
       fightTime(ord) {
-        if (ord <= 4) return 30 + ord * 5;
-        return Math.min(80, 52 + (ord - 5) * 2);
+        return Math.min(58, Math.round(30 + (ord - 1) * 3.2));
+      },
+      /** 参考 DPS 曲线：设计预期玩家在第 ord 只 Boss 时"正常成长"应有的理论秒伤
+       *  （口径含 0.55 命中率折减，与 playerDps() 一致；为固定设计值，不读玩家实际强度）。
+       *  Boss 血量以该曲线为锚，不再按玩家 DPS 1:1 反推——玩家堆成长→击杀更快，成长有体感。 */
+      refDps: [90, 230, 385, 550, 725, 905, 1090, 1280, 1475, 1675],
+      refDpsAt(ord) {
+        const t = this.refDps;
+        const i = Math.max(1, ord) - 1;
+        if (i < t.length) return t[i];
+        // 无尽模式（第 10 只之后）：参考 DPS 每只 +12%
+        return t[t.length - 1] * Math.pow(1.12, i - t.length + 1);
+      },
+      /** 软追赶系数：玩家 DPS 偏离参考值时，血量只追赶 45%。
+       *  ratio=1（正常成长）=>1；ratio=2（双倍养成）=>1.405（实际击杀≈0.70×目标时长）；
+       *  ratio=0.5（没养成）=>0.775（实际击杀≈1.55×目标时长，吃力但不会完全打不动） */
+      hpSoftMul(ratio) {
+        const r = Math.max(0.45, Math.min(1.9, ratio));
+        return 0.55 + 0.45 * r;
+      },
+      /** 逐轮刷怪段节奏 [Tmin, Tmax, K]：
+       *  本轮刷怪时间 ≥ Tmin 且累计击杀 ≥ K → 提前召唤 Boss（清怪越快出得越早）；
+       *  到 Tmax 仍未达标则强制召唤（防空转卡死）。时长分层由此实现：
+       *  高手压 Tmin、中手落在 Tmin~Tmax、慢手吃满 Tmax 且 Boss 战更久。 */
+      roundSchedule: [
+        [45, 75, 14],    // 第1轮
+        [55, 90, 18],    // 第2轮
+        [65, 105, 22],   // 第3轮
+        [75, 120, 26],   // 第4轮
+        [90, 140, 30],   // 第5轮
+        [90, 140, 34],   // 第6轮
+        [100, 155, 38],  // 第7轮（进攻手段大致在本轮前后拉满 ≈ 全程70%）
+        [100, 155, 42],  // 第8轮
+        [110, 170, 46],  // 第9轮
+        [110, 170, 50]   // 第10轮
+      ],
+      roundSchedAt(round) {
+        const t = this.roundSchedule;
+        const r = Math.max(1, round);
+        if (r <= t.length) return t[r - 1];
+        // 无尽模式（10轮之后）：间隔与击杀门槛微增，封顶防空转
+        const ex = r - t.length;
+        const last = t[t.length - 1];
+        return [Math.min(200, last[0] + ex * 6), Math.min(260, last[1] + ex * 8), Math.min(70, last[2] + ex * 2)];
       }
+    },
+
+    /** 元素精通成长：元素弹命中后 DoT 秒伤 = 子弹命中伤害 × (dpsBase + dpsPerLv×精通等级)
+     *  精通等级 0-3（通过三选一「元素精通」卡成长）；同种异常可叠层 5 层（每层 +12%，见 game.applyElement） */
+    elementMaster: {
+      flame:  { dpsBase: 0.40, dpsPerLv: 0.15, durBase: 3, durPerLv: 0.5 },
+      poison: { dpsBase: 0.25, dpsPerLv: 0.10, durBase: 6, durPerLv: 1 },
+      ice:    { dpsBase: 0.30, dpsPerLv: 0.10, durBase: 2, durPerLv: 0.5, freezeBase: 4, freezePerLv: 0.5 }
     },
 
     /** 地图表：每次进入游戏随机刷新一张；阻碍特性与草地相同（撞击掉 30% 生命并碎裂 / 地面单位免疫 / 可被炮弹炸毁）

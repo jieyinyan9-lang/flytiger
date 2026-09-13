@@ -14,8 +14,13 @@
   const STORE_KEY = 'flytiger_mission_v1';
   const BOARD_SIZE = 2;
 
-  /* ---------------- 可参与委托的猫咪（魅影为藏品解锁角色，暂不参与） ---------------- */
-  const CATS = ['xiaobai', 'xiake', 'mofashi', 'buliang', 'jiaodoushi', 'chaoren'];
+  /* ---------------- 可参与委托的猫咪：所有已解锁英雄（含藏品解锁的魅影） ---------------- */
+  const BASE_CATS = ['xiaobai', 'xiake', 'mofashi', 'buliang', 'jiaodoushi', 'chaoren'];
+  /** 当前可派遣猫咪：动态读取角色系统，新解锁的英雄立即可参与委托 */
+  function allCats() {
+    if (window.CHARS && CHARS.ORDER) return CHARS.ORDER.filter(id => id && (!CHARS.isUnlocked || CHARS.isUnlocked(id)));
+    return BASE_CATS.slice();
+  }
   const catName = id => { const c = window.CHARS && CHARS.get(id); return c ? c.name : id; };
   const catFace = id => { const c = window.CHARS && CHARS.get(id); return c ? (c.face || c.art || '') : ''; };
 
@@ -57,7 +62,6 @@
   const TIMED = {
     id: 'storm', name: '沙漠风暴侦察', timed: true,
     rounds: 3, deadline: 5, slots: 1,
-    cats: CATS.slice(),
     rec: ['xiaobai', 'xiake', 'mofashi'], fish: 50, special: 0.70,
     specialStage: 'sphinx_outpost',
     desc: '月亮缺了一角，缺口往外漏沙。沙落之地，石猫从地里长出，全朝东方。游方僧说：狮身人面像醒了，它在找东西。接过沙子的人都会梦见巨爪之下，抬头看不见脸，只听见——“还给我。”哨站把沙子沉井，井第二天被沙填平。月亮又多了一个洞。'
@@ -149,9 +153,9 @@
     const left = Math.max(0, m.finish - data.rounds);
     return (m.timed ? '限时委托' : '委托中') + '·剩' + left + '轮';
   }
-  /** 空闲（可派遣/可备战）猫咪：六只基础猫扣除委托中的 */
+  /** 空闲（可派遣/可备战）猫咪：所有已解锁英雄扣除委托中的 */
   function freeCats(def) {
-    const allow = def && def.cats ? def.cats : CATS;
+    const allow = (def && def.cats) || allCats();
     return allow.filter(id => !isBusy(id));
   }
   function hasPending() { return data.pending.length > 0; }
@@ -508,7 +512,7 @@
     catBox.appendChild(subTitle('选择派遣猫咪（' + (def.slots > 1 ? '最多 ' + def.slots + ' 只' : '1 只') + '）'));
     const row = document.createElement('div');
     row.className = 'ms-cat-row';
-    const eligible = def.cats || CATS;
+    const eligible = def.cats || allCats();
     eligible.forEach(id => {
       const busy = isBusy(id);
       const chip = document.createElement('div');

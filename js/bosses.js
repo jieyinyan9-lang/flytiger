@@ -49,10 +49,10 @@
       this.hoverX = 700;
       this.radius = radius;
       this.contactDmg = contactDmg;
-      // 血量按玩家 DPS 动态生成：目标交战时长按 Boss 序号递增
-      // 第1只35s / 第2只40s / 第3只45s / 第4只50s / 第5只起52-80s
+      // 血量以参考 DPS 曲线为锚（正常成长→交战≈fightTime），实际 DPS 偏离只软追赶 45%
+      // 第1只30s 起步，之后每只 +3.2s，58s 封顶
       const fightTime = CFG.boss.fightTime(g.bossSpawned + 1);
-      this.maxHp = Math.round(g.playerDps() * fightTime * g.bossHpMul());
+      this.maxHp = Math.round(CFG.boss.refDpsAt(g.bossSpawned + 1) * fightTime * g.hpSoftMul(g.bossSpawned + 1));
       this.hp = this.maxHp;
       this.xpValue = 220;
       this.deathCols = ['#fff', '#ffd23b', '#ff7b2e'];
@@ -281,7 +281,7 @@
   /* ================ B1. 飞天日本武士（特殊机制） ================ */
   class Samurai extends Boss {
     constructor(g) {
-      super(g, 26, 58);   // 体积扩大：接触碰撞半径 46→58，配合立绘 0.58→0.74
+      super(g, 26, 46);
       this.bossName = '飞天日本武士';
       this.title = '特殊机制型';
       this.hoverX = 690;
@@ -2041,9 +2041,9 @@
       super(g, 26, 92);
       this.bossName = '狮身人面像';
       this.title = '沙漠远古守护神';
-      // 单循环血条：目标 40s 交战（整场 3 循环），按玩家 DPS 动态缩放
+      // 单循环血条：目标 40s 交战（整场 3 循环），按参考 DPS 曲线 + 软追赶缩放
       // 注意：40 为独立于 CFG.boss.fightTime 的史诗战常量（仅 ord 1-2 沙漠限定出场），调整全局曲线时无需跟随
-      this.maxHp = Math.round(g.playerDps() * 40 * g.bossHpMul());
+      this.maxHp = Math.round(CFG.boss.refDpsAt(g.bossSpawned + 1) * 40 * g.hpSoftMul(g.bossSpawned + 1));
       this.hp = this.maxHp;
       this.cycle = 1;            // 循环 1-3
       this.phase = 'p1';         // p1 / p2 / p3
@@ -2943,7 +2943,7 @@
       this.bossName = '牛魔';
       this.title = '草原魔王';
       // 血量：当前轮数普通 Boss 的 2 倍，有效交战时长封顶 80s（通用期后期不再失控）
-      this.maxHp = Math.round(g.playerDps() * Math.min(CFG.boss.fightTime(g.bossSpawned + 1) * 2, 80) * g.bossHpMul());
+      this.maxHp = Math.round(CFG.boss.refDpsAt(g.bossSpawned + 1) * Math.min(CFG.boss.fightTime(g.bossSpawned + 1) * 2, 80) * g.hpSoftMul(g.bossSpawned + 1));
       this.hp = this.maxHp;
       this.phase = 'p1';
       this.act = null;          // move / chargeWind / chargeAir / c4 / finale
@@ -4298,29 +4298,29 @@
    *   但地图限定永久生效（无 maxOrd、无每局单次限制）。
    */
   window.BOSS_LIST = [
-    { cls: PigKing, weight: 3, music: 'boss' },
-    { cls: ThunderBehemoth, weight: 3, music: 'boss' },
-    { cls: Samurai, weight: 3, music: 'boss' },
-    { cls: SwordEagle, weight: 3, music: 'eagle' },        // 咬剑鹰：广州鼓点+鹰叫
-    { cls: SkullKing, weight: 3, music: 'boss' },
-    { cls: DogKing, weight: 3, music: 'boss' },
-    { cls: GiantPheasant, weight: 3, ground: true, music: 'pheasant' },       // 野鸡王：地面突击型，鸡叫融合电音
-    { cls: Homelander, weight: 3, music: 'hero' },  // 祖国人：军乐+电磁声
-    { cls: BossMan, weight: 3, music: 'imperial' },  // 大王：帝王军乐
-    { cls: Stranger, weight: 3, music: 'boss' },      // 怪客
-    { cls: FrogKing, weight: 3, ground: true, music: 'boss' },    // 蛙哥：地面巨兽
-    { cls: CraneSage, weight: 3, music: 'crane' },               // 鹤仙：五技特殊型；悲壮像素摇滚
+    { cls: PigKing, weight: 3, music: 'boss-1' },          // 火焰飞猪王
+    { cls: ThunderBehemoth, weight: 3, music: 'boss-1' }, // 雷公巨兽
+    { cls: Samurai, weight: 3, music: 'boss-wushi' },     // 飞天日本武士
+    { cls: SwordEagle, weight: 3, music: 'boss-ying' },   // 咬剑鹰
+    { cls: SkullKing, weight: 3, music: 'boss-2' },       // 亡灵骷髅王
+    { cls: DogKing, weight: 3, music: 'boss-1' },         // 飞天狗王
+    { cls: GiantPheasant, weight: 3, ground: true, music: 'boss-1' },  // 火鸡王：地面突击型
+    { cls: Homelander, weight: 3, music: 'boss-2' },      // 怒星使
+    { cls: BossMan, weight: 3, music: 'boss-fuwang' },    // 斧王
+    { cls: Stranger, weight: 3, music: 'boss-2' },        // 怪客
+    { cls: FrogKing, weight: 3, ground: true, music: 'boss-2' },  // 蛙哥：地面巨兽
+    { cls: CraneSage, weight: 3, music: 'boss-hexian' },  // 鹤仙：五技特殊型
     // 狮身人面像：沙漠永久限定（map）；第1轮50%/第2轮70%独立强制出场，
     // 强制轮后（无论是否命中过）拉平为沙漠普通池等权成员，可反复出场
     { cls: Sphinx, weight: 3, minOrd: 1, map: 'desert',
-      forceChance: { 1: 0.5, 2: 0.7 }, music: 'sphinx' },
+      forceChance: { 1: 0.5, 2: 0.7 }, music: 'boss-shishenrenmian' },
     // 牛魔：草原永久限定（map）；第2轮60%/第3轮70%/第4轮80%独立强制出场，
     // 强制轮后（无论是否命中过）拉平为草原普通池等权成员，可反复出场
     { cls: NiuMo, weight: 3, map: 'grassland', minOrd: 2,
-      forceChance: { 2: 0.6, 3: 0.7, 4: 0.8 }, music: 'niumo' },
+      forceChance: { 2: 0.6, 3: 0.7, 4: 0.8 }, music: 'boss-niumowang' },
     // 巨型骨龙王：荒地永久限定（map）；第2轮70%/第3轮80%独立强制出场，
     // 强制轮后（无论是否命中过）拉平为荒地普通池等权成员，可反复出场
     { cls: BoneDragonKing, weight: 3, map: 'wasteland', minOrd: 2,
-      forceChance: { 2: 0.7, 3: 0.8 }, music: 'boss' }
+      forceChance: { 2: 0.7, 3: 0.8 }, music: 'boss-gulongwang' }
   ];
 })();

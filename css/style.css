@@ -607,16 +607,15 @@ kbd {
   font-size: 11px; color: #ffd166; font-weight: bold; line-height: 1.25;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* 右上角状态徽章 */
+/* 右上角状态徽章：纯展示，不响应点击（事件穿透到角色框） */
 .char-status {
   position: absolute; top: 4px; right: 6px; z-index: 2;
   font-size: 10px; font-weight: 900; letter-spacing: 1px;
   color: #b9ccea; background: rgba(20,30,60,.9);
   border: 1.5px solid #33477a; border-radius: 10px;
-  padding: 1px 9px; cursor: pointer; user-select: none;
-  transition: border-color .12s, color .12s, background .12s;
+  padding: 1px 9px; cursor: default; user-select: none;
+  pointer-events: none;
 }
-.char-status:hover { border-color: #6be0ff; color: #fff; }
 .char-status.idle { color: #7e93c0; }
 .char-status.ready { color: #221a00; background: #ffd166; border-color: #000; }
 .char-status.coming { color: #ffd9a0; border-color: #6a4a2a; background: rgba(60,30,10,.8); }
@@ -638,25 +637,6 @@ kbd {
 .char-bar-empty .char-empty-note {
   margin: auto; font-size: 13px; font-weight: 900; color: #55688f; letter-spacing: 2px;
 }
-/* 状态选项浮层 */
-.char-status-menu {
-  position: absolute; z-index: 20;
-  background: rgba(14, 22, 46, .98);
-  border: 2px solid #ffd166; border-radius: 6px;
-  padding: 3px 0; width: 140px;
-  box-shadow: 0 6px 20px rgba(0,0,0,.6);
-  display: flex; flex-direction: column;
-}
-.char-status-item {
-  font-size: 12px; font-weight: 900; color: #dcecff;
-  padding: 7px 12px; cursor: pointer; text-align: center;
-  border-bottom: 1px solid #24365e; letter-spacing: 2px;
-  transition: background .1s, color .1s;
-}
-.char-status-item:last-child { border-bottom: none; }
-.char-status-item:hover { background: #2a3f6e; color: #fff; }
-.char-status-item.disabled { color: #5a6f8a; cursor: not-allowed; }
-.char-status-item.disabled:hover { background: transparent; color: #5a6f8a; }
 #char-back-btn { margin-top: 8px; flex: none; }
 
 /* ---------- 喵咪成就界面 ---------- */
@@ -1381,6 +1361,4 @@ kbd {
 .char-bar.on-mission .char-bar-avatar canvas { filter: grayscale(.75) brightness(.72); }
 .char-status.mission {
   color: #ffe2c2; background: rgba(60,34,12,.92); border-color: #a86a2a;
-  cursor: not-allowed;
 }
-.char-status.mission:hover { border-color: #a86a2a; color: #ffe2c2; }
