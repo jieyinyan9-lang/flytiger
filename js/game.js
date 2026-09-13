@@ -404,6 +404,8 @@
       this.stageTime = 0;                   // 关卡已进行时间（秒）
       this.stageWavesTriggered = new Set(); // 已触发的怪物潮序号
       this.stageBossSpawned = false;        // 最终 Boss 是否已出场
+      this.stageUnlocked = new Set();       // 关卡内按时间表已解锁的小怪类型
+      this.stageSpawnsDone = new Set();     // 时间表中已保底刷出的条目（按类型去重）
       this.shootDisabled = false;           // Boss 台词演出期间停火
       this.letterbox = 0;                   // 上下黑边压下进度（0~1，1=完全压下）
       this.bossIntro = null;                // Boss 入场演出状态机
@@ -1763,10 +1765,13 @@
       const table = [];
       Object.keys(CFG.enemies).forEach(type => {
         const def = CFG.enemies[type];
-        if ((def.minBossKills || 0) > this.bossCount) return;        // 未达成 Boss 击败数：每击败1只Boss解锁1种
-        if (def.flyer && !this.unlockedFlyers.has(type)) return;    // 飞行弹幕敌人：仅已解锁的出场
+        // 月痕沙海：时间表已解锁的小怪，无视 Boss 击败数 / 飞行解锁 / 斗兽场限定三道门槛
+        const stageOk = this.stageMode && this.stageUnlocked.has(type);
+        if ((def.minBossKills || 0) > this.bossCount && !stageOk) return;        // 未达成 Boss 击败数：每击败1只Boss解锁1种
+        if (def.flyer && !this.unlockedFlyers.has(type) && !stageOk) return;    // 飞行弹幕敌人：仅已解锁的出场
         if (def.ground && this.mapId === 'ocean') return;           // 大海：不出现地面类敌人（弓箭手/炮师）
-        if (def.arenaOnly && this.mapId !== 'colosseum') return;    // 斗兽场专属小怪（投掷奴/羊头斗士/盾奴/皮影客/自爆囚）
+        if (def.arenaOnly && this.mapId !== 'colosseum' &&
+            !(this.mapId === 'moondesert' && stageOk)) return;      // 斗兽场专属小怪（投掷奴/羊头斗士/盾奴/皮影客/自爆囚）
         if (def.oncePerRound && this.grassDragonThisRound) return;   // 草龙：每轮至多一次
         if ((def.elite || def.ground) && this.enemies.some(e => e.type === type && !e.isMini)) return;  // 精英/地面单位场上限 1（分裂小段不计）
         // 罗马角斗场：地面类敌人（弓箭手/炮师）刷出权重 ×3，明显更常见
@@ -1788,6 +1793,24 @@
           this.tideT = cfg.waveDur;
           this.toast(`⚠ 月痕沙海怪物潮来袭：小怪数量 ×3！坚持 ${cfg.waveDur} 秒！`, 3.2);
           SFX.warn();
+        }
+      });
+      // 按关卡时间解锁小怪：到点保底刷出（horde 为一次群体），之后加入随机池
+      (cfg.spawnSchedule || []).forEach(s => {
+        if (this.stageSpawnsDone.has(s.type) || this.stageTime < s.t) return;
+        this.stageSpawnsDone.add(s.type);
+        this.stageUnlocked.add(s.type);
+        const def = CFG.enemies[s.type];
+        if (s.horde) {
+          // 群体事件：直接构造，绕过同类型场上限与普通刷怪上限（40 只硬顶）
+          for (let i = 0; i < s.horde && this.enemies.length < 40; i++) {
+            this.enemies.push(new Enemy(s.type, this));
+          }
+          this.toast(`⚠ 大量${def.name}蜂拥而来！`, 3.2);
+          SFX.warn();
+        } else {
+          this.spawnEnemy(s.type);
+          this.toast(`✨ ${def.name} 出现在月痕沙海！`, 2.8);
         }
       });
       // 6 分钟到点：召唤最终 Boss 狮身人面像（带专属入场演出）

@@ -553,7 +553,16 @@
       waveCount: 2,           // 中途怪物潮次数
       waveDur: 30,            // 每次怪物潮 30 秒
       waveTime: [120, 240],   // 第 2 分钟 / 第 4 分钟触发怪物潮
-      boss: 'Sphinx'          // 最终 Boss：狮身人面像
+      boss: 'Sphinx',         // 最终 Boss：狮身人面像
+      // 按关卡时间解锁的小怪：到点保底刷出（horde 只一次群体），之后加入随机池
+      spawnSchedule: [
+        { t: 30,  type: 'demon' },        // 飞天恶魔
+        { t: 60,  type: 'archer' },       // 小弓箭手
+        { t: 90,  type: 'eyefly' },       // 魔眼飞虫
+        { t: 120, type: 'puppet' },       // 皮影客（与第 1 次怪物潮同时）
+        { t: 200, type: 'owl' },          // 预言猫头鹰
+        { t: 230, type: 'ramFighter', horde: 8 }   // 大量羊头斗士蜂拥而来
+      ]
     },
 
     /** 地图特殊机制参数 */
