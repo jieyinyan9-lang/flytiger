@@ -3344,6 +3344,15 @@
       const fromLeft = stage && Math.random() < 0.5;
       this.spawnSide = fromLeft ? 'left' : 'right';
       this.x = fromLeft ? -50 : CFG.W + 50;
+      // face：1=朝右（水平翻转 L 系精灵），-1=朝左（默认）。左侧入场时先朝右飞入
+      this.face = fromLeft ? 1 : -1;
+      // 左侧入场怪先飞到右侧的“镜像入场点”再交给原 AI（原 AI 均按“从右向左进入”设计）
+      this.enterTX = null;
+      if (fromLeft) {
+        if (type === 'skull') this.enterTX = rand(940, 980);        // 头骨仅在 x>W-30 时开火，需从更右侧滑入
+        else if (def.ground) this.enterTX = rand(860, 905);         // 地面单位：从右缘向左走/跑
+        else this.enterTX = rand(750, 845);                         // 飞行单位：玩家右上悬停带
+      }
       this.y = rand(CFG.TOP_Y + 40, CFG.GROUND_Y - 60);
       this.state = 'enter';
       this.stateT = 0;
@@ -3649,11 +3658,16 @@
       // 减速（护罩破碎冲击波）：行动节奏降至 45%（计时器仍按真实时间流逝，不影响击退）
       if (this.slowT > 0) { this.slowT -= dt; dt *= 0.45; }
 
-      // 月痕沙海：从左侧入场的敌人先向右飞入屏幕，再交由各 AI 接管
-      if (g.mapId === 'moondesert' && this.spawnSide === 'left' && this.x < 150) {
-        this.x += 280 * dt;
-        this.y += Math.sin(this.t * 3) * 30 * dt;
-        return;
+      // 月痕沙海：从左侧入场的敌人先向右飞到镜像入场点，再交由各 AI 接管
+      if (g.mapId === 'moondesert' && this.spawnSide === 'left' && this.enterTX !== null) {
+        if (this.x >= this.enterTX) {
+          this.enterTX = null;   // 到位：本帧继续走原 AI
+        } else {
+          this.x += 280 * dt;
+          this.y += Math.sin(this.t * 3) * 30 * dt;
+          this.face = 1;
+          return;
+        }
       }
 
       const p = g.player;
@@ -3681,6 +3695,10 @@
         case 'shieldSlave': this.aiShieldSlave(dt, g, p); break;
         case 'puppet': this.aiPuppet(dt, g, p); break;
         case 'bombPrisoner': this.aiBombPrisoner(dt, g, p); break;
+      }
+      // 月痕沙海：入场结束后精灵朝向玩家（单一朝向写入源；入场飞行段在上方处理）
+      if (g.mapId === 'moondesert' && this.enterTX === null && g.player) {
+        this.face = (g.player.x >= this.x) ? 1 : -1;
       }
       // 飞离屏幕清理
       if (this.x < -80 || this.y > CFG.H + 100 || this.y < -160) this.dead = true;
@@ -4452,6 +4470,14 @@
           ctx.beginPath(); ctx.arc(sx, sy, 3.4, 0, TAU); ctx.fill();
         }
       }
+      // 月痕沙海：朝右时整体水平翻转 L 系精灵（以自身 x 为轴）
+      const mirrored = this.face > 0;
+      if (mirrored) {
+        ctx.save();
+        ctx.translate(this.x, 0);
+        ctx.scale(-1, 1);
+        ctx.translate(-this.x, 0);
+      }
       switch (this.type) {
         case 'eagle': {
           const spr = Math.floor(t * 7) % 2 === 0 ? Sprites.eagleAL : Sprites.eagleBL;
@@ -4526,14 +4552,6 @@
         case 'eyefly': {
           const spr = Math.floor(t * 14) % 2 === 0 ? Sprites.eyeflyAL : Sprites.eyeflyBL;
           drawSprite(ctx, spr, this.x, this.y, 2.4, 2.4, 0, this.flash);
-          // 锁定中：眼睛变红 + 锁定标记
-          if (this.lockT > 0) {
-            ctx.strokeStyle = `rgba(255,60,60,${0.5 + Math.sin(t * 20) * 0.3})`;
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(this.lockX, this.lockY, 14, 0, TAU); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(this.lockX - 20, this.lockY); ctx.lineTo(this.lockX - 8, this.lockY); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(this.lockX + 8, this.lockY); ctx.lineTo(this.lockX + 20, this.lockY); ctx.stroke();
-          }
           break;
         }
         case 'stonebeetle': {
@@ -4630,6 +4648,15 @@
           }
           break;
         }
+      }
+      if (mirrored) ctx.restore();
+      // 魔眼飞虫锁定准星：世界坐标绘制（不能随精灵镜像翻转）
+      if (this.type === 'eyefly' && this.lockT > 0) {
+        ctx.strokeStyle = `rgba(255,60,60,${0.5 + Math.sin(t * 20) * 0.3})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(this.lockX, this.lockY, 14, 0, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(this.lockX - 20, this.lockY); ctx.lineTo(this.lockX - 8, this.lockY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(this.lockX + 8, this.lockY); ctx.lineTo(this.lockX + 20, this.lockY); ctx.stroke();
       }
       // 小黑骷髅自爆预警：扩张虚线圈 + 脉动爆点
       if (this.type === 'skeleton' && this.state === 'windup') {
