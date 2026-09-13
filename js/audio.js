@@ -5,13 +5,19 @@
   'use strict';
 
   let ctx = null;
+  let sfxBus = null;          // 战斗音效统一总线（整体压低音量，避免战斗时过吵）
+  const SFX_VOL = 0.5;        // 音效总线增益
   let muted = false;
   let lastShoot = 0;
 
   function ac() {
     if (!ctx) {
-      try { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
-      catch (e) { ctx = null; }
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        sfxBus = ctx.createGain();
+        sfxBus.gain.value = SFX_VOL;
+        sfxBus.connect(ctx.destination);
+      } catch (e) { ctx = null; sfxBus = null; }
     }
     if (ctx && ctx.state === 'suspended') ctx.resume();
     return ctx;
@@ -29,7 +35,7 @@
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol || 0.1, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(c.destination);
+    o.connect(g); g.connect(sfxBus);
     o.start(t); o.stop(t + dur + 0.02);
   }
 
@@ -46,7 +52,7 @@
     const g = c.createGain();
     g.gain.setValueAtTime(vol || 0.2, c.currentTime);
     g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
-    src.connect(f); f.connect(g); g.connect(c.destination);
+    src.connect(f); f.connect(g); g.connect(sfxBus);
     src.start();
   }
 
@@ -67,7 +73,7 @@
     const g = c.createGain();
     g.gain.setValueAtTime(vol || 0.2, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f); f.connect(g); g.connect(c.destination);
+    src.connect(f); f.connect(g); g.connect(sfxBus);
     src.start(t);
   }
 
@@ -240,7 +246,7 @@
       const echo = c.createDelay(0.6); echo.delayTime.value = 0.17;
       const fb = c.createGain(); fb.gain.value = 0.34;
       const wet = c.createGain(); wet.gain.value = 0.38;
-      echo.connect(fb); fb.connect(echo); echo.connect(wet); wet.connect(c.destination);
+      echo.connect(fb); fb.connect(echo); echo.connect(wet); wet.connect(sfxBus);
 
       // 一声万人齐吼"好！"：多个失谐锯齿/方波"人声"经带通共鸣腔，起扬后降调
       const shout = (t, base) => {
@@ -251,7 +257,7 @@
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.68);
         const bp = c.createBiquadFilter();
         bp.type = 'bandpass'; bp.frequency.value = 850; bp.Q.value = 0.7;
-        g.connect(bp); bp.connect(c.destination); bp.connect(echo);
+        g.connect(bp); bp.connect(sfxBus); bp.connect(echo);
         for (let i = 0; i < 8; i++) {
           const o = c.createOscillator();
           o.type = i % 3 ? 'sawtooth' : 'square';
@@ -305,7 +311,7 @@
       sg.gain.exponentialRampToValueAtTime(0.3, now + 0.5);
       sg.gain.setValueAtTime(0.3, now + 2.1);
       sg.gain.exponentialRampToValueAtTime(0.0001, now + 3.0);
-      sub.connect(sg); sg.connect(c.destination);
+      sub.connect(sg); sg.connect(sfxBus);
       sub.start(now); sub.stop(now + 3.0);
       // 兽性嘶吼：锯齿 + 7.5Hz 痛苦颤音，持续下滑
       const roar = c.createOscillator(); roar.type = 'sawtooth';
@@ -321,7 +327,7 @@
       rg.gain.exponentialRampToValueAtTime(0.22, now + 0.5);
       rg.gain.setValueAtTime(0.22, now + 2.0);
       rg.gain.exponentialRampToValueAtTime(0.0001, now + 2.6);
-      roar.connect(rf); rf.connect(rg); rg.connect(c.destination);
+      roar.connect(rf); rf.connect(rg); rg.connect(sfxBus);
       roar.start(now + 0.25); roar.stop(now + 2.6);
       lfo.start(now + 0.25); lfo.stop(now + 2.6);
       // 人性悲号：三角波哭腔三段呜咽下滑

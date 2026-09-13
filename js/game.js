@@ -2091,7 +2091,9 @@
               b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
               b.angle = Math.atan2(b.vy, b.vx);
               if (b.kind === 'butt') b._achBounced = true;     // 成就：反弹烟头标记
-              burst(this, b.x, b.y, 5, ['#fff', '#ff9d2e'], 150, 3, 0.25);
+              // 浪客烟头反弹火花：更小更少（战狂锯齿盾保持原样）
+              if (b.kind === 'butt') burst(this, b.x, b.y, 3, ['#ff9d2e', '#ffd23b'], 90, 2, 0.2);
+              else burst(this, b.x, b.y, 5, ['#fff', '#ff9d2e'], 150, 3, 0.25);
               SFX.melee();
             } else {
               b.pierce--;
@@ -2129,7 +2131,9 @@
             b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
             b.angle = Math.atan2(b.vy, b.vx);
             if (b.kind === 'butt') b._achBounced = true;     // 成就：反弹烟头标记
-            burst(this, b.x, b.y, 5, ['#fff', '#caa06a'], 150, 3, 0.25);
+            // 浪客烟头反弹火花：更小更少（战狂锯齿盾保持原样）
+            if (b.kind === 'butt') burst(this, b.x, b.y, 3, ['#ff9d2e', '#caa06a'], 90, 2, 0.2);
+            else burst(this, b.x, b.y, 5, ['#fff', '#caa06a'], 150, 3, 0.25);
             SFX.melee();
           } else b.dead = true;
           break;

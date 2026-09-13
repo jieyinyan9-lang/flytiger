@@ -236,10 +236,10 @@
       /* —— 飞行弹幕类敌人：通过指定关卡后，每轮 30% 概率解锁其中 1 只 —— */
       // 弱型｜基础弹幕（通过第 2 关后解锁，动态血量保证至少 7s 击杀，占本轮 20%）
       spikebird: {
-        name: '刺羽鸟', hp: 42, speed: 115, contact: 10,
+        name: '刺羽鸟', hp: 1, speed: 115, contact: 10,
         bulletDmg: 8, xp: 9, score: 20, radius: 16, weight: 7, minBossKills: 2, elite: false,
-        flyer: true, flyerTier: 'weak', group: 5,
-        dynamicHp: true, fightTime: [7, 7]
+        flyer: true, flyerTier: 'weak', group: 5
+        // 玻璃大炮：不再使用动态血量，生命固定为 1，基本一触即死
       },
       eyefly: {
         name: '魔眼飞虫', hp: 40, speed: 135, contact: 8,

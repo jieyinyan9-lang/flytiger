@@ -2482,7 +2482,7 @@
           if (d < R + (e.radius || 16)) {
             const nx = dx / (d || 1), ny = dy / (d || 1);
             if (w.dmg) e.takeDamage(w.dmg, g, { x: nx * w.kb, y: ny * w.kb * 0.6 - 50 });
-            else { e.kbX += nx * w.kb; e.kbY += ny * w.kb * 0.6 - 60; }
+            else if (!e.def.noKnockback && !e.def.ground) { e.kbX += nx * w.kb; e.kbY += ny * w.kb * 0.6 - 60; }   // 斗兽场精英/所有地面单位免疫击退
             if (w.slow) e.slowT = Math.max(e.slowT || 0, w.slow);
             burst(g, e.x, e.y, 6, ['#ffd23b', '#fff'], 170, 4, 0.3);
           }
@@ -3335,10 +3335,11 @@
         this.spawnInvuln = 4;      // 首个无敌期 4s
       }
 
-      // 刺羽鸟：悬停抖动散射羽毛
+      // 刺羽鸟：悬停抖动，单发瞄准弹 / 环形散射交替发射
       if (type === 'spikebird') {
         this.state = 'hover';
-        this.atkT = rand(2.0, 3.2);
+        this.atkT = rand(1.2, 2.0);
+        this.volley = randi(0, 1);     // 0=下一发单发瞄准 / 1=下一发环形散射；群体内错峰
         this.spawnInvuln = 1.5;
       }
       // 魔眼飞虫：锁定玩家位置后发射魔法弹
@@ -3454,7 +3455,7 @@
       this.hp -= dmg;
       this.flash = 0.08;
       this.hurtT = 0.12;   // 持续受伤红染：连续命中时 hurtT 始终 >0，不会闪烁
-      if (kb && !this.def.noKnockback) { this.kbX += kb.x; this.kbY += kb.y; }   // 斗兽场精英单位免疫击退
+      if (kb && !this.def.noKnockback && !this.def.ground) { this.kbX += kb.x; this.kbY += kb.y; }   // 斗兽场精英/所有地面单位免疫击退
       burst(g, this.x - 10, this.y, 2, ['#fff', '#ffe08a'], 120, 3, 0.18);
       SFX.hit();
       if (this.hp <= 0) this.die(g);
@@ -3943,7 +3944,7 @@
       SFX.enemyShoot();
     }
 
-    /* 刺羽鸟：保持中距悬停，周期抖动身体向周围散射羽毛弹 */
+    /* 刺羽鸟：保持中距悬停抖动；攻击间隔较短，单发瞄准弹与环形散射交替发射 */
     aiSpikeBird(dt, g, p) {
       const sp = this.speedMul * 115;
       const wantX = p.x + 260;
@@ -3953,15 +3954,26 @@
       this.y = this.baseY + Math.sin(this.t * 4) * 22;
       this.atkT -= dt;
       if (this.atkT <= 0 && this.x < CFG.W - 30) {
-        this.atkT = rand(2.6, 3.6);
-        const n = 10;
+        this.atkT = rand(1.4, 2.0);     // 攻击间隔降低（原 2.6-3.6s）
         const dmg = this.bulletDmg * g.atkScale;
-        for (let i = 0; i < n; i++) {
-          const a = (TAU / n) * i + rand(-0.08, 0.08);
+        this.volley = (this.volley || 0) % 2;
+        if (this.volley === 0) {
+          // 本轮单发：瞄准玩家高速射出一片叶片弹
+          const a = Math.atan2(p.y - this.y, p.x - this.x);
           g.bullets.push(new Bullet(this.x, this.y,
-            Math.cos(a) * 170, Math.sin(a) * 170,
+            Math.cos(a) * 280, Math.sin(a) * 280,
             { kind: 'orb', r: 6, dmg, dmgScale: g.atkScale, life: 5, eb: 'leaf' }));
+        } else {
+          // 本轮散射：10 向叶片环弹
+          const n = 10;
+          for (let i = 0; i < n; i++) {
+            const a = (TAU / n) * i + rand(-0.08, 0.08);
+            g.bullets.push(new Bullet(this.x, this.y,
+              Math.cos(a) * 170, Math.sin(a) * 170,
+              { kind: 'orb', r: 6, dmg, dmgScale: g.atkScale, life: 5, eb: 'leaf' }));
+          }
         }
+        this.volley++;
         SFX.flyerShoot('leaf');
       }
     }
