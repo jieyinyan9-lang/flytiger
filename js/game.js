@@ -398,7 +398,10 @@
       this.kills = 0;
       this.bossCount = 0;       // 已击败 Boss 数（成长叠加）
       this.bossSpawned = 0;     // 已出现 Boss 数
-      this.lastBossName = null;  // 上一只出场 Boss（禁止连续两轮重复）
+      // 上一只出场 Boss（禁止连续两轮重复）；跨局读取持久化记录，
+      // 使新一局第一只也不会与上一局最后一只相同（杜绝连续两场相同 Boss）
+      this.lastBossName = null;
+      try { this.lastBossName = localStorage.getItem('flytiger_last_boss') || null; } catch (e) {}
       this.totalLevels = 0;
       this.xp = 0;
       this.xpNeed = CFG.xpNeed(0);
@@ -1662,6 +1665,7 @@
       this.bosses.push(b);
       this.bossSpawned++;
       this.lastBossName = cls.name;   // 记录上一只：下一轮抽取时剔除，禁止连续重复
+      try { localStorage.setItem('flytiger_last_boss', cls.name); } catch (e) {}  // 跨局记忆：新局首只也剔除
       this.bossSeen.add(cls.name);   // 登记出场：后续抽取权重减半
       // 所有非地图专属 Boss（狮身人面像/牛魔/骨龙王除外）均已轮过一遍 → 清空记录，概率恢复正常。
       // 专属 Boss 无单次限制：强制轮后即等权留在本图普通池，仅受权重减半与不连续重复约束
@@ -1974,6 +1978,7 @@
       this.bosses.push(b);
       this.bossSpawned++;
       this.lastBossName = 'Sphinx';
+      try { localStorage.setItem('flytiger_last_boss', 'Sphinx'); } catch (e) {}  // 跨局记忆：关卡后新局首只也不再是 Sphinx
       this.el.bossName.textContent = `${b.bossName}`;
       this.el.bossHud.classList.remove('hidden');
       this.resetBossBarFx();
