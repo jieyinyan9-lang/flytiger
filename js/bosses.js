@@ -1540,6 +1540,10 @@
       const p = g.player;
       this.phase3Invuln = Math.max(0, this.phase3Invuln - dt);
       this.commonMove(dt);
+      // 阶段3 血量打空 → 真正死亡（火车入场锁血期除外）
+      if (this.hp <= 0 && !this.lockHp && this.phase3Invuln <= 0) {
+        this.hp = 0; this.die(g); return;
+      }
       // 火车部件矩形随车体同步（车头 + 4 车厢宽度不等）；被毁部件持续下沉
       if (this.train) {
         const tr = this.train;
@@ -1847,10 +1851,12 @@
       }
     }
 
-    /* ── P5 狂暴（全速提升，16 向溅射，斧击突进，电击蓄力 0.3s）── */
+    /* ── P5 狂暴（全速提升，16 向溅射，斧击突进，电击蓄力 0.3s）── 持续循环直到死亡 ── */
     updateP3Rage(dt, g, p) {
       const pp = this.p3;
-      this.flyHover(dt, g, p, 1.5);
+      // 突进/归位期间禁用 flyHover，避免横向漂移与归位判定互相打架导致卡死
+      const inDash = pp.sub === 'dash';
+      if (!inDash) this.flyHover(dt, g, p, 1.5);
       pp.fireT -= dt;
       if (pp.fireT <= 0) {
         if (pp.sub === 'axe') {
@@ -1867,14 +1873,14 @@
           pp.fireT = 0.3; pp.sub = 'elecFire';
         } else if (pp.sub === 'elecFire') {
           this.fireEbolt(g, pp.boltA, 1.3);
-          pp.sub = 'dash'; pp.fireT = 0.4; pp.dashT = 0;
+          pp.sub = 'dash'; pp.fireT = 0.4; pp.dashT = 0; pp.subT = 0;
           // 斧击突进：锁定玩家方向
           pp.dashA = Math.atan2(p.y - this.y, p.x - this.x);
           pp.dashDone = false;
         }
       }
       // 斧击突进
-      if (pp.sub === 'dash' && !pp.dashDone) {
+      if (inDash && !pp.dashDone) {
         pp.dashT += dt;
         const dashSpd = 720;
         this.x += Math.cos(pp.dashA) * dashSpd * dt;
@@ -1889,12 +1895,18 @@
           pp.targetX = this.x < CFG.W * 0.5 ? CFG.W * 0.8 : CFG.W * 0.2;
           pp.targetY = clamp(p.y - 60, 80, CFG.GROUND_Y - 180);
         }
-      } else if (pp.sub === 'dash' && pp.dashDone) {
+      } else if (inDash && pp.dashDone) {
+        pp.subT += dt;
         this.x += (pp.targetX - this.x) * dt * 4;
         this.y += (pp.targetY - this.y) * dt * 4;
-        if (Math.hypot(pp.targetX - this.x, pp.targetY - this.y) < 24) {
+        // 计时 0.7s 或距离足够近即回到飞斧，保证循环绝不卡死
+        if (pp.subT > 0.7 || Math.hypot(pp.targetX - this.x, pp.targetY - this.y) < 30) {
           pp.sub = 'axe'; pp.fireT = 0.6;
         }
+      }
+      // 保险：异常子状态（如 dash 标记丢失）直接重启循环
+      if (['axe', 'pot', 'elec', 'elecFire', 'dash'].indexOf(pp.sub) < 0) {
+        pp.sub = 'axe'; pp.fireT = 0.3;
       }
     }
 
