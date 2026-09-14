@@ -1470,6 +1470,86 @@
     return cv;
   }
 
+  /** 斧头兵：礼帽 + 黑墨镜 + 深色西装红领带的持斧壮汉（斧王召唤专属）。
+   *  朝右绘制，游戏内翻转朝左。两帧：raised=false 持斧垂手 / true 高举抡斧（抛掷前摇）。 */
+  function buildAxeMinion(raised) {
+    const W = 21, H = 23;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const r = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const d  = '#181c24';  // 深藏青描边（弱化黑边）
+    const K  = '#15181f';  // 礼帽黑
+    const Kh = '#2a303c';  // 帽体高光
+    const Kb = '#7a1f1a';  // 帽带暗红
+    const Hr = '#221a12';  // 鬓角碎发
+    const S  = '#f4cfa6';  // 皮肤
+    const Sd = '#d9a87c';  // 皮肤暗
+    const Gg = '#0c0e13';  // 墨镜黑
+    const Gl = '#8fb6e8';  // 镜片高光
+    const C  = '#2e333d';  // 西装亮
+    const Cc = '#22262f';  // 西装暗
+    const Wt = '#eef2f8';  // 衬衫白 / 口袋巾
+    const R  = '#c62f26';  // 红领带
+    const Rd = '#8f2019';  // 领带暗
+    const Sh = '#0c0e13';  // 皮鞋
+    const Wd = '#7a4a22';  // 斧柄木
+    const St = '#cdd6e2';  // 斧刃钢
+    const Sl = '#f4f7fc';  // 开刃高光
+    /* —— 后臂（垂在身侧，最先画，被躯干压住） —— */
+    r(2, 11, 3, 6, d); r(3, 11, 2, 5, Cc); r(3, 15, 2, 2, S);
+    if (raised) {
+      /* —— 头顶上方高举的斧（先画，帽檐自然压住柄根） —— */
+      r(13, 1, 3, 6, d); r(14, 2, 1, 5, Wd);            // 斜举斧柄
+      r(15, 0, 6, 5, d); r(16, 1, 4, 3, St); r(18, 1, 2, 1, Sl);  // 斧头刃朝右上
+      r(15, 1, 1, 3, Kh);                               // 斧脑钢块
+      /* —— 前臂高举 —— */
+      r(14, 6, 3, 7, d); r(15, 7, 2, 6, C);
+    } else {
+      /* —— 前臂垂手（斧画在躯干之后，握于体前） —— */
+      r(14, 11, 3, 6, d); r(15, 11, 2, 5, C);
+    }
+    /* —— 西装躯干 —— */
+    r(4, 11, 12, 7, d);         // 描边底
+    r(5, 11, 10, 7, C);         // 西装
+    r(11, 11, 4, 7, Cc);        // 右侧暗面
+    r(12, 11, 2, 2, Wt);        // 衬衫领口
+    r(13, 13, 1, 3, R);         // 红领带
+    r(13, 16, 1, 1, Rd);        // 领带尖
+    r(7, 12, 1, 1, Wt);         // 口袋巾
+    r(7, 14, 1, 1, d); r(7, 16, 1, 1, d);   // 双排扣
+    r(4, 17, 12, 1, d);         // 下摆腰线
+    if (!raised) {
+      /* —— 手持立斧（斧头朝上靠肩，画在躯干前） —— */
+      r(15, 8, 3, 13, d); r(16, 9, 1, 11, Wd);          // 斧柄
+      r(17, 7, 4, 6, d); r(17, 8, 3, 4, St); r(19, 8, 1, 4, Sl);  // 斧头刃朝右
+      r(17, 7, 1, 2, Kh);                               // 斧脑钢块
+    }
+    /* —— 握斧手掌（盖在斧柄上） —— */
+    if (raised) r(15, 5, 2, 2, S);
+    else r(15, 15, 2, 2, S);
+    /* —— 脖子 —— */
+    r(9, 10, 3, 1, Sd);
+    /* —— 脸 + 连体墨镜 —— */
+    r(6, 6, 7, 4, S);           // 脸
+    r(6, 6, 7, 1, Sd);          // 帽檐下额影
+    r(5, 6, 1, 4, Hr);          // 鬓角碎发
+    r(5, 7, 9, 2, Gg);          // 墨镜横带（连体镜片，包裹到脸侧）
+    r(7, 7, 2, 1, Gl); r(11, 7, 2, 1, Gl);   // 双镜片高光
+    r(6, 9, 7, 1, d);           // 下巴线
+    /* —— 礼帽 —— */
+    r(7, 0, 6, 4, K);           // 帽冠
+    r(7, 3, 6, 1, Kb);          // 帽带
+    r(8, 1, 1, 2, Kh);          // 帽体高光
+    r(5, 4, 10, 1, K);          // 帽檐
+    r(5, 5, 10, 1, d);          // 檐底阴影
+    /* —— 腿 + 皮鞋（鞋尖朝右） —— */
+    r(6, 18, 3, 3, Cc); r(10, 18, 3, 3, Cc);
+    r(6, 18, 1, 3, d); r(10, 18, 1, 3, d);
+    r(5, 21, 5, 2, Sh); r(9, 21, 6, 2, Sh);
+    r(5, 22, 5, 1, d); r(9, 22, 6, 1, d);
+    return cv;
+  }
+
   /* ============ 斗兽场地面小怪（5 种，均朝右绘制、游戏内翻转朝左） ============ */
 
   /** 投掷奴：锈蚀铁皮驼背人形，右臂弩炮结构，左眼瞄准齿轮，披破烂深红斗篷 */
@@ -1713,6 +1793,8 @@
     blackSkel: build(BLACK_SKEL, BLACK_SKEL_PAL),
     skullhead: build(SKULLHEAD, SKULLHEAD_PAL),
     cannoneer: buildCannoneer(),
+    axeMinion: buildAxeMinion(false),      // 斧头兵：持斧垂手
+    axeMinionUp: buildAxeMinion(true),     // 斧头兵：高举抡斧（抛掷前摇）
     /* —— 斗兽场地面小怪（朝右绘制，翻转成朝左使用） —— */
     javelinSlave: buildJavelinSlave(),   // 投掷奴
     ramFighter: buildRamFighter(),       // 羊头斗士
@@ -1768,6 +1850,8 @@
   Sprites.skeletonL = flip(Sprites.skeleton);
   Sprites.blackSkelL = flip(Sprites.blackSkel);
   Sprites.cannoneerL = flip(Sprites.cannoneer);
+  Sprites.axeMinionL = flip(Sprites.axeMinion);        // 斧头兵：翻转朝左
+  Sprites.axeMinionUpL = flip(Sprites.axeMinionUp);
   // 斗兽场地面小怪：统一翻转成朝左
   Sprites.javelinSlaveL = flip(Sprites.javelinSlave);
   Sprites.ramFighterL   = flip(Sprites.ramFighter);

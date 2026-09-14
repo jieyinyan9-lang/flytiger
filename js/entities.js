@@ -4601,150 +4601,6 @@
       }
     }
 
-    /** 西装斧头兵程序化绘制（色块饱满、深色描边、面朝左；外层镜像/受伤红染由 render 统一处理） */
-    drawAxeMinion(ctx, t) {
-      const dying = this.dying;
-      const walk = !dying && this.state === 'walk';
-      const wp = t * 9;
-      const sw = walk ? Math.sin(wp) : 0;
-      const bob = walk ? Math.abs(Math.cos(wp)) * 1.6 : 0;
-      const shift = walk ? Math.sin(wp) * 2 : 0;
-      const ang = dying ? this.spin : (walk ? Math.sin(wp) * 0.05 : 0);
-      ctx.save();
-      ctx.translate(this.x + shift, this.y - bob);
-      ctx.rotate(ang);
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      // 粗肢体：先深色描边再内色
-      const limb = (x1, y1, x2, y2, w, color) => {
-        ctx.strokeStyle = '#14161b'; ctx.lineWidth = w + 2.4;
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-        ctx.strokeStyle = color; ctx.lineWidth = w;
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-      };
-      /* ---- 腿 ---- */
-      const bfx = 4 - sw * 5, ffx = -4 + sw * 5;   // 后脚/前脚 x
-      limb(4, 6, bfx, 25, 6.4, '#232830');
-      limb(-4, 6, ffx, 25, 6.4, '#2b303a');
-      /* ---- 皮鞋（朝左） ---- */
-      ctx.fillStyle = '#0c0e13';
-      ctx.fillRect(bfx - 8, 22.5, 10, 5.4);
-      ctx.fillRect(ffx - 9, 22.5, 11, 5.4);
-      /* ---- 后臂（自然摆动） ---- */
-      limb(8, -12, 8 + sw * 5, 0 + sw * 3, 5.6, '#262b34');
-      ctx.fillStyle = '#d8a87e';
-      ctx.beginPath(); ctx.arc(8 + sw * 5, 0 + sw * 3, 2.6, 0, TAU); ctx.fill();
-      /* ---- 西装外套 ---- */
-      ctx.fillStyle = '#2e333d'; ctx.strokeStyle = '#14161b'; ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-13, -15); ctx.lineTo(13, -15); ctx.lineTo(10.5, 8); ctx.lineTo(-10.5, 8);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#272c35';   // 右侧暗面
-      ctx.beginPath();
-      ctx.moveTo(0, -15); ctx.lineTo(13, -15); ctx.lineTo(10.5, 8); ctx.lineTo(0, 8);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#1b1f27'; ctx.fillRect(-10.5, 5.6, 21, 2.8);   // 下摆腰线
-      /* ---- 白衬衫 ---- */
-      ctx.fillStyle = '#eef2f8';
-      ctx.beginPath();
-      ctx.moveTo(-5.4, -14.4); ctx.lineTo(5.4, -14.4); ctx.lineTo(0, -3.4);
-      ctx.closePath(); ctx.fill();
-      ctx.fillRect(-2.6, -4, 5.2, 12);
-      /* ---- 西装翻领 ---- */
-      ctx.fillStyle = '#1f242c';
-      ctx.beginPath();
-      ctx.moveTo(-13, -15); ctx.lineTo(-3.4, -14.4); ctx.lineTo(-7.4, -4);
-      ctx.closePath(); ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(13, -15); ctx.lineTo(3.4, -14.4); ctx.lineTo(7.4, -4);
-      ctx.closePath(); ctx.fill();
-      /* ---- 红领带 ---- */
-      ctx.fillStyle = '#c62f26';
-      ctx.fillRect(-2.2, -15, 4.4, 3.4);
-      ctx.beginPath();
-      ctx.moveTo(-2.4, -11.6); ctx.lineTo(2.4, -11.6); ctx.lineTo(3, -1.6);
-      ctx.lineTo(0, 3); ctx.lineTo(-3, -1.6);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(-1.2, -10, 1, 7);
-      /* ---- 纽扣 / 口袋巾 ---- */
-      ctx.fillStyle = '#161920';
-      ctx.beginPath(); ctx.arc(3.6, -2, 1.1, 0, TAU); ctx.fill();
-      ctx.beginPath(); ctx.arc(3.6, 3.2, 1.1, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#e8eef7'; ctx.fillRect(-9.4, -0.6, 4, 2.6);
-      /* ---- 脖子 ---- */
-      ctx.fillStyle = '#d8a87e'; ctx.fillRect(-2.6, -18.6, 5.2, 4.6);
-      /* ---- 头 ---- */
-      ctx.fillStyle = '#d8a87e';
-      ctx.beginPath(); ctx.arc(5.8, -24.4, 1.9, 0, TAU); ctx.fill(); ctx.stroke();   // 耳朵
-      ctx.fillStyle = '#e3b58c'; ctx.strokeStyle = '#14161b'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(0, -24.5, 6.6, 0, TAU); ctx.fill(); ctx.stroke();
-      // 后梳黑发（脸朝左，额头露在左侧）
-      ctx.fillStyle = '#16110f';
-      ctx.beginPath();
-      ctx.moveTo(-5.4, -26.2);
-      ctx.quadraticCurveTo(-4, -31.6, 2, -31.2);
-      ctx.quadraticCurveTo(7, -30.8, 6.8, -25.2);
-      ctx.lineTo(6.2, -22.4);
-      ctx.quadraticCurveTo(3, -25.4, -1, -25.6);
-      ctx.quadraticCurveTo(-3.6, -25.6, -5.4, -24.2);
-      ctx.closePath(); ctx.fill();
-      // 墨镜
-      ctx.fillStyle = '#0c0e13';
-      ctx.beginPath();
-      ctx.moveTo(-6.4, -26.6); ctx.lineTo(1.6, -26.6); ctx.lineTo(1.2, -23.6); ctx.lineTo(-5.6, -23.8);
-      ctx.closePath(); ctx.fill();
-      ctx.fillRect(1.6, -26.2, 4.8, 2.8);
-      ctx.fillStyle = 'rgba(150,190,255,0.55)'; ctx.fillRect(-5, -26, 2.2, 0.9);
-      // 嘴
-      ctx.strokeStyle = '#8a5a44'; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(-5, -21.4); ctx.lineTo(-1.6, -21.2); ctx.stroke();
-      /* ---- 前臂 + 手持斧（a：0=垂在身侧，>0 向前抡起，π=头顶） ---- */
-      let a;
-      if (dying) a = 0.5;
-      else if (this.state === 'throwAnim') {
-        const wind = CFG.axeMinion.throwWind;
-        const k = clamp(1 - this.throwT / wind, 0, 1);
-        a = k < 0.5 ? 0.2 + (2.9 - 0.2) * (k / 0.5)
-                    : 2.9 + (-0.25 - 2.9) * ((k - 0.5) / 0.5);   // 举过头顶 → 顺势下劈
-      } else a = 0.18 - sw * 0.5;
-      const shX = -8, shY = -12;
-      const hx = shX - Math.sin(a) * 17, hy = shY + Math.cos(a) * 17;
-      limb(shX, shY, hx, hy, 5.4, '#2e333d');
-      ctx.fillStyle = '#e3b58c'; ctx.strokeStyle = '#14161b'; ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.arc(hx, hy, 2.8, 0, TAU); ctx.fill(); ctx.stroke();
-      // 斧柄 + 双刃
-      const dx = -Math.sin(a), dy = Math.cos(a), qx = Math.cos(a), qy = Math.sin(a);
-      const p0x = hx - dx * 5, p0y = hy - dy * 5, p1x = hx + dx * 15, p1y = hy + dy * 15;
-      ctx.strokeStyle = '#14161b'; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.stroke();
-      ctx.strokeStyle = '#7a4a22'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.stroke();
-      for (const s of [1, -1]) {
-        ctx.fillStyle = '#14161b';
-        ctx.beginPath();
-        ctx.moveTo(p1x + dx * 2 + qx * 2 * s, p1y + dy * 2 + qy * 2 * s);
-        ctx.lineTo(p1x + dx * 2 + qx * 11 * s, p1y + dy * 2 + qy * 11 * s);
-        ctx.lineTo(p1x - dx * 6 + qx * 9 * s, p1y - dy * 6 + qy * 9 * s);
-        ctx.lineTo(p1x - dx * 7 + qx * 2 * s, p1y - dy * 7 + qy * 2 * s);
-        ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#cdd6e2';
-        ctx.beginPath();
-        ctx.moveTo(p1x + dx * 1.2 + qx * 3 * s, p1y + dy * 1.2 + qy * 3 * s);
-        ctx.lineTo(p1x + dx * 1.2 + qx * 9.2 * s, p1y + dy * 1.2 + qy * 9.2 * s);
-        ctx.lineTo(p1x - dx * 4.6 + qx * 7.4 * s, p1y - dy * 4.6 + qy * 7.4 * s);
-        ctx.lineTo(p1x - dx * 5.2 + qx * 3 * s, p1y - dy * 5.2 + qy * 3 * s);
-        ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = '#f4f7fc'; ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(p1x + dx * 0.8 + qx * 8 * s, p1y + dy * 0.8 + qy * 8 * s);
-        ctx.lineTo(p1x - dx * 3 + qx * 6.8 * s, p1y - dy * 3 + qy * 6.8 * s);
-        ctx.stroke();
-      }
-      ctx.fillStyle = '#ffd23b';
-      ctx.beginPath(); ctx.arc(p1x, p1y, 2, 0, TAU); ctx.fill();
-      ctx.restore();
-    }
-
     /* 渲染 */
     render(ctx) {
       const flip = this.flash > 0;
@@ -4938,9 +4794,16 @@
           }
           break;
         }
-        case 'axeMinion':
-          this.drawAxeMinion(ctx, t);
+        case 'axeMinion': {
+          // 像素点阵西装斧头兵：行走颠簸摇摆；抡斧前摇切高举帧；死亡绕中心旋转飞天（与自爆囚 leap 同用 spin）
+          const moving = !this.dying && this.state === 'walk';
+          const bob = moving ? Math.abs(Math.sin(t * 9)) * -3 : 0;
+          const sx = moving ? Math.sin(t * 9) * 2.2 : 0;
+          const ang = this.dying ? this.spin : (moving ? Math.sin(t * 9) * 0.05 : 0);
+          const spr = (!this.dying && this.state === 'throwAnim') ? Sprites.axeMinionUpL : Sprites.axeMinionL;
+          drawSprite(ctx, spr, this.x + sx, this.y - 6 + bob, 3, 3, ang, this.flash);
           break;
+        }
       }
       if (mirrored) ctx.restore();
       // 魔眼飞虫锁定准星：世界坐标绘制（不能随精灵镜像翻转）
