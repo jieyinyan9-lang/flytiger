@@ -201,6 +201,7 @@
       this.grav = opts.grav || 0;           // 重力（抛射弹道）
       this.spin = rand(0, TAU);
       this.spinRate = opts.spinRate || 9;   // 自转角速度（斧头弹等持续旋转）
+      this.p3spr = !!opts.p3spr;            // 斧王阶段3 飞斧：使用 dawang_3futou 精灵渲染
       this.onExpire = opts.onExpire || null;
       this.onPlayerHit = opts.onPlayerHit || null;   // 命中玩家时回调（怪客十字弹吸血等）
       this.trail = 0;
@@ -263,7 +264,7 @@
       };
       for (const e of g.targets()) {
         if (e.dead || e.dying) continue;
-        if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) continue;
+        if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'phaseTrans')) continue;
         if (e.segments) {
           const ne = e.nearestExposed(this.x, this.y);
           if (ne) scan(ne.x, ne.y, ne);
@@ -421,6 +422,26 @@
       if (this.kind === 'lava' && !this.dead) {
         const gy = g.groundYAt ? g.groundYAt(this.x) : CFG.GROUND_Y;
         if (this.y > gy - this.r * 0.5) {
+          this.dead = true;
+          if (this.onExpire) this.onExpire(g, this);
+        } else {
+          for (const r of g.rocks) {
+            if (r.dead) continue;
+            const cx = clamp(this.x, r.left, r.left + r.w);
+            const cy = clamp(this.y, r.top, r.baseY);
+            if ((this.x - cx) ** 2 + (this.y - cy) ** 2 < (this.r + 4) ** 2) {
+              this.dead = true;
+              if (this.onExpire) this.onExpire(g, this);
+              break;
+            }
+          }
+        }
+      }
+      // 斧王酒壶炸弹（potbomb）：抛物线，触地 / 触障碍即爆炸
+      if (this.kind === 'potbomb' && !this.dead) {
+        const gy = g.groundYAt ? g.groundYAt(this.x) : CFG.GROUND_Y;
+        if (this.y > gy - this.r * 0.5) {
+          this.y = gy - this.r * 0.5;
           this.dead = true;
           if (this.onExpire) this.onExpire(g, this);
         } else {
@@ -1242,6 +1263,12 @@
         return;
       }
       if (k === 'axe') {
+        // 斧王阶段3 追击飞斧：dawang_3futou 精灵（双刃战斧+电光），绕中心自旋
+        if (this.p3spr && Sprites.axeProj) {
+          const s = (this.r / 9) * 0.19;    // r=9 时精灵缩放 0.19 → 显示约 24×30
+          drawSprite(ctx, Sprites.axeProj, this.x, this.y, s, s, this.spin, 0);
+          return;
+        }
         // 大王斧头弹：双刃战斧，绕中心持续旋转（spin 驱动），刃身染 this.color；大型追踪斧脉动+被击闪白
         const pulse = this.hp > 0 ? 1 + Math.sin(this.t * 5) * 0.08 : 1;
         const s = Math.min(this.r / 8, 1.5) * pulse;
@@ -1281,6 +1308,49 @@
           ctx.fillStyle = `rgba(255,255,255,${clamp(this.hitFlash * 6, 0, 0.85)})`;
           ctx.beginPath(); ctx.arc(0, -4, 19, 0, TAU); ctx.fill();
         }
+        ctx.restore();
+        return;
+      }
+      if (k === 'potbomb') {
+        // 斧王酒壶：陶瓷坛身（深褐外框 + 棕陶主体 + 绿酒液 + 坛口 + 高光）
+        const a = Math.atan2(this.vy, this.vx) + Math.PI / 2;   // 旋转跟随抛物线切向
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        const r = this.r;
+        // 坛身外框
+        ctx.fillStyle = '#2a1a0e';
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+        // 主体陶色
+        ctx.fillStyle = '#7a4a22';
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.84, 0, TAU); ctx.fill();
+        // 高光
+        ctx.fillStyle = '#a86b34';
+        ctx.beginPath(); ctx.arc(-r * 0.3, -r * 0.3, r * 0.4, 0, TAU); ctx.fill();
+        // 坛口
+        ctx.fillStyle = '#2a1a0e';
+        ctx.fillRect(-r * 0.45, -r - 2, r * 0.9, 5);
+        ctx.fillStyle = '#5a3a1e';
+        ctx.fillRect(-r * 0.4, -r - 1, r * 0.8, 3);
+        // 绿酒液（内盛）
+        ctx.fillStyle = '#3aa64a';
+        ctx.beginPath(); ctx.arc(0, r * 0.2, r * 0.5, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#5cd96a';
+        ctx.beginPath(); ctx.arc(-r * 0.15, r * 0.1, r * 0.25, 0, TAU); ctx.fill();
+        ctx.restore();
+        return;
+      }
+      if (k === 'liquid') {
+        // 斧王酒液弹：绿色水滴（深绿外框 + 翠绿主体 + 浅绿芯 + 高光）
+        const a = Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        const r = this.r;
+        ctx.fillStyle = '#1c5e2a';
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#3aa64a';
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.8, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#5cd96a';
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.5, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#b8f5c8';
+        ctx.beginPath(); ctx.arc(-r * 0.25, -r * 0.25, r * 0.22, 0, TAU); ctx.fill();
         ctx.restore();
         return;
       }
@@ -1541,6 +1611,71 @@
         ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.6, 0, TAU); ctx.fill();
         ctx.fillStyle = '#ffffff';                                // 白芯高光
         ctx.beginPath(); ctx.arc(this.x - r * 0.24, this.y - r * 0.26, r * 0.3, 0, TAU); ctx.fill();
+        return;
+      }
+      if (k === 'windBolt') {
+        // 鹤仙风炮：高速风弹——流线梭形（黑边→深青→亮青主体→白芯），尾部气流向后拖曳
+        const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        // 后拖气流尾迹（两层渐淡）
+        ctx.fillStyle = 'rgba(120,220,255,0.35)';
+        ctx.beginPath();
+        ctx.moveTo(-6, 0); ctx.lineTo(-22, -4); ctx.lineTo(-22, 4); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(190,240,255,0.55)';
+        ctx.beginPath();
+        ctx.moveTo(-6, 0); ctx.lineTo(-16, -2.5); ctx.lineTo(-16, 2.5); ctx.closePath(); ctx.fill();
+        // 黑色描边外框（亮天空下清晰）
+        ctx.fillStyle = '#0b1622';
+        ctx.beginPath();
+        ctx.moveTo(15, 0); ctx.quadraticCurveTo(4, -7, -10, 0);
+        ctx.quadraticCurveTo(4, 7, 15, 0); ctx.closePath();
+        ctx.lineWidth = 1; ctx.fill();
+        // 深青内层
+        ctx.fillStyle = '#1b6e8a';
+        ctx.beginPath();
+        ctx.moveTo(13, 0); ctx.quadraticCurveTo(3, -5.5, -9, 0);
+        ctx.quadraticCurveTo(3, 5.5, 13, 0); ctx.closePath(); ctx.fill();
+        // 亮青主体
+        ctx.fillStyle = '#5fd0f0';
+        ctx.beginPath();
+        ctx.moveTo(11, 0); ctx.quadraticCurveTo(2, -3.8, -7, 0);
+        ctx.quadraticCurveTo(2, 3.8, 11, 0); ctx.closePath(); ctx.fill();
+        // 白芯高光
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(8, 0); ctx.quadraticCurveTo(1, -1.6, -3, 0);
+        ctx.quadraticCurveTo(1, 1.6, 8, 0); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        return;
+      }
+      if (k === 'windBlade') {
+        // 鹤仙风刃：青绿月牙刃（黑边→深青→翠青主体→白刃锋），自旋飞行
+        const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a + this.spin * 0.5);
+        const R = this.r * 1.7, inn = this.r * 0.7;
+        // 黑色描边
+        ctx.fillStyle = '#0b1622';
+        ctx.beginPath();
+        ctx.arc(0, 0, R + 1.6, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.arc(R * 0.55, 0, inn + 1.6, Math.PI * 0.85, Math.PI * 0.15, true);
+        ctx.closePath(); ctx.fill();
+        // 深青外层
+        ctx.fillStyle = '#1d6f7e';
+        ctx.beginPath();
+        ctx.arc(0, 0, R, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.arc(R * 0.55, 0, inn, Math.PI * 0.85, Math.PI * 0.15, true);
+        ctx.closePath(); ctx.fill();
+        // 翠青主体
+        ctx.fillStyle = '#4fe0c8';
+        ctx.beginPath();
+        ctx.arc(0, 0, R - 2, Math.PI * 0.18, Math.PI * 0.82);
+        ctx.arc(R * 0.55, 0, inn + 0.5, Math.PI * 0.82, Math.PI * 0.18, true);
+        ctx.closePath(); ctx.fill();
+        // 白刃锋高光
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(0, 0, R - 3.5, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
+        ctx.restore();
         return;
       }
       if (k === 'blackKnife') {
@@ -2266,7 +2401,7 @@
       const cdInterval = 0.5 / Math.max(1, this.blades);
       g.targets().forEach(e => {
         if (e.dead) return;
-        if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) return;   // Boss 入场/转场免伤
+        if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'phaseTrans')) return;   // Boss 入场/转场免伤
         for (let i = 0; i < this.blades; i++) {
           const bp = this.bladePos(i);
           let hx = null, hy = null;
@@ -2370,7 +2505,7 @@
       let best = null, bestD = Infinity;
       for (const e of g.targets()) {
         if (e.dead || e.dying) continue;
-        if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) continue;
+        if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'phaseTrans')) continue;
         const px = e.x, py = e.y;
         const d = (px - this.x) ** 2 + (py - this.y) ** 2;
         if (d < bestD) { bestD = d; best = e; }
@@ -2794,7 +2929,7 @@
           if (!bounced) {
             for (const e2 of g.targets()) {
               if (e2 === t.e || e2.dead) continue;
-              if (e2.isBoss && (e2.state === 'enter' || e2.state === 'trans')) continue;
+              if (e2.isBoss && (e2.state === 'enter' || e2.state === 'trans' || e2.state === 'phaseTrans')) continue;
               if (dist(t.e, e2) < t.e.radius + e2.radius) {
                 const a = Math.atan2(t.e.y - e2.y, t.e.x - e2.x);
                 const sp = Math.hypot(t.vx, t.vy);
@@ -2832,7 +2967,7 @@
         const lx = this.x, ly = this.y;
         g.targets().forEach(e => {
           if (e.dead) return;
-          if (e.isBoss && (e.state === 'enter' || e.state === 'trans')) return;
+          if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'phaseTrans')) return;
           let px = e.x, py = e.y;
           if (e.segments) { const ne = e.nearestExposed(lx, ly); if (!ne) return; px = ne.x; py = ne.y; }
           if (px > lx - 10 && Math.abs(py - ly) < laserW + e.radius) {

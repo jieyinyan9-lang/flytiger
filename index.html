@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>飞喵的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260914r5">
+<link rel="stylesheet" href="css/style.css?v=20260914r6">
 </head>
 <body>
 <div id="game-wrap">
@@ -129,7 +129,7 @@
     <div class="menu-ctrl">
       <div><b>移动</b>　键盘模式：方向键 / WASD　｜　鼠标模式：鼠标位置引导（均自动射击）</div>
       <div><b>大招</b>　击杀积满怒气，按 <kbd>空格</kbd>/<kbd>J</kbd> 释放大招，肃清全屏小怪</div>
-      <div><b>其他</b>　<kbd>P</kbd> 暂停　<kbd>M</kbd> 音效　<kbd>N</kbd> 音乐</div>
+      <div><b>其他</b>　<kbd>P</kbd>/<kbd>ESC</kbd> 暂停　<kbd>M</kbd> 音效　<kbd>N</kbd> 音乐</div>
     </div>
   </div>
 
@@ -246,7 +246,10 @@
   <div id="gameover" class="hidden">
     <div class="go-title">飞喵陨落</div>
     <div id="go-stats" class="go-stats"></div>
-    <button id="restart-btn" class="big-btn" type="button">↻ 再战一场</button>
+    <div class="go-btns">
+      <button id="restart-btn" class="big-btn" type="button">↻ 再战一场</button>
+      <button id="home-btn" class="big-btn go-home" type="button">🏠 返回主页</button>
+    </div>
   </div>
 
   <!-- 月痕沙海通关奖励 -->
@@ -264,16 +267,16 @@
   </div>
 </div>
 
-<script src="js/sprites.js?v=20260914r3"></script>
+<script src="js/sprites.js?v=20260914r4"></script>
 <script src="js/characters.js?v=20260914r2"></script>
-<script src="js/config.js?v=20260914r8"></script>
-<script src="js/audio.js?v=20260914r3"></script>
+<script src="js/config.js?v=20260914r9"></script>
+<script src="js/audio.js?v=20260914r4"></script>
 <script src="js/music.js?v=20260914r3"></script>
 <script src="js/achievements.js?v=20260909r2"></script>
 <script src="js/warehouse.js?v=20260914r4"></script>
 <script src="js/missions.js?v=20260914r2"></script>
-<script src="js/entities.js?v=20260914r8"></script>
-<script src="js/bosses.js?v=20260914r7"></script>
-<script src="js/game.js?v=20260914r16"></script>
+<script src="js/entities.js?v=20260914r11"></script>
+<script src="js/bosses.js?v=20260914r14"></script>
+<script src="js/game.js?v=20260914r21"></script>
 </body>
 </html>

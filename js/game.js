@@ -82,7 +82,7 @@
       bossman: ['西装巨人漂浮弹砸扁了', '召唤的军队乱刀砍成了肉泥', '半血变身破损巨头双眼激光烧化了半边身子'],
       stranger: ['S形冲刺撞碎了头骨', '飞刀插满了全身', '巨型十字弹追击后碎裂扎穿了', '十字弹命中后被吸干了血'],
       frogking: ['弧形跳跃砸扁了脑壳', '蓄力冲撞顶飞后撞墙撞死了', '吐舌贯穿全屏卷过去后摔断了脖子', '贴脸爪击掏出了心脏'],
-      cranesage: ['追魂羽针扎穿了眉心', '未毁的羽针加速冲刺穿颅而过', '鹤鸣声波圈震碎了耳膜和脑子', '旋羽领域卷成了碎片', '万羽天葬扎成了肉串'],
+      cranesage: ['风炮连射击穿了胸膛', '龙卷风卷碎了全身骨头', '镜面反射的激光切成了两半', '高速风刃凌迟成了碎片', '锁血气波冲击震碎了内脏'],
       sphinx: ['双爪扇形石片割开了喉咙', '贴地冲击波震断了双腿后倒地摔死', '双眼扫射烧穿了胸腔', '横冲撞甩月牙刃腰斩了', '双螺旋弹幕和三组连击绞成了肉渣'],
       niumo: ['牛角散射射穿了五脏六腑', '牛头冲撞顶碎了胸腔', '双角夹击挤成了肉饼', '追踪魔角追击后穿颅而亡', '魔王爆发齐射轰成了碎末'],
       bonedragonking: ['钻地出土时冲撞砸烂了全身', '绿火连射烧成了骨渣', '头部碎裂后崩解的骨龙群啃食殆尽', '小骨蛇缠满全身绞断了每一根骨头']
@@ -182,6 +182,7 @@
         this.toast(`🏮 新角色「${c ? c.name : id}」已加入角色选择！`, 3.2, 'lt');
       });
       this.onClick('restart-btn', () => this.start());
+      this.onClick('home-btn', () => this.backToMenu());
       this.onClick('pause-restart-btn', () => this.start());
       this.onClick('pause-resume-btn', () => this.togglePause());
       this.onClick('pause-select-btn', () => this.openCharSelect(true));
@@ -228,14 +229,18 @@
       this.syncStandbyName();
       this.buildCharGrid();
 
-      // 测试模式：URL 参数 ?boss=NiuMo 强制指定 Boss 反复出现（仅测试用，便于调试专属 Boss）
+      // 测试模式：URL 参数 ?boss=BossMan 强制指定 Boss 反复出现；&p3=1 斧王出场即跳阶段3（仅测试用）
+      // 也可由本地测试面板设置 window.__TEST_BOSS__ / window.__TEST_P3__
       try {
-        const p = new URLSearchParams(location.search).get('boss');
+        const qs = new URLSearchParams(location.search);
+        const p = window.__TEST_BOSS__ || qs.get('boss');
         if (p && (window.BOSS_LIST || []).find(e => e.cls.name === p)) this.testBoss = p;
         else this.testBoss = null;
-      } catch (e) { this.testBoss = null; }
+        this.testP3 = !!(window.__TEST_P3__ || qs.get('p3') === '1');
+      } catch (e) { this.testBoss = null; this.testP3 = false; }
 
       this.reset();
+      this.buildLocalTestPanel();   // 仅本机/ ?test=1 显示的浮动测试面板（线上不显示）
       this.last = performance.now();
       requestAnimationFrame(t => this.loop(t));
     }
@@ -272,11 +277,13 @@
           e.preventDefault();
         }
         if (e.code === 'KeyJ' && this.state === 'playing') this.player.tryUltimate(this);
-        if (e.code === 'KeyP' && (this.state === 'playing' || this.state === 'paused')) this.togglePause();
+        if ((e.code === 'KeyP' || e.code === 'Escape') && (this.state === 'playing' || this.state === 'paused')) {
+          this.togglePause();
+          e.preventDefault();
+        }
         if (e.code === 'KeyM') this.toggleMute();
         if (e.code === 'KeyN') this.toggleBgm();
-        // 月痕沙海关卡：主界面按 1 进入
-        if ((e.code === 'Digit1' || e.key === '1') && this.state === 'menu') { this.startStage(); e.preventDefault(); return; }
+        // 月痕沙海关卡：仅可从「发现秘境」面板进入（已移除主界面按 1 快捷键）
         // 奖励页：点击任意位置或按键退回主界面（4s 后可操作）
         if (this.rewardShown && this.rewardCanClose) { this.closeReward(); e.preventDefault(); return; }
         // 测试模式快捷键：B 立即触发 Boss 预警（跳过倒计时），便于反复测试
@@ -466,6 +473,8 @@
         this.map = m; this.mapId = 'grassland';
         this.crater = null; this.sea = null;
         this.bossT = 3;
+      } else if (this.testBoss) {
+        this.bossT = 3;   // 其他测试 Boss 同样 3 秒后登场（B 键可再立即召唤）
       }
       // 罗马角斗场：Boss 出现间隔减半（首场）
       if (this.mapId === 'colosseum') {
@@ -818,6 +827,7 @@
         this.el.warn.classList.add('hidden');
         this.el.levelup.classList.add('hidden');
         this.state = 'menu';
+        this.stageMode = false;   // 退出到菜单：清除月痕沙海关卡标记，避免下次开局误入
         this.shakeMag = 0;        // 局内退出到菜单：立即停止震屏
       }
       this.buildCharGrid();
@@ -874,10 +884,155 @@
       if (this.testBoss) this.toast(`🧪 测试模式：强制 ${this.testBoss} 反复出场（B 键立即召唤）`, 3.2);
     }
 
-    /** 从主界面进入月痕沙海关卡（按 1 键触发） */
+    /** 从「发现秘境」面板进入月痕沙海关卡 */
     startStage() {
       this.stageMode = true;
       this.start();
+    }
+
+    /** 死亡结算「返回主页」：放弃再战，清场回到主菜单（reset 会清空战局残留并重滚地图） */
+    backToMenu() {
+      this.reset();
+      this.state = 'menu';
+      this.shakeMag = 0;        // 回主界面：立即停止一切残留震屏
+      this.flashT = 0;
+      this.el.gameover.classList.add('hidden');
+      this.el.hud.classList.add('hidden');
+      this.el.bossHud.classList.add('hidden');
+      this.el.warn.classList.add('hidden');
+      this.el.levelup.classList.add('hidden');
+      this.el.pause.classList.add('hidden');
+      this.el.menu.classList.remove('hidden');
+      this.syncMapBtns();
+      if (window.Music) Music.play('bgm-zhujiemian');
+      SFX.hit();
+    }
+
+    /**
+     * 本地测试面板：仅 localhost / 127.0.0.1 / file:// 或带 ?test=1 时注入（线上 GitHub Pages 不显示）。
+     * 提供：斧王阶段3 一键开局、战斗中 P0-P5 子状态跳转、Boss/玩家回满血。
+     */
+    buildLocalTestPanel() {
+      let isLocal = false;
+      try {
+        isLocal = ['localhost', '127.0.0.1', ''].includes(location.hostname) ||
+                  new URLSearchParams(location.search).has('test');
+      } catch (e) { isLocal = false; }
+      if (!isLocal) return;
+
+      const box = document.createElement('div');
+      box.id = 'local-test-panel';
+      box.style.cssText = [
+        'position:fixed', 'left:8px', 'bottom:8px', 'z-index:99999',
+        'background:rgba(20,16,28,0.85)', 'border:1px solid #ff3bd0', 'border-radius:8px',
+        'padding:7px 9px', 'color:#ffd9f4', 'font:12px/1.45 system-ui,sans-serif',
+        'box-shadow:0 2px 14px rgba(255,59,208,.28)', 'user-select:none', 'max-width:238px'
+      ].join(';');
+
+      const btn = (label, fn, bg) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.style.cssText =
+          'margin:2px;padding:3px 7px;font-size:12px;border-radius:5px;cursor:pointer;' +
+          'border:1px solid #6a5470;color:#fff;background:' + (bg || '#2c2438');
+        b.addEventListener('click', fn);
+        return b;
+      };
+      const label = txt => {
+        const d = document.createElement('div');
+        d.textContent = txt;
+        d.style.cssText = 'margin:4px 0 1px;color:#c98fbe;font-size:11px;';
+        return d;
+      };
+
+      // 标题栏 + 关闭
+      const head = document.createElement('div');
+      head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-weight:bold;';
+      const t = document.createElement('span'); t.textContent = '🧪 本地测试';
+      const x = document.createElement('span');
+      x.textContent = '×';
+      x.style.cssText = 'cursor:pointer;padding:0 4px;color:#c98fbe;';
+      x.title = '隐藏（刷新页面恢复）';
+      x.addEventListener('click', () => { box.style.display = 'none'; });
+      head.appendChild(t); head.appendChild(x);
+      box.appendChild(head);
+
+      // 开局按钮
+      box.appendChild(label('开局'));
+      const r1 = document.createElement('div');
+      r1.appendChild(btn('🪓 斧王·P3直测', () => {
+        this.testBoss = 'BossMan'; this.testP3 = true;
+        window.__TEST_BOSS__ = 'BossMan'; window.__TEST_P3__ = true;
+        this.stageMode = false;
+        this.start();
+      }, '#5a1d4d'));
+      r1.appendChild(btn('🪓 斧王·完整战', () => {
+        this.testBoss = 'BossMan'; this.testP3 = false;
+        window.__TEST_BOSS__ = 'BossMan'; window.__TEST_P3__ = false;
+        this.stageMode = false;
+        this.start();
+      }));
+      r1.appendChild(btn('🕊️ 鹤仙·双阶段', () => {
+        this.testBoss = 'CraneSage';
+        window.__TEST_BOSS__ = 'CraneSage';
+        this.stageMode = false;
+        this.start();
+      }, '#1d6f7e'));
+      box.appendChild(r1);
+
+      // 战斗中：鹤仙快速测试按钮
+      box.appendChild(label('鹤仙测试（战斗中）'));
+      const craneSage = () => this.bosses.find(b => b.constructor.name === 'CraneSage');
+      const r4 = document.createElement('div');
+      r4.appendChild(btn('立即到P2', () => {
+        const b = craneSage();
+        if (!b) { this.toast('当前场上没有鹤仙', 1.3, 'lt'); return; }
+        if (b.phase === 2) { this.toast('已在第二阶段', 1.1, 'lt'); return; }
+        b.hp = Math.floor(b.maxHp * 0.5) + 1;
+        this.toast('鹤仙血量降至50%，即将转阶段', 1.4, 'lt');
+      }, '#1d6f7e'));
+      r4.appendChild(btn('鹤仙回满', () => {
+        const b = craneSage();
+        if (b) { b.hp = b.maxHp; this.toast('鹤仙已回满血', 1.1, 'lt'); }
+      }));
+      r4.appendChild(btn('清场上弹', () => {
+        this.bullets.forEach(bu => { if (!bu.friendly) bu.neutralize(); });
+        this.toast('敌方弹幕已清除', 1.0, 'lt');
+      }));
+      box.appendChild(r4);
+
+      // 战斗中：P0-P5 跳转
+      box.appendChild(label('斧王阶段3跳转（战斗中）'));
+      const bossMan = () => this.bosses.find(b => b.constructor.name === 'BossMan');
+      const jump = key => {
+        const b = bossMan();
+        if (!b) { this.toast('当前场上没有斧王', 1.3, 'lt'); return; }
+        if (typeof b.__testJumpP3 !== 'function') { this.toast('旧版斧王不支持跳转', 1.3, 'lt'); return; }
+        b.__testJumpP3(this, key);
+      };
+      const phases = [
+        ['P0', 'p0'], ['P1', 'p1'], ['P2', 'p2'],
+        ['P3', 'p3'], ['P4', 'p4'], ['P5', 'p5']
+      ];
+      const r2 = document.createElement('div');
+      for (const [lab, key] of phases) r2.appendChild(btn(lab, () => jump(key)));
+      box.appendChild(r2);
+
+      // 辅助
+      box.appendChild(label('辅助'));
+      const r3 = document.createElement('div');
+      r3.appendChild(btn('Boss回满', () => {
+        const b = bossMan();
+        if (b) { b.hp = b.maxHp; this.toast('Boss 已回满血', 1.1, 'lt'); }
+      }));
+      r3.appendChild(btn('玩家回满', () => {
+        this.player.hp = this.player.maxHp;
+        this.toast('玩家已回满血', 1.1, 'lt');
+      }));
+      box.appendChild(r3);
+
+      document.body.appendChild(box);
     }
 
     gameOver() {
@@ -1683,9 +1838,16 @@
       this.el.bossName.textContent = `${b.bossName}`;
       this.el.bossHud.classList.remove('hidden');
       this.resetBossBarFx();   // 新 Boss：血条满状态，清空斩击/灼烧残留
-      this.toast(`${b.bossName} 出现！`, 2, 'lt');
-      if (b.musicTheme === 'boss-fuwang') SFX.bossArmy();   // 大王登场：万军齐吼"好！好！好！" + 战鼓号角
-      else SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
+      // 测试模式：斧王出场即跳过第一命，直接进入阶段3（火车入场）
+      const skipP3 = this.testP3 && cls.name === 'BossMan';
+      this.toast(skipP3 ? '🧪 测试：直接进入斧王阶段3' : `${b.bossName} 出现！`, 2, 'lt');
+      if (skipP3 && typeof b.startPhase3 === 'function') {
+        b.startPhase3(this);   // startPhase3 内部自带 bossRoar / toast / shake
+      } else if (b.musicTheme === 'boss-fuwang') {
+        SFX.bossArmy();   // 大王登场：万军齐吼"好！好！好！" + 战鼓号角
+      } else {
+        SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
+      }
       this.shake(6);
     }
     onBossDefeated(boss) {
@@ -2432,7 +2594,7 @@
         if (!b.friendly || b.dead) continue;
         for (const e of this.targets()) {
           if (e.dead || e.dying) continue;
-          if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'summon' || e.state === 'transform')) continue;   // Boss 入场/转场/锁血召唤期免伤（子弹穿透不吞弹）
+          if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'phaseTrans' || e.state === 'summon' || e.state === 'transform')) continue;   // Boss 入场/转场/锁血期免伤（子弹穿透不吞弹）
           if (b.hitSet && b.hitSet.has(e)) continue;
           // 草龙：子弹逐节命中（仅露出地面的节）
           let hitSeg = -1;
@@ -2638,6 +2800,10 @@
             // 火山口巨大火焰弹：命中玩家即引爆（环境伤害）
             b.dead = true;
             this.lavaBlast(b.x, b.y, b.dmg);
+          } else if (b.kind === 'potbomb') {
+            // 斧王酒壶：命中玩家即爆炸（触发 onExpire 走酒壶爆炸流程）
+            b.dead = true;
+            if (b.onExpire) b.onExpire(this, b);
           } else if (b.kind === 'missile' || b.hp > 0) {
             // 可击爆弹（导弹/漂浮战斧等 hp>0）撞到玩家：直接引爆
             b.dead = true;
@@ -2668,7 +2834,7 @@
         let best = null, bestD = C.range, bestPt = null;
         for (const e of this.targets()) {
           if (e.dead || e.dying || linked.has(e)) continue;
-          if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'summon' || e.state === 'transform')) continue;   // 入场/转场/锁血召唤期免伤不链接
+          if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'phaseTrans' || e.state === 'summon' || e.state === 'transform')) continue;   // 入场/转场/锁血期免伤不链接
           // 草龙：最近露出节即受击点；整龙全在地下则跳过
           const pt = e.segments ? e.nearestExposed(from.x, from.y) : { x: e.x, y: e.y };
           if (!pt) continue;

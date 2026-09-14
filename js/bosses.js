@@ -1183,6 +1183,14 @@
       this.eyeT = 3.0;
       this.invulnT = 0;        // 斧头命中玩家获得的无敌时间（可叠加）
       this.deathCols = ['#2b2f3a', '#e8eef7', '#ffd23b', '#e0453a'];
+      // ── 阶段3（火车入场 + 蜥蜴脸飞空形态）──
+      this.life = 1;                  // 1=第一命（阶段1-2），2=第二命（阶段3）
+      this.phase3Invuln = 0;          // P3 酒壶无敌期（玫红光环）
+      this.phase3InvulnMax = 5;      // P3 无敌持续 5s
+      this.train = null;             // 火车对象 {x,y,w,h,vx,stopped,parts:[{dead}×5],partsLeft,exploded}
+      this.p3 = null;                // 阶段3 子状态机辅助字段
+      this.dialogueShown = false;    // 阶段3 开场台词气泡
+      this.enraged = true;           // 阶段3 不触发通用低血狂暴（P5 自行处理）
     }
     update(dt, g) {
       this.t += dt; this.stateT += dt;
@@ -1258,6 +1266,8 @@
         }
         return;
       }
+
+      if (this.phase === 3) { this.updateP3(dt, g); return; }
 
       if (this.phase === 1) {
         if (this.state === 'fight') {
@@ -1393,7 +1403,7 @@
       }
     }
     takeDamage(dmg, g, kb) {
-      // 锁血（开场召唤斧头兵团 6s / 半血碎裂变身 2.4s）：免疫常规伤害；大招释放时会临时解除 lockHp 造成伤害
+      // 锁血（开场召唤斧头兵团 6s / 半血碎裂变身 2.4s / 阶段3 火车入场）：免疫常规伤害
       if (this.lockHp) {
         if (Math.random() < 0.3) {
           burst(g, this.x + rand(-60, 40), this.y + rand(-90, 90), 2, ['#ffd23b', '#fff3c4'], 140, 3, 0.2);
@@ -1407,7 +1417,20 @@
         }
         return;
       }
+      // 阶段3 P3 酒壶无敌：玫红高亮度光环，不掉血
+      if (this.phase3Invuln > 0) {
+        if (Math.random() < 0.4) {
+          burst(g, this.x + rand(-50, 40), this.y + rand(-70, 70), 2, ['#ff3bd0', '#fff'], 150, 3, 0.2);
+        }
+        return;
+      }
       super.takeDamage(dmg, g, kb);
+    }
+    /** 多命机制：阶段2（巨头）血量打空时不真正死亡，转阶段3（火车入场）；阶段3 血空才真死 */
+    die(g) {
+      if (this.life < 2) { this.startPhase3(g); return; }
+      this.dead = true;
+      g.onBossDefeated(this);
     }
     /** 五颗巨大漂浮弹：缓慢追踪玩家，被击中 6 次爆炸 */
     launchFloaters(g) {
@@ -1458,6 +1481,7 @@
         }
         ctx.restore();
       }
+      if (this.phase === 3) { this.renderP3(ctx); return; }
       if (this.phase === 2) {
         // 变身后巨头（占据近半屏）：dawang_2.png 192×176，缩放 1.625 → 显示约 312×286
         const pulse = 1 + Math.sin(this.t * 4) * 0.02;
@@ -1480,6 +1504,663 @@
       } else {
         // 碎裂中：身体闪烁崩坏（白闪为碎裂演出，非受击反馈）
         drawSprite(ctx, Sprites.bossManL, this.x, this.y, 1.125, 1.125, 0, Math.floor(this.t * 14) % 2 ? 0.6 : 0);
+      }
+    }
+
+    /* ============================================================
+     *  阶段3：火车入场（P0）→ 飞斧（P1）→ 电击（P2）→ 酒壶（P3）→ 混合（P4）→ 狂暴（P5）
+     *  蜥蜴脸西装礼帽持双斧的飞空形态，体积约为玩家最大体积的 2 倍
+     * ============================================================ */
+    /** 阶段2 巨头血空 → 启动阶段3：火车入场演出 */
+    startPhase3(g) {
+      this.life = 2;
+      this.phase = 3;
+      this.state = 'p3train'; this.stateT = 0;
+      this.lockHp = true;            // 火车入场期间锁血
+      this.hp = 1;                   // 占位，演出结束回满
+      // 阶段3 第二命血量：以参考 DPS 曲线 + 标准交战时长为锚（独立于阶段1-2 的 maxHp）
+      const fightTime = CFG.boss.fightTime(g.bossSpawned + 1);
+      this.maxHp = Math.round(CFG.boss.refDpsAt(g.bossSpawned + 1) * fightTime * g.hpSoftMul(g.bossSpawned + 1));
+      // 火车：从右下入场，2.5s 高速横穿后停稳占据整个下半屏（1 车头 + 4 节可复制车厢 = 5 个可破坏部位）
+      this.train = this.makeP3Train();
+      const stopX = Math.max(8, CFG.W - this.train.w - 12);   // 停稳后车头贴左、整车横亘下半屏
+      this.train.vx = (stopX - this.train.x) / 2.5;   // 2.5s 高速横穿到位
+      this.p3 = { phase: 'p0', actT: 0, fireT: 0, cycle: 0, dashT: 0, targetX: 0, targetY: 0 };
+      // 巨头消失：爆裂粒子
+      burst(g, this.x, this.y, 40, ['#2b2f3a', '#e8eef7', '#ffd23b', '#e0453a'], 320, 7, 0.9, 150);
+      g.shake(14);
+      SFX.bossRoar();
+      g.toast('斧王逃上了火车！', 2.2, 'lt');
+    }
+
+    /** 阶段3 主更新：按子状态路由 */
+    updateP3(dt, g) {
+      const p = g.player;
+      this.phase3Invuln = Math.max(0, this.phase3Invuln - dt);
+      this.commonMove(dt);
+      // 火车部件矩形随车体同步（车头 + 4 车厢宽度不等）；被毁部件持续下沉
+      if (this.train) {
+        for (let i = 0; i < 5; i++) {
+          const part = this.train.parts[i];
+          if (part.dead) {
+            if (part.sinkY < tr.h * 4) {     // 坠落到 4 倍车高后停止累积（早已淡出屏幕）
+              part.sinkVy += 900 * dt;       // 重力加速
+              part.sinkY += part.sinkVy * dt;
+            }
+          } else {
+            const r = this.trainPartRect(this.train, i);
+            part.x = r.x;
+            part.w = r.w;
+          }
+        }
+        // 爆炸冲击波环扩张
+        if (this.train.rings) {
+          for (let i = this.train.rings.length - 1; i >= 0; i--) {
+            const r = this.train.rings[i];
+            r.t += dt; r.r += r.vr * dt;
+            if (r.t >= r.life) this.train.rings.splice(i, 1);
+          }
+        }
+      }
+      switch (this.state) {
+        case 'p3train': this.updateP3Train(dt, g); break;
+        case 'p3axe':   this.updateP3Axe(dt, g, p); break;
+        case 'p3elec':  this.updateP3Elec(dt, g, p); break;
+        case 'p3pot':   this.updateP3Pot(dt, g, p); break;
+        case 'p3mix':   this.updateP3Mix(dt, g, p); break;
+        case 'p3rage':  this.updateP3Rage(dt, g, p); break;
+      }
+      // 飞斧击中火车部件检测（敌方 axe 弹幕未命中玩家时可能击中火车）
+      this.checkAxeHitTrain(dt, g);
+    }
+
+    /** 构造阶段3 火车：青电朋克机车（源图 x∈[0,58)）+ 4 节复制车厢（源图 x∈[58,106)）。
+     *  高占屏幕 50%（270），贴屏幕底边；总宽 = 车头宽 + 4×车厢宽（约 938）。 */
+    makeP3Train() {
+      const tH = Math.round(CFG.H * 0.5);     // 270
+      const kSc = tH / 72;                    // 源图高 72 → 显示缩放 3.75
+      const engW = Math.round(58 * kSc);      // 车头显示宽 ≈ 218
+      const carW = Math.round(48 * kSc);      // 单节车厢显示宽 = 180
+      return {
+        x: CFG.W + 80, y: CFG.H - tH, w: engW + carW * 4, h: tH,
+        engW, carW,
+        vx: 0, stopped: false, exploded: false,
+        partsLeft: 5,
+        // sx/sw 为精灵源图内的横向裁剪区间（车头 0..58，车厢 58..106）
+        // sinkY/sinkVy：部件被摧毁后持续下沉的位移与速度
+        parts: [
+          { sx: 0, sw: 58, x: 0, w: engW, dead: false, sinkY: 0, sinkVy: 0 },
+          { sx: 58, sw: 48, x: 0, w: carW, dead: false, sinkY: 0, sinkVy: 0 },
+          { sx: 58, sw: 48, x: 0, w: carW, dead: false, sinkY: 0, sinkVy: 0 },
+          { sx: 58, sw: 48, x: 0, w: carW, dead: false, sinkY: 0, sinkVy: 0 },
+          { sx: 58, sw: 48, x: 0, w: carW, dead: false, sinkY: 0, sinkVy: 0 }
+        ]
+      };
+    }
+
+    /** 第 i 个部件（0=车头，1..4=车厢）在屏幕上的矩形 {x,w} */
+    trainPartRect(tr, i) {
+      return i === 0
+        ? { x: tr.x, w: tr.engW }
+        : { x: tr.x + tr.engW + (i - 1) * tr.carW, w: tr.carW };
+    }
+
+    /* ── P0 火车入场（高速横穿 + 轮轨火星，无伤害仅推开）── */
+    updateP3Train(dt, g) {
+      const tr = this.train;
+      const st = this.stateT;
+      // 0..0.8s 预警（右下灯光 + 烟尘 + 文字）
+      if (st < 0.8) {
+        if (st < 0.1 && !this._warnToast) { this._warnToast = true; g.toast('右下方传来轰鸣……！', 1.6, 'lt'); SFX.warn(); }
+        return;
+      }
+      // 0.8..3.3s 火车高速横穿（2.5s）
+      if (!tr.stopped) {
+        tr.x += tr.vx * dt;
+        // 烟囱烟尘
+        if (Math.random() < 0.7) {
+          g.particles.push(new Particle(tr.x + tr.engW * (15 / 58) + rand(-8, 8), tr.y + rand(0, 24),
+            rand(60, 160), rand(-40, -6), 0.8, rand(4, 8), 'rgba(200,200,210,0.6)'));
+        }
+        // 轮轨火星：高速行驶时底盘擦出大量火星
+        for (let s = 0; s < 4; s++) {
+          const wx = tr.x + rand(20, tr.w - 20);
+          g.particles.push(new Particle(wx, tr.y + tr.h - 4,
+            rand(-220, -60), rand(-180, -40), 0.35, rand(1.5, 3.2),
+            Math.random() < 0.5 ? '#ffd23b' : '#ff7b2e'));
+        }
+        // 车体擦撞玩家：无伤害，仅向左上方推开（避免卡在车内）
+        const pl = g.player;
+        if (pl.x > tr.x - pl.radius && pl.x < tr.x + tr.w + pl.radius &&
+            pl.y > tr.y - pl.radius && pl.y < tr.y + tr.h + pl.radius) {
+          pl.x = tr.x - pl.radius - 4;
+          pl.y = Math.min(pl.y, tr.y - pl.radius - 18);
+          // 撞击火星
+          burst(g, pl.x + pl.radius, pl.y, 8, ['#ffd23b', '#ff7b2e', '#fff'], 200, 3, 0.3);
+        }
+        if (st >= 3.3) {
+          tr.stopped = true;
+          tr.x = Math.max(8, CFG.W - tr.w - 12);   // 钉死停止位置
+          // 急停冲击：大范围火星 + 冲击波 + 烟尘
+          burst(g, tr.x + tr.w, tr.y + tr.h * 0.5, 44,
+            ['#ffd23b', '#ff7b2e', '#c94a1e', '#fff', '#888'], 420, 8, 0.7, 160);
+          // 地面横向溅射火星
+          for (let s = 0; s < 18; s++) {
+            g.particles.push(new Particle(tr.x + rand(0, tr.w), tr.y + tr.h - 2,
+              rand(-380, 380), rand(-120, -20), 0.5, rand(2, 4),
+              ['#ffd23b', '#ff7b2e', '#fff'][s % 3]));
+          }
+          SFX.explode(false); g.shake(16);
+        }
+      } else if (!tr.exploded) {
+        // 停稳 1.5s 后斧王从火车中飞出
+        if (st >= 4.8) {
+          tr.exploded = true;
+          this.x = tr.x + tr.w * 0.6;
+          this.y = tr.y - 56;
+          this.baseY = this.y;
+          this.hp = this.maxHp;
+          this.lockHp = false;
+          if (g.showDialogue) g.showDialogue('为了理想而战！！！', 2.6);
+          else g.toast('为了理想而战！！！', 2.6, 'lt');
+          burst(g, this.x, this.y, 30, ['#2e8b6f', '#5cbf9a', '#fff', '#ffd23b'], 280, 6, 0.6, 130);
+          SFX.phaseRise();
+          this.state = 'p3axe'; this.stateT = 0;
+          this.p3.phase = 'p1'; this.p3.fireT = 1.2; this.p3.actT = 0;
+        }
+      }
+    }
+
+    /* ── P1 飞斧（投掷飞斧，命中火车部件则损毁；5 部件全毁 → P2）── */
+    updateP3Axe(dt, g, p) {
+      // 中高速横向飞空
+      this.flyHover(dt, g, p, 1.0);
+      this.p3.fireT -= dt;
+      if (this.p3.fireT <= 0) {
+        this.p3.fireT = rand(1.3, 1.9);
+        this.throwAxe(g, p, 360);
+      }
+      // 火车全部损毁 → 大型爆炸 → P2
+      if (this.train && this.train.partsLeft <= 0) {
+        const tr = this.train;
+        burst(g, tr.x + tr.w * 0.5, tr.y + tr.h * 0.5, 50,
+          ['#ff7b2e', '#ffd23b', '#c94a1e', '#fff', '#3a4152'], 360, 8, 0.9, 150);
+        SFX.explode(false); g.shake(16);
+        this.train = null;            // 火车消失
+        this.state = 'p3elec'; this.stateT = 0;
+        this.p3.phase = 'p2'; this.p3.actT = 2.0; this.p3.cycle = 0;
+        g.toast('火车彻底损毁！', 2.0, 'lt');
+      }
+    }
+
+    /* ── P2 电击（飞至玩家上方，悬停瞄准 0.5s，释放直线电击弹，换位后投斧）── */
+    updateP3Elec(dt, g, p) {
+      const pp = this.p3;
+      if (pp.actT > 0) {
+        // 间隔期：悬停飞空
+        pp.actT -= dt;
+        this.flyHover(dt, g, p, 1.0);
+        // 间隔中投一斧
+        pp.fireT = (pp.fireT || 0) - dt;
+        if (pp.fireT <= 0) { pp.fireT = 1.6; this.throwAxe(g, p, 360); }
+        if (pp.actT <= 0) {
+          // 飞至玩家上方
+          pp.targetX = p.x;
+          pp.targetY = clamp(p.y - 150, 60, CFG.GROUND_Y - 220);
+          pp.sub = 'approach'; pp.subT = 0;
+        }
+        return;
+      }
+      // 子状态：approach → aim → bolt → reposition
+      if (pp.sub === 'approach') {
+        this.x += (pp.targetX - this.x) * dt * 4;
+        this.y += (pp.targetY - this.y) * dt * 4;
+        pp.subT += dt;
+        if (pp.subT > 0.5 || Math.hypot(pp.targetX - this.x, pp.targetY - this.y) < 14) {
+          pp.sub = 'aim'; pp.subT = 0;
+        }
+      } else if (pp.sub === 'aim') {
+        pp.subT += dt;
+        // 瞄准期间锁定玩家当前位置
+        pp.boltA = Math.atan2(p.y - this.y, p.x - this.x);
+        if (pp.subT >= 0.5) {
+          // 释放电击弹（高速直线）
+          this.fireEbolt(g, pp.boltA);
+          pp.sub = 'reposition'; pp.subT = 0;
+          // 目标：移到另一侧
+          pp.targetX = this.x < CFG.W * 0.5 ? CFG.W * 0.78 : CFG.W * 0.22;
+          pp.targetY = clamp(p.y - 40, 80, CFG.GROUND_Y - 180);
+        }
+      } else if (pp.sub === 'reposition') {
+        this.x += (pp.targetX - this.x) * dt * 3.2;
+        this.y += (pp.targetY - this.y) * dt * 3.2;
+        pp.subT += dt;
+        if (pp.subT > 0.7 || Math.hypot(pp.targetX - this.x, pp.targetY - this.y) < 18) {
+          pp.cycle++;
+          pp.sub = null;
+          pp.actT = 2.4;   // 回到间隔期
+          // 3 轮电击后 → P3 酒壶
+          if (pp.cycle >= 3) {
+            this.state = 'p3pot'; this.stateT = 0;
+            this.p3.phase = 'p3';
+            // 进入 5s 无敌
+            this.phase3Invuln = this.phase3InvulnMax;
+            g.toast('斧王进入无敌状态！', 1.8, 'lt');
+            SFX.phaseRise();
+            burst(g, this.x, this.y, 24, ['#ff3bd0', '#fff', '#ff8be0'], 260, 6, 0.6, 130);
+          }
+        }
+      }
+    }
+
+    /* ── P3 酒壶炸弹（5s 无敌 → 虚影碎裂 → 投掷酒壶抛物线，落地爆炸 + 8 向溅射）── */
+    updateP3Pot(dt, g, p) {
+      const pp = this.p3;
+      // 无敌期间减速悬停
+      if (this.phase3Invuln > 0) {
+        this.flyHover(dt, g, p, 0.4);
+        // 无敌结束瞬间：虚影碎裂效果
+        if (this.phase3Invuln <= dt) {
+          burst(g, this.x, this.y, 28, ['#ff3bd0', '#ff8be0', '#fff'], 300, 6, 0.7, 140);
+          g.shake(8); SFX.phaseRise();
+          g.toast('无敌解除！', 1.4, 'lt');
+        }
+        return;
+      }
+      // 无敌后：投掷酒壶
+      this.flyHover(dt, g, p, 0.8);
+      // dash 换位中
+      if (pp.sub === 'dash') {
+        this.x += (pp.targetX - this.x) * dt * 5;
+        this.y += (pp.targetY - this.y) * dt * 5;
+        pp.subT += dt;
+        if (pp.subT > 0.5 || Math.hypot(pp.targetX - this.x, pp.targetY - this.y) < 20) {
+          pp.sub = null;
+          // 4 次酒壶完成 → P4 混合
+          if ((pp.cycle || 0) >= 4) {
+            this.state = 'p3mix'; this.stateT = 0;
+            this.p3.phase = 'p4'; pp.cycle = 0; pp.fireT = 1.0; pp.sub = 'axe';
+            return;
+          }
+        }
+        return;
+      }
+      // 等待投壶计时
+      pp.fireT = (pp.fireT || 0) - dt;
+      if (pp.fireT <= 0) {
+        pp.fireT = rand(1.8, 2.4);
+        pp.cycle = (pp.cycle || 0) + 1;
+        this.throwPot(g, p);
+        // 爆炸间隙高速换位
+        pp.targetX = this.x < CFG.W * 0.5 ? rand(CFG.W * 0.6, CFG.W * 0.85) : rand(CFG.W * 0.15, CFG.W * 0.4);
+        pp.targetY = clamp(p.y - rand(80, 180), 60, CFG.GROUND_Y - 200);
+        pp.sub = 'dash'; pp.subT = 0;
+      }
+    }
+
+    /* ── P4 飞斧＋酒壶（循环：飞斧 → 换位 → 酒壶 → 电击）── */
+    updateP3Mix(dt, g, p) {
+      const pp = this.p3;
+      this.flyHover(dt, g, p, 1.2);
+      pp.fireT -= dt;
+      if (pp.fireT <= 0) {
+        if (pp.sub === 'axe') {
+          this.throwAxe(g, p, 420);
+          pp.fireT = 0.7; pp.sub = 'reposition';
+        } else if (pp.sub === 'reposition') {
+          pp.targetX = this.x < CFG.W * 0.5 ? rand(CFG.W * 0.6, CFG.W * 0.85) : rand(CFG.W * 0.15, CFG.W * 0.4);
+          pp.targetY = clamp(p.y - rand(60, 160), 60, CFG.GROUND_Y - 200);
+          pp.sub = 'pot'; pp.fireT = 0.5;
+        } else if (pp.sub === 'pot') {
+          this.throwPot(g, p);
+          pp.sub = 'elec'; pp.fireT = 0.8;
+        } else if (pp.sub === 'elec') {
+          // 电击（蓄力 0.4s + 释放）
+          pp.targetX = p.x; pp.targetY = clamp(p.y - 130, 60, CFG.GROUND_Y - 220);
+          pp.boltA = Math.atan2(p.y - this.y, p.x - this.x);
+          this.fireEbolt(g, pp.boltA);
+          pp.sub = 'axe'; pp.fireT = 1.2;
+          // 换位
+          const tx = this.x < CFG.W * 0.5 ? CFG.W * 0.78 : CFG.W * 0.22;
+          pp.targetX = tx; pp.targetY = clamp(p.y - 40, 80, CFG.GROUND_Y - 180);
+          this.x += (pp.targetX - this.x) * 0.3;
+        }
+      } else if (pp.sub === 'reposition') {
+        this.x += (pp.targetX - this.x) * dt * 5;
+        this.y += (pp.targetY - this.y) * dt * 5;
+      }
+      // HP ≤ 35% → P5 狂暴
+      if (this.hp <= this.maxHp * 0.35) {
+        this.state = 'p3rage'; this.stateT = 0;
+        this.p3.phase = 'p5'; pp.fireT = 0.8; pp.sub = 'axe'; pp.cycle = 0; pp.dashT = 0;
+        g.toast('斧王狂暴了！', 2.0, 'lt');
+        SFX.bossEnrage(); g.shake(12);
+        burst(g, this.x, this.y, 30, ['#ff3b3b', '#ffd23b', '#fff', '#2e8b6f'], 300, 6, 0.7, 140);
+      }
+    }
+
+    /* ── P5 狂暴（全速提升，16 向溅射，斧击突进，电击蓄力 0.3s）── */
+    updateP3Rage(dt, g, p) {
+      const pp = this.p3;
+      this.flyHover(dt, g, p, 1.5);
+      pp.fireT -= dt;
+      if (pp.fireT <= 0) {
+        if (pp.sub === 'axe') {
+          // 飞斧 + 斜向切入
+          this.throwAxe(g, p, 480, true);
+          pp.fireT = 0.55; pp.sub = 'pot';
+        } else if (pp.sub === 'pot') {
+          // 酒壶（16 向溅射）
+          this.throwPot(g, p, true);
+          pp.sub = 'elec'; pp.fireT = 0.5;
+        } else if (pp.sub === 'elec') {
+          // 电击蓄力 0.3s
+          pp.boltA = Math.atan2(p.y - this.y, p.x - this.x);
+          pp.fireT = 0.3; pp.sub = 'elecFire';
+        } else if (pp.sub === 'elecFire') {
+          this.fireEbolt(g, pp.boltA, 1.3);
+          pp.sub = 'dash'; pp.fireT = 0.4; pp.dashT = 0;
+          // 斧击突进：锁定玩家方向
+          pp.dashA = Math.atan2(p.y - this.y, p.x - this.x);
+          pp.dashDone = false;
+        }
+      }
+      // 斧击突进
+      if (pp.sub === 'dash' && !pp.dashDone) {
+        pp.dashT += dt;
+        const dashSpd = 720;
+        this.x += Math.cos(pp.dashA) * dashSpd * dt;
+        this.y += Math.sin(pp.dashA) * dashSpd * dt;
+        // 突进尾迹
+        if (Math.random() < 0.8) {
+          g.particles.push(new Particle(this.x, this.y, rand(-30, 30), rand(-30, 30), 0.4, rand(3, 6), '#ff3b3b'));
+        }
+        if (pp.dashT > 0.5 || this.x < 20 || this.x > CFG.W - 20 || this.y < 20 || this.y > CFG.GROUND_Y - 20) {
+          pp.dashDone = true;
+          // 拉开距离
+          pp.targetX = this.x < CFG.W * 0.5 ? CFG.W * 0.8 : CFG.W * 0.2;
+          pp.targetY = clamp(p.y - 60, 80, CFG.GROUND_Y - 180);
+        }
+      } else if (pp.sub === 'dash' && pp.dashDone) {
+        this.x += (pp.targetX - this.x) * dt * 4;
+        this.y += (pp.targetY - this.y) * dt * 4;
+        if (Math.hypot(pp.targetX - this.x, pp.targetY - this.y) < 24) {
+          pp.sub = 'axe'; pp.fireT = 0.6;
+        }
+      }
+    }
+
+    /* ── 飞斧击中火车部件检测（车头宽 + 4 车厢等宽，各部件独立矩形）── */
+    checkAxeHitTrain(dt, g) {
+      if (!this.train || this.train.stopped === false) return;   // 火车未停或已消失不检测
+      const tr = this.train;
+      for (const b of g.bullets) {
+        if (b.dead || b.kind !== 'axe' || b.friendly) continue;
+        for (let i = 0; i < 5; i++) {
+          const part = tr.parts[i];
+          if (part.dead) continue;
+          // 矩形碰撞：子弹进入部件区域（顶部留 12px 烟囱/车顶余量）
+          if (b.x > part.x && b.x < part.x + part.w && b.y > tr.y + 10 && b.y < tr.y + tr.h) {
+            part.dead = true;
+            tr.partsLeft--;
+            b.dead = true;
+            // 范围爆炸：大火球 + 冲击波环 + 浓烟
+            const cx = part.x + part.w * 0.5, cy = tr.y + tr.h * 0.45;
+            burst(g, cx, cy, 34, ['#ff7b2e', '#ffd23b', '#c94a1e', '#fff', '#3a4152'], 360, 7, 0.7, 200);
+            // 冲击波环（由 renderTrain 绘制为扩散圈）
+            if (!tr.rings) tr.rings = [];
+            tr.rings.push({ x: cx, y: cy, r: 8, vr: 380, t: 0, life: 0.5, color: '#ffd23b' });
+            tr.rings.push({ x: cx, y: cy, r: 4, vr: 560, t: 0, life: 0.4, color: '#ff7b2e' });
+            // 残骸带初速下沉（先微弹再坠落）
+            part.sinkVy = rand(-120, -40);
+            SFX.explode(false); g.shake(6);
+            // 爆炸范围伤害
+            const p = g.player;
+            const d = Math.hypot(p.x - cx, p.y - cy);
+            if (d < 110 + p.radius) p.hurt(Math.round(10 * g.atkScale), g, this.dsrc);
+            if (tr.partsLeft <= 0) return;
+            break;
+          }
+        }
+      }
+    }
+
+    /* ── 辅助：飞空悬停（横向移动 + 正弦垂直）── spd 倍率控制速度档 ── */
+    flyHover(dt, g, p, spd) {
+      const v = (spd || 1) * 130;
+      // 横向往返
+      const targetX = this._hoverDir < 0 ? CFG.W * 0.22 : CFG.W * 0.78;
+      if (this._hoverDir === undefined) this._hoverDir = 1;
+      this.x += this._hoverDir * v * dt;
+      if (this.x < CFG.W * 0.18) this._hoverDir = 1;
+      if (this.x > CFG.W * 0.82) this._hoverDir = -1;
+      // 火车（P0/P1）占下半屏时 Boss 只在上半屏飞；火车炸毁后恢复全空域
+      const hoverMaxY = this.train ? CFG.H * 0.5 - 45 : CFG.GROUND_Y - 180;
+      this.baseY = clamp(p.y - 60, 60, hoverMaxY);
+      this.y += (this.baseY - this.y) * dt * 1.6;
+      this.y += Math.sin(this.t * 2.4) * 14 * dt * 4;
+    }
+
+    /* ── 投掷飞斧（高速直线，朝玩家）── diag=true 增加斜向切入 ──
+     *  阶段3 飞斧使用重绘精灵 dawang_3futou（双刃战斧+电光，p3spr 走精灵渲染分支）。 */
+    throwAxe(g, p, speed, diag) {
+      const base = Math.atan2(p.y - this.y, p.x - this.x);
+      const n = diag ? 3 : 1;
+      for (let i = 0; i < n; i++) {
+        const a = base + (n > 1 ? (i - 1) * 0.28 : 0);
+        g.bullets.push(new Bullet(this.x - 30, this.y - 10,
+          Math.cos(a) * speed, Math.sin(a) * speed,
+          { kind: 'axe', r: 9, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 5,
+            spinRate: 12, color: '#cfd8e3', src: this.dsrc, p3spr: true }));
+      }
+      SFX.enemyShoot();
+    }
+
+    /* ── 投掷酒壶（抛物线，落地爆炸 + N 向溅射）── big=true 16 向溅射 ── */
+    throwPot(g, p, big) {
+      // 抛物线：算到玩家当前位置的落点
+      const tx = p.x, ty = clamp(p.y, 60, CFG.GROUND_Y - 20);
+      const dx = tx - this.x, dy = ty - this.y;
+      const tFly = 1.2;           // 飞行时间
+      const g0 = 520;             // 重力（与 arrow 一致量级）
+      const vx = dx / tFly;
+      const vy = (dy - 0.5 * g0 * tFly * tFly) / tFly;
+      const self = this;
+      const b = new Bullet(this.x - 20, this.y, vx, vy,
+        { kind: 'potbomb', r: 11, dmg: 16 * g.atkScale, dmgScale: g.atkScale, life: 5,
+          grav: g0, spinRate: 6, src: this.dsrc });
+      b.onExpire = (gg, bb) => {
+        // 爆炸范围伤害
+        const R = big ? 130 : 90;
+        burst(gg, bb.x, bb.y, big ? 28 : 18, ['#3aa64a', '#5cd96a', '#7a4a22', '#fff'], 260, 6, 0.6, 110);
+        SFX.explode(false); gg.shake(big ? 8 : 5);
+        const pl = gg.player;
+        const d = Math.hypot(pl.x - bb.x, pl.y - bb.y);
+        if (d < R + pl.radius) pl.hurt(Math.round(bb.dmg * (d < R * 0.5 ? 1 : 0.6)), gg, bb.src);
+        // N 向酒液溅射
+        const dirs = big ? 16 : 8;
+        for (let i = 0; i < dirs; i++) {
+          const a = (TAU / dirs) * i + rand(-0.06, 0.06);
+          const sp = (big ? 230 : 180) + rand(-20, 20);
+          gg.bullets.push(new Bullet(bb.x, bb.y, Math.cos(a) * sp, Math.sin(a) * sp,
+            { kind: 'liquid', r: 6, dmg: 9 * gg.atkScale, dmgScale: gg.atkScale, life: 4,
+              spinRate: 4, src: self.dsrc }));
+        }
+      };
+      g.bullets.push(b);
+      SFX.enemyShoot();
+    }
+
+    /* ── 释放电击弹（高速直线子弹，电蓝色）── mul 速度倍率 ── */
+    fireEbolt(g, ang, mul) {
+      const sp = 620 * (mul || 1);
+      const b = new Bullet(this.x, this.y + 10, Math.cos(ang) * sp, Math.sin(ang) * sp,
+        { kind: 'bolt', r: 7, dmg: 14 * g.atkScale, dmgScale: g.atkScale, life: 2.2,
+          color: '#7fe0ff', spinRate: 0, src: this.dsrc });
+      // 电击拖尾色
+      b.trailCols = ['#3b9eff', '#7fe0ff', '#ffffff'];
+      b.fireTrail = true;
+      g.bullets.push(b);
+      SFX.warn();
+    }
+
+    /* ── 【本地测试】直接跳到阶段3 某子状态：key = p0..p5（p0 重走火车入场）── */
+    __testJumpP3(g, key) {
+      if (key === 'p0') { this.startPhase3(g); return; }
+      if (this.life < 2) this.life = 2;
+      this.phase = 3;
+      this.lockHp = false;
+      this.phase3Invuln = 0;
+      // 保证有阶段3 血量（直接从阶段1/2 跳来时 maxHp 还是第一条命的）
+      const fightTime = CFG.boss.fightTime(g.bossSpawned + 1);
+      this.maxHp = Math.round(CFG.boss.refDpsAt(g.bossSpawned + 1) * fightTime * g.hpSoftMul(g.bossSpawned + 1));
+      this.hp = this.maxHp;
+      this.x = CFG.W * 0.72; this.y = CFG.H * 0.32; this.baseY = this.y;
+      this.p3 = this.p3 || { actT: 0, fireT: 0, cycle: 0, dashT: 0, targetX: 0, targetY: 0 };
+      if (key === 'p1') {
+        // 已停稳、横亘下半屏的完好火车（车头 + 4 车厢，5 部件齐全）
+        this.train = this.makeP3Train();
+        this.train.x = Math.max(8, CFG.W - this.train.w - 12);
+        this.train.stopped = true; this.train.exploded = true;
+        for (let i = 0; i < 5; i++) Object.assign(this.train.parts[i], this.trainPartRect(this.train, i));
+        this.state = 'p3axe'; this.stateT = 0;
+        Object.assign(this.p3, { phase: 'p1', fireT: 0.6 });
+      } else if (key === 'p2') {
+        this.train = null;
+        this.state = 'p3elec'; this.stateT = 0;
+        Object.assign(this.p3, { phase: 'p2', actT: 0.01, fireT: 1, cycle: 0, sub: null });
+      } else if (key === 'p3') {
+        this.train = null;
+        this.state = 'p3pot'; this.stateT = 0;
+        Object.assign(this.p3, { phase: 'p3', fireT: 0.5, cycle: 0, sub: null });
+        this.phase3Invuln = this.phase3InvulnMax;   // 先展示 5s 玫红无敌 + 虚影碎裂，再投壶
+      } else if (key === 'p4') {
+        this.train = null;
+        this.state = 'p3mix'; this.stateT = 0;
+        Object.assign(this.p3, { phase: 'p4', fireT: 0.8, cycle: 0, sub: 'axe' });
+      } else if (key === 'p5') {
+        this.train = null;
+        this.state = 'p3rage'; this.stateT = 0;
+        Object.assign(this.p3, { phase: 'p5', fireT: 0.5, cycle: 0, dashT: 0, sub: 'axe', dashDone: true });
+      }
+      g.toast('🧪 跳到阶段3 · ' + key.toUpperCase(), 1.4, 'lt');
+    }
+
+    /* ── 阶段3 渲染：火车 + 蜥蜴脸飞空形态 + 无敌光环 ── */
+    renderP3(ctx) {
+      // 火车（P0 入场及 P1 停留期间渲染）
+      if (this.train) this.renderTrain(ctx);
+      // P0 火车入场期间斧王尚未现身（藏在车里），不绘制本体
+      if (this.state === 'p3train' && !(this.train && this.train.exploded)) return;
+
+      // P3 酒壶无敌：玫红高亮度光环 + 虚影
+      if (this.phase3Invuln > 0) {
+        const k = this.phase3Invuln / this.phase3InvulnMax;
+        const a = 0.45 + Math.sin(this.t * 18) * 0.25;
+        ctx.save();
+        ctx.globalAlpha = a;
+        // 外层虚影（放大淡红拷贝）
+        const ghost = 1 + Math.sin(this.t * 10) * 0.06 + (1 - k) * 0.1;
+        ctx.shadowColor = '#ff3bd0'; ctx.shadowBlur = 36;
+        ctx.strokeStyle = '#ff3bd0'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.ellipse(this.x, this.y, 104 * ghost, 144 * ghost, 0, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,139,224,0.6)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(this.x, this.y, 120 * ghost, 160 * ghost, 0, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      // 蜥蜴脸飞空形态：dawang_3 240×304，缩放 0.68 → 显示约 163×207（约玩家 2 倍体积；精灵已朝左）
+      const pulse = 1 + Math.sin(this.t * 4) * 0.025;
+      const scl = 0.68 * pulse;
+      drawBossSprite(ctx, Sprites.bossMan3L, this.x, this.y, scl, scl, Math.sin(this.t * 1.8) * 0.05, this.flash);
+      // 斧击突进尾迹（P5 dash 时额外红光残影）
+      if (this.state === 'p3rage' && this.p3.sub === 'dash' && !this.p3.dashDone) {
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.shadowColor = '#ff3b3b'; ctx.shadowBlur = 18;
+        drawBossSprite(ctx, Sprites.bossMan3L, this.x, this.y, scl, scl, 0, 0);
+        ctx.restore();
+      }
+    }
+
+    /* ── 火车渲染（车体 + 5 部件状态 + 预警灯光）── */
+    renderTrain(ctx) {
+      const tr = this.train;
+      const st = this.stateT;
+      // P0 预警期（< 1s）：右下车头灯（源图车灯 y≈20/72）+ 光锥 + 烟尘
+      if (this.state === 'p3train' && st < 1.0) {
+        const lx = CFG.W - 30;
+        const ly = tr.y + tr.h * (20 / 72);
+        ctx.save();
+        ctx.globalAlpha = 0.6 + Math.sin(this.t * 20) * 0.3;
+        ctx.fillStyle = '#ffd23b';
+        ctx.shadowColor = '#ffd23b'; ctx.shadowBlur = 40;
+        ctx.beginPath(); ctx.arc(lx, ly, 16, 0, TAU); ctx.fill();
+        // 光锥（车头朝左，光柱向左铺开）
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = '#bfeaff';
+        ctx.beginPath();
+        ctx.moveTo(lx, ly); ctx.lineTo(lx - 210, ly - 48); ctx.lineTo(lx - 210, ly + 48); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        return;
+      }
+      // 车体：部件 0 = 车头（源图 sx0/sw58），部件 1..4 = 复制车厢（源图 sx58/sw48）
+      if (Sprites.train && Sprites.train.width >= 106) {
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.translate(tr.x, tr.y);
+        for (let i = 0; i < 5; i++) {
+          const part = tr.parts[i];
+          const dx = i === 0 ? 0 : tr.engW + (i - 1) * tr.carW;
+          const dw = part.w;
+          ctx.save();
+          if (part.dead) {
+            // 残骸：随 sinkY 持续下沉，并随下沉距离渐隐（不裁剪，使其可坠落到车体下方）
+            const sink = part.sinkY;
+            const alpha = clamp(1 - sink / (tr.h * 1.6), 0, 1);
+            if (alpha <= 0) { ctx.restore(); continue; }
+            ctx.globalAlpha = alpha;
+            ctx.translate(0, sink);
+            ctx.fillStyle = '#141018';
+            ctx.fillRect(dx + 5, tr.h * 0.32, dw - 10, tr.h * 0.52);
+            ctx.fillStyle = '#2b2330';
+            ctx.fillRect(dx + 12, tr.h * 0.42, dw - 24, tr.h * 0.3);
+            ctx.fillStyle = '#5a2a1e';
+            for (let e = 0; e < 3; e++) {
+              ctx.fillRect(dx + 14 + e * (dw - 28) / 3, tr.h * 0.5 + (e % 2) * 12, 7, 5);
+            }
+            ctx.fillStyle = '#0d0f16';
+            ctx.fillRect(dx, tr.h * 0.8, dw, tr.h * 0.2);
+          } else {
+            ctx.beginPath(); ctx.rect(dx, 0, dw, tr.h); ctx.clip();
+            ctx.drawImage(Sprites.train, part.sx, 0, part.sw, 72, dx, 0, dw, tr.h);
+          }
+          ctx.restore();
+        }
+        ctx.restore();
+      } else {
+        // 兜底：纯色块（精灵尚未加载完时短暂出现）
+        ctx.fillStyle = '#3a4152';
+        ctx.fillRect(tr.x, tr.y, tr.w, tr.h);
+      }
+      // 运动烟尘（横穿中，车尾右侧）
+      if (!tr.stopped) {
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = 'rgba(200,200,210,0.6)';
+        ctx.beginPath(); ctx.arc(tr.x + tr.w + 20, tr.y + 10, 14, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+      // 部件摧毁时的范围爆炸冲击波环（世界坐标）
+      if (tr.rings) {
+        for (const r of tr.rings) {
+          const k = 1 - r.t / r.life;
+          ctx.save();
+          ctx.globalAlpha = k * 0.8;
+          ctx.strokeStyle = r.color;
+          ctx.lineWidth = 3 + k * 4;
+          ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke();
+          ctx.restore();
+        }
       }
     }
   }
@@ -1831,256 +2512,685 @@
     }
   }
 
-  /* ================ C2. 鹤仙（特殊机制） ================
-   * 巨大高瘦仙鹤（高占屏 60%）：追魂羽针（3s 无敌可击毁追踪弹）/ 鹤鸣震荡（多层环形声波）/
-   * 天空俯冲（落点预警+冲击波）/ 旋羽领域（环绕羽风暴）/ 万羽天葬（半血终极：漫天落羽） */
+  /* ================ C2. 鹤仙（特殊机制：双阶段风之主宰） ================
+   * P1 瞬移+风炮：空中换位 → 连发4发风炮（高速直线弹）/ 原地旋转生成1个龙卷风（蛇形慢速移动）
+   * 阶段转换：HP≤50% → 血量回满 + 锁血10s（全身闪蓝 + 气波冲击驱离贴脸）
+   * P2 多目标+强化：持续飞行 + 4浮空镜面反射激光 + 双龙卷风 + 高速风刃
+   * 循环（P1）：瞬移 → 风炮×4 → 换位 → 龙卷风 → 换位 → 风炮……
+   * 循环（P2）：飞行 → 镜面布置 → 反射激光 → 双龙卷风 → 高速风刃 → 换位……
+   * ---------------------------------------------------------------- */
   class CraneSage extends Boss {
     constructor(g) {
-      super(g, 20, 88);
+      super(g, 18, 80);
       this.bossName = '鹤仙';
       this.title = '特殊机制型';
-      this.hoverX = 660;
-      this.skillT = 2.6;
-      this.seq = 0;                 // 技能序列：羽针→鹤鸣→俯冲→旋羽（→天葬）
-      this.needles = [];            // 已发射羽针（3.2s 后提速）
-      this.whirlOrbs = [];
-      this.fallMarks = [];          // 万羽天葬落点预警 { x, t }
-      this.waveIdx = 0; this.waveT = 0;
-      this.fallRound = 0; this.fallT = 0;
-      this.deathCols = ['#f4f6f2', '#3a8f9e', '#d43f2f', '#2a5a6a', '#fff'];
+      this.hoverX = 640;
+      this.phase = 1;               // 1 / 2
+      this.act = null;              // 子状态机
+      this.actT = 0;
+      this.actFired = false;        // 当前子状态是否已触发一次性动作
+      this.tornadoes = [];           // {x,y,t,dir,spd,freq,amp,ph,life,hitCd,topR,botR,height,spin}
+      this.mirrors = [];             // {x,y,ang,spin,t,born,dy}
+      this.beams = [];               // {segs:[{x1,y1,x2,y2}],t,warn,active,dealt,dmg,dead}
+      this.shockwaves = [];          // {x,y,r,vr,t,life,dmg,dealt}
+      this.blueFlash = 0;           // 阶段转换蓝闪强度 0..1
+      this.teleFade = 0;            // 瞬移淡入淡出 0=可见 1=不可见
+      this.teleTarget = null;       // 瞬移目标点
+      this.teleGlow = [];            // 瞬移残影点 {x,y,t}
+      this.cannonN = 0;             // 风炮已发数
+      this.cannonT = 0;             // 风炮发射计时
+      this.p1Seq = 0;               // P1 攻击序号（偶=风炮 奇=龙卷风 交替）
+      this.phaseTransT = 0;         // 锁血剩余秒数
+      this.spinAng = 0;             // Boss 旋转角度（生成龙卷风时的高速自旋）
+      this.spinT = 0;               // 自旋剩余时间
+      this._contactBase = this.contactDmg;   // 基础接触伤害（瞬移/锁血期间置 0）
+      this.deathCols = ['#f4f6f2', '#7fd8ff', '#3a8f9e', '#bfe9ff', '#fff'];
     }
+    /* ---------- 伤害与阶段转换 ---------- */
+    takeDamage(dmg, g) {
+      if (this.dead || this.state === 'enter' || this.state === 'phaseTrans') return;   // 入场/锁血免伤
+      this.hp -= dmg;
+      this.hitFlash();
+      if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#7fd8ff', '#fff'], 130, 3, 0.18);
+      // P1 → P2 转换：第一条生命结束（HP ≤ 50%）
+      if (this.phase === 1 && this.hp > 0 && this.hp <= this.maxHp * 0.5) {
+        this.startPhaseTrans(g);
+        return;
+      }
+      if (this.hp <= 0) { this.hp = 0; this.die(g); }
+    }
+    startPhaseTrans(g) {
+      this.hp = this.maxHp;                 // 血量回满
+      this.phase = 2;
+      this.state = 'phaseTrans';
+      this.stateT = 0;
+      this.phaseTransT = 10;               // 锁血10s
+      this.blueFlash = 1.0;
+      this.contactDmg = 0;                 // 锁血期不造成接触伤害
+      this.act = null;
+      // 形成气波：中半径冲击波驱离贴脸玩家
+      this.shockwaves.push({ x: this.x, y: this.y, r: 24, vr: 460, t: 0, life: 1.0,
+        dmg: Math.round(20 * g.atkScale), dealt: false });
+      g.toast('鹤仙·第二阶段！', 2.4, 'lt');
+      SFX.phaseRise(); g.shake(10);
+      // 清理残留敌方弹幕与场上龙卷风/镜子/激光
+      g.bullets.forEach(b => { if (!b.friendly) b.neutralize(); });
+      this.tornadoes.length = 0;
+      this.mirrors.length = 0;
+      this.beams.length = 0;
+      this.teleGlow.length = 0;
+    }
+    die(g) {
+      this.tornadoes.length = 0;
+      this.mirrors.length = 0;
+      this.beams.length = 0;
+      this.shockwaves.length = 0;
+      super.die(g);
+    }
+    /* ---------- 主更新 ---------- */
     update(dt, g) {
-      this.t += dt; this.stateT += dt;
+      this.t += dt; this.stateT += dt; this.actT += dt;
       this.flash = Math.max(0, this.flash - dt);
+      this.blueFlash = Math.max(0, this.blueFlash - dt * 0.4);
+      // Boss 自旋（生成龙卷风时高速旋转，衰减回 0）
+      if (this.spinT > 0) {
+        this.spinT -= dt;
+        this.spinAng += dt * 18;   // 高速自旋
+      } else {
+        this.spinAng *= (1 - dt * 4);   // 缓慢回正
+      }
       this.commonMove(dt);
       const p = g.player;
+
+      // 场上实体更新
+      this.updateTornadoes(dt, g, p);
+      this.updateMirrors(dt, g);
+      this.updateBeams(dt, g, p);
+      this.updateShockwaves(dt, g, p);
+      for (let i = this.teleGlow.length - 1; i >= 0; i--) {
+        this.teleGlow[i].t -= dt;
+        if (this.teleGlow[i].t <= 0) this.teleGlow.splice(i, 1);
+      }
 
       if (this.state === 'enter') {
         this.x -= 150 * dt;
         this.y = this.baseY + Math.sin(this.t * 2) * 30;
-        if (this.x <= this.hoverX) { this.state = 'fight'; this.stateT = 0; }
+        if (this.x <= this.hoverX) {
+          this.state = 'p1'; this.stateT = 0;
+          this.pickTelePos(g); this.setAct('teleport');
+        }
         return;
       }
-
-      // 羽针 3.2s 未被击毁 → 高速冲刺
-      this.needles = this.needles.filter(n => !n.b.dead);
-      for (const n of this.needles) {
-        n.t -= dt;
-        if (n.t <= 0 && !n.boosted) {
-          n.boosted = true;
-          n.b.vx *= 1.45; n.b.vy *= 1.45; n.b.turnRate = 2.6;
-          burst(g, n.b.x, n.b.y, 5, ['#fff', '#c9d2cc'], 140, 3, 0.25);
+      if (this.state === 'p1') this.updateP1(dt, g, p);
+      else if (this.state === 'phaseTrans') this.updatePhaseTrans(dt, g, p);
+      else if (this.state === 'p2') this.updateP2(dt, g, p);
+    }
+    /* ---------- P1：瞬移 + 风炮 + 龙卷风 ---------- */
+    updateP1(dt, g, p) {
+      if (this.act === 'teleport') {
+        this.updateTeleport(dt, g, () => {
+          // 瞬移完成 → 按序号选攻击
+          if (this.p1Seq % 2 === 0) { this.cannonN = 0; this.cannonT = 0.14; this.setAct('windCannon'); }
+          else { this.setAct('tornadoSpin'); }
+        });
+      }
+      else if (this.act === 'windCannon') {
+        this.hoverDrift(dt, p, 0.6);
+        this.cannonT -= dt;
+        const maxShots = 6;   // 4 → 6 发提升密度
+        if (this.cannonT <= 0 && this.cannonN < maxShots) {
+          this.cannonN++; this.cannonT = 0.14;
+          this.fireWindCannon(g, p);
+        }
+        if (this.cannonN >= maxShots && this.actT > 0.4) {
+          this.p1Seq++;
+          this.pickTelePos(g); this.setAct('teleport');
         }
       }
-      // 万羽天葬落点预警计时
-      this.fallMarks = this.fallMarks.filter(m => {
-        m.t -= dt;
-        if (m.t <= 0) {
-          g.bullets.push(new Bullet(m.x, -30, 0, 430,
-            { kind: 'feather', r: 9, dmg: 12 * g.atkScale, life: 4, color: '#f4f6f2' }));
-          return false;
+      else if (this.act === 'tornadoSpin') {
+        // Boss 快速原地旋转蓄力 → 生成龙卷风
+        this.hoverDrift(dt, p, 0.3);
+        if (!this.actFired && this.actT > 0.15) {
+          this.actFired = true;
+          this.spinT = 0.5;            // 触发 0.5s 高速自旋
+          g.toast('龙卷风！', 1.0, 'lt');
         }
-        return true;
-      });
-
-      if (this.state === 'fight') {
-        // 缓慢游弋
-        this.baseY += (clamp(p.y + 20, 110, CFG.GROUND_Y - 140) - this.baseY) * dt * 1.1;
-        this.y = this.baseY + Math.sin(this.t * 1.7) * 42;
-        this.x = this.hoverX + Math.sin(this.t * 0.9) * 66;
-        this.skillT -= dt;
-        if (this.skillT <= 0) {
-          const order = ['needles', 'cry', 'dive', 'whirl'];
-          const next = order[this.seq % order.length];
-          this.seq++;
-          this.stateT = 0;
-          // 半血后每 3 个技能插播一次万羽天葬，节奏加快
-          if (this.hp <= this.maxHp * 0.5 && this.seq % 3 === 0) {
-            this.state = 'burialUp';
-            this.skillT = rand(3.0, 3.8);
-            return;
-          }
-          this.skillT = rand(3.6, 4.6);
-          this.state = next;
-          if (next === 'cry') { this.waveIdx = 0; this.waveT = 0.7; g.toast('鹤鸣震荡！', 1.2, 'lt'); SFX.sweep(); }
-          if (next === 'needles') { this.needleN = 0; this.needleT = 0.1; }
-          if (next === 'dive') { g.toast('鹤仙入天！', 1.2, 'lt'); }
-          if (next === 'whirl') { this.spawnWhirl(g); g.toast('旋羽领域！', 1.2, 'lt'); }
+        if (this.actT > 0.65 && this.spinT <= 0 && this.tornadoes.length === 0) {
+          this.spawnTornado(g, p, 1);
         }
-      }
-      else if (this.state === 'needles') {
-        this.hoverDrift(dt, p);
-        this.needleT -= dt;
-        if (this.needleT <= 0 && this.needleN < 5) {
-          this.needleN++; this.needleT = 0.36;
-          const a = Math.atan2(p.y - this.y, p.x - this.x) + rand(-0.3, 0.3);
-          const b = new Bullet(this.x - 60, this.y - 25,
-            Math.cos(a) * 350, Math.sin(a) * 350,
-            { kind: 'feather', r: 7, dmg: 13 * g.atkScale, life: 7, color: '#fff',
-              homing: true, turnRate: 1.0, hp: 1, invuln: 3 });
-          this.needles.push({ b, t: 3.2, boosted: false });
-          g.bullets.push(b);
-          SFX.enemyShoot();
-        }
-        if (this.needleN >= 5 && this.stateT > 2.0) { this.state = 'fight'; this.stateT = 0; }
-      }
-      else if (this.state === 'cry') {
-        this.hoverDrift(dt, p, 0.4);
-        this.waveT -= dt;
-        if (this.waveT <= 0 && this.waveIdx < 3) {
-          // 三层声波圈：速度不同均可扩散至全屏；密度疏密交替（密圈 24 发 / 疏圈 14 发）
-          const speeds = [150, 210, 280];
-          const counts = [24, 14, 24];
-          const sp = speeds[this.waveIdx];
-          const n = counts[this.waveIdx];
-          for (let i = 0; i < n; i++) {
-            const a = i * TAU / n + this.waveIdx * 0.21;
-            g.bullets.push(new Bullet(this.x - 50, this.y - 25, Math.cos(a) * sp, Math.sin(a) * sp,
-              { kind: 'wave', r: this.waveIdx === 1 ? 15 : 13, dmg: 11 * g.atkScale, life: 7, color: '#38bdf8' }));
-          }
-          this.waveIdx++; this.waveT = 0.55;
-          g.shake(3); SFX.enemyShoot();
-        }
-        if (this.waveIdx >= 3 && this.stateT > 3.2) { this.state = 'fight'; this.stateT = 0; }
-      }
-      else if (this.state === 'dive') {
-        // dive 阶段内部再分：up → aim → fall → blast
-        if (!this.phase || this.phase === 'up') {
-          this.phase = 'up';
-          this.x += (this.hoverX - this.x) * dt * 2;
-          this.y += (-70 - this.y) * dt * 2.4;
-          if (this.stateT > 0.9 && this.y < -20) { this.phase = 'aim'; this.stateT = 0; this.aim = { x: p.x }; }
-        } else if (this.phase === 'aim') {
-          // 顶部悬停锁定，落点预警
-          this.aim.x += (p.x - this.aim.x) * dt * 2.0;
-          if (this.stateT > 0.85) {
-            this.phase = 'fall';
-            this.x = this.aim.x; this.y = -40;
-            this.contactDmg = Math.round(26 * g.atkScale);
-            SFX.dash(); g.shake(4);
-          }
-        } else if (this.phase === 'fall') {
-          this.y += 780 * dt;
-          if (this.y >= CFG.GROUND_Y - 64) {
-            this.phase = 'blast'; this.stateT = 0;
-            this.contactDmg = this.contactDmgBase || 20;
-            g.shake(10);
-            burst(g, this.x, CFG.GROUND_Y - 30, 16, ['#fff', '#c9d2cc', '#8a5a2b'], 260, 5, 0.5);
-            for (let i = 0; i < 8; i++) {
-              const a = i * TAU / 8;
-              g.bullets.push(new Bullet(this.x, CFG.GROUND_Y - 60, Math.cos(a) * 250, Math.sin(a) * 250,
-                { kind: 'wave', r: 12, dmg: 12 * g.atkScale, life: 3, color: '#38bdf8' }));
-            }
-            SFX.explode();
-          }
-        } else if (this.phase === 'blast') {
-          // 回归
-          this.y += (this.baseY - this.y) * dt * 2.2;
-          if (this.stateT > 0.7) { this.phase = null; this.state = 'fight'; this.stateT = 0; }
-        }
-      }
-      else if (this.state === 'whirl') {
-        this.hoverDrift(dt, p, 0.5);
-        if (this.stateT > 3.0) {
-          // 结束：羽沿切线飞散
-          for (const b of this.whirlOrbs) b.orbit = null;
-          this.whirlOrbs = [];
-          this.state = 'fight'; this.stateT = 0;
-        }
-      }
-      else if (this.state === 'burialUp') {
-        this.y += (-60 - this.y) * dt * 2.2;
-        this.x += (CFG.W * 0.55 - this.x) * dt * 1.5;
-        if (this.stateT > 1.1 && this.y < -10) {
-          this.state = 'burial'; this.stateT = 0;
-          this.fallRound = 0; this.fallT = 0.2;
-          g.toast('万羽天葬！', 1.6, 'lt'); SFX.sweep(); g.shake(5);
-        }
-      }
-      else if (this.state === 'burial') {
-        this.fallT -= dt;
-        if (this.fallT <= 0 && this.fallRound < 4) {
-          // 新一轮落羽：全屏宽度投放，后期密度增大、预警更短（落点疏密随机）
-          this.fallRound++;
-          const n = this.fallRound >= 3 ? 16 : 12;
-          const warn = this.fallRound >= 3 ? 0.55 : 0.75;
-          for (let i = 0; i < n; i++) this.fallMarks.push({ x: rand(40, CFG.W - 40), t: warn + i * 0.04 });
-          this.fallT = 0.95;
-        }
-        if (this.fallRound >= 4 && this.fallMarks.length === 0 && this.stateT > 1.5) {
-          this.state = 'fight'; this.stateT = 0;
+        if (this.actT > 2.0) {
+          this.p1Seq++;
+          this.pickTelePos(g); this.setAct('teleport');
         }
       }
     }
+    /* ---------- 阶段转换：锁血10s ---------- */
+    updatePhaseTrans(dt, g, p) {
+      // 缓慢升至场中高空
+      this.baseY += (CFG.H * 0.34 - this.baseY) * dt * 0.8;
+      this.y = this.baseY + Math.sin(this.t * 1.5) * 18;
+      this.x += (CFG.W * 0.5 - this.x) * dt * 0.8;
+      this.phaseTransT -= dt;
+      // 蓝光粒子环绕
+      if (Math.random() < 0.6) {
+        g.particles.push(new Particle(
+          this.x + rand(-44, 44), this.y + rand(-54, 54),
+          rand(-30, 30), rand(-50, -10), rand(0.4, 0.8), rand(3, 6), '#7fd8ff'));
+      }
+      if (this.phaseTransT <= 0) {
+        this.state = 'p2'; this.stateT = 0;
+        this.contactDmg = this._contactBase;
+        // 入 P2 冲击波
+        this.shockwaves.push({ x: this.x, y: this.y, r: 20, vr: 500, t: 0, life: 1.0,
+          dmg: Math.round(18 * g.atkScale), dealt: false });
+        g.shake(8); SFX.phaseRise();
+        this.blueFlash = 0.6;
+        this.setAct('fly');
+      }
+    }
+    /* ---------- P2：飞行 + 镜面 + 反射激光 + 双龙卷风 + 风刃 ---------- */
+    updateP2(dt, g, p) {
+      // P2 持续飞行，攻击频率更高
+      this.baseY += (clamp(p.y + 10, 100, CFG.GROUND_Y - 160) - this.baseY) * dt * 1.4;
+      this.y = this.baseY + Math.sin(this.t * 2.2) * 50;
+      this.x = this.hoverX + Math.sin(this.t * 1.1) * 100;
+
+      if (this.act === 'fly') {
+        if (this.actT > 0.8) this.setAct('placeMirrors');
+      }
+      else if (this.act === 'placeMirrors') {
+        if (!this.actFired) { this.actFired = true; this.placeMirrors(g); g.toast('镜面阵！', 0.9, 'lt'); }
+        if (this.actT > 0.7) this.setAct('reflectLaser');
+      }
+      else if (this.act === 'reflectLaser') {
+        if (!this.actFired && this.actT > 0.25) { this.actFired = true; this.fireReflectLaser(g, p); }
+        if (this.actT > 1.5) this.setAct('dualTornadoSpin');
+      }
+      else if (this.act === 'dualTornadoSpin') {
+        // Boss 旋转蓄力 → 双龙卷风
+        if (!this.actFired && this.actT > 0.15) {
+          this.actFired = true;
+          this.spinT = 0.45;
+          g.toast('双龙卷风！', 0.9, 'lt');
+        }
+        if (this.actT > 0.6 && this.spinT <= 0 && this.tornadoes.length === 0) {
+          this.spawnTornado(g, p, 2);
+        }
+        if (this.actT > 1.6) this.setAct('windBlade');
+      }
+      else if (this.act === 'windBlade') {
+        if (!this.actFired && this.actT > 0.2) { this.actFired = true; this.fireWindBlade(g, p); }
+        if (this.actT > 0.8) { this.cannonN = 0; this.cannonT = 0.1; this.setAct('rapidCannon'); }
+      }
+      else if (this.act === 'rapidCannon') {
+        // P2 追加：快速 8 发风炮连射（提升密度）
+        this.hoverDrift(dt, p, 0.8);
+        this.cannonT -= dt;
+        if (this.cannonT <= 0 && this.cannonN < 8) {
+          this.cannonN++; this.cannonT = 0.1;
+          this.fireWindCannon(g, p);
+        }
+        if (this.cannonN >= 8 && this.actT > 0.3) {
+          this.pickTelePos(g); this.setAct('teleportEnd');
+        }
+      }
+      else if (this.act === 'teleportEnd') {
+        this.updateTeleport(dt, g, () => this.setAct('fly'));
+      }
+    }
+    /* ---------- 瞬移通用逻辑 ---------- */
+    updateTeleport(dt, g, onDone) {
+      // 0~0.13s 淡出；0.13~0.17s 瞬移跳点；0.17~0.4s 淡入；0.4s 完成
+      if (this.actT < 0.13) {
+        this.teleFade = this.actT / 0.13;
+        this.contactDmg = 0;
+      } else if (this.actT < 0.17) {
+        if (this.teleTarget) {
+          // 残影点（旧位置）
+          for (let i = 0; i < 12; i++) {
+            this.teleGlow.push({ x: this.x + rand(-36, 36), y: this.y + rand(-48, 48), t: 0.45 });
+          }
+          this.x = this.teleTarget.x; this.y = this.teleTarget.y;
+          this.baseY = this.y;
+          this.teleTarget = null;
+          // 新位置爆点
+          burst(g, this.x, this.y, 14, ['#7fd8ff', '#bfe9ff', '#fff'], 180, 5, 0.4);
+          // 落点环形气波
+          this.teleGlow.push({ x: this.x, y: this.y, t: 0.5 });
+          SFX.craneTele();
+        }
+      } else if (this.actT < 0.4) {
+        this.teleFade = 1 - (this.actT - 0.17) / 0.23;
+      } else {
+        this.teleFade = 0;
+        this.contactDmg = this._contactBase;
+        onDone();
+      }
+    }
+    pickTelePos(g) {
+      this.teleTarget = {
+        x: rand(CFG.W * 0.22, CFG.W * 0.78),
+        y: rand(110, CFG.GROUND_Y - 210)
+      };
+    }
+    setAct(act) { this.act = act; this.actT = 0; this.actFired = false; }
     hoverDrift(dt, p, spd = 1) {
-      this.baseY += (clamp(p.y + 20, 110, CFG.GROUND_Y - 140) - this.baseY) * dt * 1.1 * spd;
+      this.baseY += (clamp(p.y + 20, 110, CFG.GROUND_Y - 150) - this.baseY) * dt * 1.1 * spd;
       this.y = this.baseY + Math.sin(this.t * 1.7) * 42;
       this.x = this.hoverX + Math.sin(this.t * 0.9) * 66;
     }
-    spawnWhirl(g) {
-      // 14 根羽毛环绕，半径渐扩至全屏（70 → ~450），寿命覆盖整个领域
-      for (let i = 0; i < 14; i++) {
-        const ang = i * TAU / 14;
-        const b = new Bullet(this.x, this.y, 0, 0,
-          { kind: 'feather', r: 8, dmg: 11 * g.atkScale, life: 5.0, color: '#fff' });
-        b.orbit = { ang, angSpd: 2.2, radius: 70, grow: 90, pivot: () => this.dead ? null : { x: this.x, y: this.y } };
-        this.whirlOrbs.push(b);
-        g.bullets.push(b);
-      }
-      SFX.enemyShoot();
+    /* ---------- 攻击：风炮（P2 更大更密 + 风拖尾） ---------- */
+    fireWindCannon(g, p) {
+      const a = Math.atan2(p.y - this.y, p.x - this.x);
+      const p2 = this.phase === 2;
+      const r = p2 ? 12 : 8;
+      const dmg = Math.round((p2 ? 14 : 11) * g.atkScale);
+      const opts = { kind: 'windBolt', r, dmg, life: 4, angle: a };
+      if (p2) opts.trailCols = ['#bfe9ff', '#5fd0f0', '#1d6f7e'];   // P2 风拖尾
+      g.bullets.push(new Bullet(this.x - 50, this.y - 20,
+        Math.cos(a) * 520, Math.sin(a) * 520, opts));
+      SFX.craneWind();
     }
-    render(ctx) {
-      // 天空俯冲落点预警
-      if (this.state === 'dive' && this.phase === 'aim') {
-        const on = Math.floor(this.t * 10) % 2 === 0;
-        ctx.save();
-        ctx.fillStyle = on ? 'rgba(255,60,60,0.4)' : 'rgba(255,60,60,0.18)';
-        ctx.fillRect(this.aim.x - 48, CFG.GROUND_Y - 26, 96, 26);
-        ctx.strokeStyle = '#ff5252'; ctx.lineWidth = 2;
-        ctx.strokeRect(this.aim.x - 48, CFG.GROUND_Y - 26, 96, 26);
-        ctx.restore();
+    /* ---------- 攻击：风刃（P2：5 发扇形 + 风拖尾 + 更大） ---------- */
+    fireWindBlade(g, p) {
+      const base = Math.atan2(p.y - this.y, p.x - this.x);
+      const p2 = this.phase === 2;
+      const r = p2 ? 13 : 9;
+      const dmg = Math.round((p2 ? 16 : 13) * g.atkScale);
+      const n = p2 ? 5 : 3;
+      const spread = p2 ? 0.22 : 0.3;
+      for (let i = 0; i < n; i++) {
+        const off = (i - (n - 1) / 2) * spread;
+        const a = base + off;
+        const opts = { kind: 'windBlade', r, dmg, life: 4, angle: a, spinRate: 8 };
+        if (p2) opts.trailCols = ['#bfe9ff', '#5fd0f0', '#1d6f7e'];
+        g.bullets.push(new Bullet(this.x - 40, this.y - 10,
+          Math.cos(a) * 440, Math.sin(a) * 440, opts));
       }
-      // 万羽天葬落点预警圈
-      for (const m of this.fallMarks) {
-        const on = Math.floor(this.t * 10) % 2 === 0;
-        ctx.save();
-        ctx.strokeStyle = on ? 'rgba(255,80,80,0.9)' : 'rgba(255,80,80,0.4)';
-        ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(m.x, CFG.GROUND_Y - 12, 22, 0, TAU); ctx.stroke();
-        ctx.fillStyle = on ? 'rgba(255,60,60,0.3)' : 'rgba(255,60,60,0.12)';
-        ctx.beginPath(); ctx.arc(m.x, CFG.GROUND_Y - 12, 18, 0, TAU); ctx.fill();
-        ctx.restore();
+      SFX.craneWind();
+    }
+    /* ---------- 攻击：龙卷风（漏斗形：上宽下窄，贴地蛇形横移，留顶部空隙） ---------- */
+    spawnTornado(g, p, count) {
+      for (let i = 0; i < count; i++) {
+        const sx = count === 1
+          ? rand(CFG.W * 0.3, CFG.W * 0.7)
+          : (i === 0 ? CFG.W * 0.28 : CFG.W * 0.72);
+        // 龙卷风底部贴地，高度约 300px，顶部在 GROUND_Y-300=170，与屏幕顶(40)留 130px 空隙
+        const dir = p.x > sx ? 1 : -1;   // 初始朝玩家方向横移
+        this.tornadoes.push({
+          x: sx, t: 0,
+          dir, spd: 65, freq: 1.6, amp: 0.5, ph: rand(0, TAU),
+          life: 9, hitCd: 0,
+          topR: 48, botR: 14, height: 300,
+          spin: 0, born: 0   // born: 0→1 渐入动画
+        });
       }
-      // 俯冲时身体垂直；Hexian.png 272×416，缩放 0.8125 → 显示约 221×338（与原尺寸一致）
-      const dive = this.state === 'dive' && (this.phase === 'fall');
-      drawBossSprite(ctx, Sprites.craneL, this.x, this.y, 0.8125, 0.8125, dive ? Math.PI * 0.5 : Math.sin(this.t * 2) * 0.07, this.flash);
-      // 鹤鸣时颈部声波纹：三层扩散环，从喙部发出（Hexian.png 喙部约在精灵 (70,165)）
-      if (this.state === 'cry') {
-        const cx = this.x - 50, cy = this.y - 25;
-        const prog = (this.stateT % 0.85) / 0.85;
-        for (let i = 0; i < 3; i++) {
-          const p = prog - i * 0.33;
-          if (p <= 0) continue;
-          const rr = 40 + p * 170;
-          const al = 0.95 - p * 0.75;
-          ctx.strokeStyle = `rgba(8,22,44,${al * 0.6})`;
-          ctx.lineWidth = 8;
-          ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
-          ctx.strokeStyle = `rgba(56,189,248,${al})`;
-          ctx.lineWidth = 4;
-          ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+      SFX.craneTornado();
+    }
+    updateTornadoes(dt, g, p) {
+      for (let i = this.tornadoes.length - 1; i >= 0; i--) {
+        const t = this.tornadoes[i];
+        t.t += dt; t.life -= dt; t.spin += dt * 7;
+        t.born = Math.min(1, t.born + dt * 3);
+        if (t.hitCd > 0) t.hitCd -= dt;
+        // 蛇形横移：方向 dir ± 正弦摆动（仅水平移动，贴地不动）
+        const sway = Math.sin(t.t * t.freq + t.ph) * t.amp;
+        const moveDir = t.dir + sway * 0.6;
+        t.x += moveDir * t.spd * dt;
+        // 左右边界反弹
+        if (t.x < 50) { t.x = 50; t.dir = 1; }
+        if (t.x > CFG.W - 50) { t.x = CFG.W - 50; t.dir = -1; }
+        // 接触判定：漏斗形主体（底部 y=GROUND_Y，顶部 y=GROUND_Y-height）
+        // 玩家在漏斗高度范围内、水平距离 < 该高度处的漏斗半径时受伤
+        const botY = CFG.GROUND_Y;
+        const topY = CFG.GROUND_Y - t.height;
+        if (p.y > topY && p.y < botY) {
+          const yt = (p.y - topY) / t.height;   // 0=顶部 1=底部
+          const curR = t.topR + (t.botR - t.topR) * yt;
+          if (t.hitCd <= 0 && Math.abs(t.x - p.x) < curR + p.radius * 0.6) {
+            t.hitCd = 0.5;
+            p.hurt(Math.round(14 * g.atkScale), g, this.dsrc);
+            burst(g, p.x, p.y, 5, ['#7fd8ff', '#fff'], 150, 3, 0.25);
+          }
         }
-        ctx.strokeStyle = 'rgba(235,250,255,0.9)';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath(); ctx.arc(cx, cy, 34 + prog * 46, 0, TAU); ctx.stroke();
+        if (t.life <= 0 || this.dead) this.tornadoes.splice(i, 1);
       }
-      // 旋羽领域旋转气旋
-      if (this.state === 'whirl') {
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    }
+    /* ---------- 镜面（P2，可被玩家击碎，至少 10 下） ---------- */
+    placeMirrors(g) {
+      this.mirrors.length = 0;
+      const ps = [
+        { x: CFG.W * 0.22, y: CFG.GROUND_Y - 200 },
+        { x: CFG.W * 0.78, y: CFG.GROUND_Y - 200 },
+        { x: CFG.W * 0.32, y: CFG.GROUND_Y - 340 },
+        { x: CFG.W * 0.68, y: CFG.GROUND_Y - 340 }
+      ];
+      for (const pos of ps) {
+        this.mirrors.push({ x: pos.x, y: pos.y, ang: rand(0, TAU), spin: 1.4, t: 0, born: 0, dy: 0,
+          hp: 10, maxHp: 10, flash: 0, dead: false, size: 22 });
+      }
+      SFX.craneMirror();
+    }
+    updateMirrors(dt, g) {
+      for (let i = this.mirrors.length - 1; i >= 0; i--) {
+        const m = this.mirrors[i];
+        m.t += dt;
+        m.born = Math.min(1, m.born + dt * 2);
+        m.ang += m.spin * dt;
+        m.dy = Math.sin(m.t * 1.5) * 8;
+        m.flash = Math.max(0, m.flash - dt * 4);
+        // 死亡后渐隐
+        if (m.dead) {
+          m.born -= dt * 3;
+          if (m.born <= 0) this.mirrors.splice(i, 1);
+        }
+      }
+      // 玩家子弹 vs 镜面
+      for (const b of g.bullets) {
+        if (!b.friendly || b.dead) continue;
+        for (const m of this.mirrors) {
+          if (m.dead) continue;
+          const s = m.size * m.born;
+          if (s < 4) continue;
+          const dx = b.x - m.x, dy = b.y - (m.y + m.dy);
+          if (dx * dx + dy * dy < (s + b.r) * (s + b.r)) {
+            m.hp--;
+            m.flash = 1;
+            b.dead = true;
+            burst(g, b.x, b.y, 4, ['#bfe9ff', '#fff', '#5fd0f0'], 140, 3, 0.22);
+            SFX.melee();
+            if (m.hp <= 0) {
+              m.dead = true;
+              // 镜面碎裂：玻璃飞溅粒子 + 冲击波
+              burst(g, m.x, m.y + m.dy, 18, ['#bfe9ff', '#5fd0f0', '#fff', '#1d6f7e'], 240, 5, 0.5);
+              this.shockwaves.push({ x: m.x, y: m.y + m.dy, r: 12, vr: 320, t: 0, life: 0.5,
+                dmg: 0, dealt: true });   // 纯视觉气波（无伤害）
+              g.shake(4);
+              SFX.explode();
+            }
+            break;
+          }
+        }
+      }
+    }
+    /* ---------- 反射激光（boss → mirror → 延伸方向，P2 多发齐射） ---------- */
+    fireReflectLaser(g, p) {
+      const alive = this.mirrors.filter(m => !m.dead && m.born > 0.5);
+      if (alive.length === 0) return;
+      // P2：同时打 2 面镜子（提升密度），P1 路径不会走到这
+      const n = Math.min(2, alive.length);
+      const picked = [];
+      for (let k = 0; k < n; k++) {
+        let m;
+        do { m = alive[randi(0, alive.length - 1)]; }
+        while (picked.includes(m));
+        picked.push(m);
+        const seg1 = { x1: this.x, y1: this.y, x2: m.x, y2: m.y };
+        const dx = p.x - m.x, dy = p.y - m.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const seg2 = { x1: m.x, y1: m.y, x2: m.x + dx / len * 900, y2: m.y + dy / len * 900 };
+        this.beams.push({
+          segs: [seg1, seg2], t: 0, warn: 0.7, active: 0.4,
+          dealt: false, dead: false, dmg: Math.round(16 * g.atkScale)
+        });
+      }
+      SFX.craneLaser();
+    }
+    updateBeams(dt, g, p) {
+      for (let i = this.beams.length - 1; i >= 0; i--) {
+        const b = this.beams[i];
+        b.t += dt;
+        if (b.t >= b.warn && !b.dealt) {
+          b.dealt = true;
+          g.shake(6); SFX.zap();
+          for (const seg of b.segs) {
+            const dx = seg.x2 - seg.x1, dy = seg.y2 - seg.y1;
+            const tt = clamp(((p.x - seg.x1) * dx + (p.y - seg.y1) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+            const cx = seg.x1 + dx * tt, cy = seg.y1 + dy * tt;
+            burst(g, cx, cy, 8, ['#7fd8ff', '#fff', '#5fd0f0'], 180, 4, 0.3);
+            if ((p.x - cx) ** 2 + (p.y - cy) ** 2 < (11 + p.radius * 0.7) ** 2) {
+              p.hurt(b.dmg, g, this.dsrc);
+            }
+          }
+        }
+        if (b.t > b.warn + b.active) b.dead = true;
+        if (b.dead) this.beams.splice(i, 1);
+      }
+    }
+    /* ---------- 气波冲击 ---------- */
+    updateShockwaves(dt, g, p) {
+      for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+        const s = this.shockwaves[i];
+        s.t += dt;
+        s.r += s.vr * dt;
+        s.vr *= (1 - dt * 0.8);
+        // 环带判定
+        if (!s.dealt && s.t > 0.08 && s.dmg > 0) {
+          const d = Math.hypot(p.x - s.x, p.y - s.y);
+          if (d < s.r + 28 && d > s.r - 28) {
+            s.dealt = true;
+            p.hurt(s.dmg, g, this.dsrc);
+          }
+        }
+        if (s.t > s.life) this.shockwaves.splice(i, 1);
+      }
+    }
+    /* ---------- 渲染 ---------- */
+    render(ctx) {
+      // 龙卷风
+      this.renderTornadoes(ctx);
+      // 镜面
+      this.renderMirrors(ctx);
+      // 反射激光
+      this.renderBeams(ctx);
+      // 气波
+      this.renderShockwaves(ctx);
+      // 瞬移残影
+      for (const gl of this.teleGlow) {
+        const a = clamp(gl.t / 0.4, 0, 1);
+        ctx.fillStyle = `rgba(120,220,255,${a * 0.5})`;
+        ctx.beginPath(); ctx.arc(gl.x, gl.y, 6 * a + 2, 0, TAU); ctx.fill();
+      }
+      // Boss 本体（瞬移淡入淡出；Hexian.png 272×416，缩放 0.8125）
+      const alpha = 1 - this.teleFade;
+      if (alpha > 0.02) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        const ang = Math.sin(this.t * 2) * 0.07 + this.spinAng;   // 自旋叠加（生成龙卷风时高速旋转）
+        drawBossSprite(ctx, Sprites.craneL, this.x, this.y, 0.8125, 0.8125, ang, this.flash);
+        // 阶段转换蓝闪
+        if (this.blueFlash > 0) {
+          drawSpriteTinted(ctx, Sprites.craneL, this.x, this.y,
+            Sprites.craneL.width * 0.8125, Sprites.craneL.height * 0.8125, ang, '#5fd0f0', this.blueFlash * 0.85);
+        }
+        ctx.restore();
+      }
+      // Boss 自旋时的青色旋转气环（视觉强调）
+      if (this.spinT > 0) {
+        const sR = 50 + Math.sin(this.t * 10) * 10;
+        ctx.strokeStyle = `rgba(95,208,240,${0.5 * (this.spinT / 0.5)})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(this.x, this.y, sR, this.spinAng, this.spinAng + Math.PI * 1.4); ctx.stroke();
+        ctx.strokeStyle = `rgba(191,233,255,${0.7 * (this.spinT / 0.5)})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(this.x, this.y, sR * 0.7, -this.spinAng * 1.3, -this.spinAng * 1.3 + Math.PI); ctx.stroke();
+      }
+      // 锁血期蓝光光环
+      if (this.state === 'phaseTrans') {
+        const r = 70 + Math.sin(this.t * 4) * 12;
+        ctx.strokeStyle = `rgba(95,208,240,${0.35 + Math.sin(this.t * 4) * 0.15})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.7, 0, TAU); ctx.stroke();
+      }
+    }
+    renderTornadoes(ctx) {
+      for (const t of this.tornadoes) {
+        const fade = clamp(t.life / 1.5, 0, 1);   // 末期淡出
+        const born = t.born;                      // 0→1 渐入
+        ctx.save();
+        ctx.globalAlpha = fade * born;
+        // 用重绘的龙卷风精灵贴图（Hexian-feng.png 144×404）
+        // 图像底部对齐 GROUND_Y，顶部在 GROUND_Y - drawH
+        const spr = Sprites.hexianFeng;
+        const imgW = spr.width, imgH = spr.height;   // 144 × 404
+        // 目标显示高度 = t.height（300），按比例缩放宽度
+        const drawH = t.height * born;
+        const scale = drawH / imgH;
+        const drawW = imgW * scale;
+        const cx = t.x;
+        const botY = CFG.GROUND_Y;
+        const drawX = cx - drawW / 2;
+        const drawY = botY - drawH;
+
+        // 1. 底部接地扬尘阴影（精灵图底部增强接地感）
+        ctx.fillStyle = 'rgba(60,50,40,0.35)';
+        ctx.beginPath(); ctx.ellipse(cx, botY - 2, drawW * 0.2 * born + 10, 6, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(120,100,80,0.22)';
+        ctx.beginPath(); ctx.ellipse(cx, botY - 2, drawW * 0.28 * born + 16, 9, 0, 0, TAU); ctx.fill();
+
+        // 2. 龙卷风精灵贴图
+        if (spr.width > 0 && spr.height > 0) {
+          ctx.drawImage(spr, drawX, drawY, drawW, drawH);
+        }
+
+        // 3. 旋转气流强调：2 道旋转弧线叠在精灵上（黑边 + 青白线，增强动感）
+        const topR = drawW * 0.33, botR = drawW * 0.1;
+        const topY = drawY;
+        const N = 10;
+        for (let s = 0; s < 2; s++) {
+          const phase = t.spin + s * Math.PI;
+          ctx.strokeStyle = 'rgba(11,22,34,0.55)'; ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          for (let j = 0; j <= N; j++) {
+            const yt = j / N;
+            const yy = topY + yt * drawH;
+            const rr = topR + (botR - topR) * yt;
+            const ang = phase + yt * Math.PI * 2.0;
+            const px = cx + Math.cos(ang) * rr;
+            const py = yy + Math.sin(ang) * rr * 0.3;
+            if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(191,233,255,0.5)'; ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          for (let j = 0; j <= N; j++) {
+            const yt = j / N;
+            const yy = topY + yt * drawH;
+            const rr = topR + (botR - topR) * yt;
+            const ang = phase + yt * Math.PI * 2.0;
+            const px = cx + Math.cos(ang) * rr;
+            const py = yy + Math.sin(ang) * rr * 0.3;
+            if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+        }
+
+        // 4. 底部碎屑扬尘粒子（少量，旋转飞溅）
+        for (let d = 0; d < 4; d++) {
+          const ang = t.spin * 0.5 + d * TAU / 4;
+          const dx = Math.cos(ang) * botR * 1.5;
+          const dy = Math.sin(ang) * botR * 0.4;
+          ctx.fillStyle = 'rgba(140,120,90,0.5)';
+          ctx.beginPath(); ctx.arc(cx + dx, botY - 4 + dy, 2.5, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    renderMirrors(ctx) {
+      for (const m of this.mirrors) {
+        const s = m.size * m.born;
+        if (s < 1) continue;
+        const hpRatio = m.hp / m.maxHp;   // 1=满血 0=快碎
+        ctx.save();
+        ctx.translate(m.x, m.y + m.dy);
+        // 光晕（受损时光晕变红）
+        const haloA = m.flash > 0 ? 0.5 + m.flash * 0.5 : 0.22;
+        ctx.fillStyle = m.flash > 0 ? `rgba(255,120,120,${haloA})` : 'rgba(120,220,255,0.22)';
+        ctx.beginPath(); ctx.arc(0, 0, s * 1.9, 0, TAU); ctx.fill();
+        ctx.rotate(m.ang);
+        // 黑边菱形
+        ctx.fillStyle = '#0b1622';
+        ctx.beginPath();
+        ctx.moveTo(0, -s - 2); ctx.lineTo(s + 2, 0); ctx.lineTo(0, s + 2); ctx.lineTo(-s - 2, 0); ctx.closePath(); ctx.fill();
+        // 镜面深青（受损时变暗偏红）
+        ctx.fillStyle = hpRatio > 0.5 ? '#1d6f7e' : (hpRatio > 0.25 ? '#5a4a4a' : '#6a2a2a');
+        ctx.beginPath();
+        ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath(); ctx.fill();
+        // 镜面亮青（受损时减弱）
+        ctx.fillStyle = hpRatio > 0.5 ? '#5fd0f0' : `rgba(95,208,240,${hpRatio * 0.7})`;
+        ctx.beginPath();
+        ctx.moveTo(0, -s + 2); ctx.lineTo(s - 2, 0); ctx.lineTo(0, s - 2); ctx.lineTo(-s + 2, 0); ctx.closePath(); ctx.fill();
+        // 白色高光斜线（受损时减弱）
+        ctx.strokeStyle = `rgba(255,255,255,${0.6 + m.flash * 0.4})`; ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.moveTo(-s * 0.5, -s * 0.3); ctx.lineTo(s * 0.3, s * 0.5); ctx.stroke();
+        ctx.strokeStyle = `rgba(255,255,255,${0.3 + m.flash * 0.4})`; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(-s * 0.3, s * 0.3); ctx.lineTo(s * 0.4, -s * 0.4); ctx.stroke();
+        // 裂纹（HP 越低裂纹越多）—— 受损后出现
+        if (hpRatio < 0.8) {
+          const cracks = Math.floor((1 - hpRatio) * 5) + 1;   // 1~5 道裂纹
+          ctx.strokeStyle = `rgba(20,20,30,${0.7})`; ctx.lineWidth = 1.4;
+          for (let c = 0; c < cracks; c++) {
+            const a0 = c * 2.4 + (m.t * 0.3);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(a0) * s * 0.9, Math.sin(a0) * s * 0.9);
+            ctx.stroke();
+          }
+        }
+        // 受击白闪叠加
+        if (m.flash > 0) {
+          ctx.fillStyle = `rgba(255,255,255,${m.flash * 0.5})`;
+          ctx.beginPath();
+          ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    renderBeams(ctx) {
+      for (const b of this.beams) {
+        ctx.save();
+        if (b.t < b.warn) {
+          // 预警虚线
+          const on = Math.floor(b.t * 14) % 2 === 0;
+          if (on) {
+            ctx.strokeStyle = 'rgba(95,208,240,0.7)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([12, 10]);
+            for (const seg of b.segs) {
+              ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke();
+            }
+            ctx.setLineDash([]);
+          }
+        } else {
+          // 激光本体：深青外层 → 亮青 → 白芯
+          const a = clamp(1 - (b.t - b.warn) / b.active, 0, 1);
+          ctx.globalAlpha = a;
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = '#3a8f9e'; ctx.lineWidth = 14;
+          for (const seg of b.segs) { ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke(); }
+          ctx.strokeStyle = '#5fd0f0'; ctx.lineWidth = 8;
+          for (const seg of b.segs) { ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke(); }
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+          for (const seg of b.segs) { ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke(); }
+          ctx.globalAlpha = 1;
+        }
+        ctx.restore();
+      }
+    }
+    renderShockwaves(ctx) {
+      for (const s of this.shockwaves) {
+        const a = clamp(1 - s.t / s.life, 0, 1);
+        ctx.save();
+        ctx.strokeStyle = `rgba(95,208,240,${a * 0.8})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = `rgba(255,255,255,${a * 0.9})`;
         ctx.lineWidth = 2;
-        const rr = 100 + this.stateT * 34;
-        ctx.beginPath(); ctx.arc(this.x, this.y, rr, this.t * 3, this.t * 3 + Math.PI * 1.2); ctx.stroke();
-        ctx.beginPath(); ctx.arc(this.x, this.y, rr * 0.72, -this.t * 3.6, -this.t * 3.6 + Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.stroke();
+        ctx.restore();
       }
     }
   }

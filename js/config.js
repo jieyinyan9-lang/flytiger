@@ -670,7 +670,7 @@
       { id: 'cyber',     name: '霓虹喵都',   icon: '🏙️', obs: ['poleT', 'boothL', 'buildM'], scrollMul: 2 },
       { id: 'ocean',     name: '大海',       icon: '🌊', obs: ['reefT', 'reefM', 'coralL'], sea: true },
       { id: 'colosseum', name: '罗马角斗场', icon: '⚔️', obs: ['spikeT', 'spikeM', 'spikeL'], arena: true },
-      // 月痕沙海：特殊关卡（不参与随机抽取，主界面按 1 进入）；夜晚玫红沙漠、缺角月亮漏沙、金字塔与骸骨
+      // 月痕沙海：特殊关卡（不参与随机抽取，仅可从「发现秘境」面板进入，通关后入口消失）；夜晚玫红沙漠、缺角月亮漏沙、金字塔与骸骨
       { id: 'moondesert', name: '月痕沙海', icon: '🌙', obs: ['cactusT', 'cactusM', 'cactusL'], stage: true, desert: true }
     ],
 

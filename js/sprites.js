@@ -771,6 +771,23 @@
     img.src = 'assets/Boss/Hexian.png';
     return cv;
   }
+  /** 鹤仙龙卷风美术资源：加载 assets/Boss/Hexian-feng.png（144×404，静态漏斗形）。
+   *  Sprites.hexianFeng 异步加载到离屏 canvas，渲染时 drawImage 缩放贴地。 */
+  function buildHexianFeng() {
+    const W = 144, H = 404;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] Hexian-feng.png 加载失败');
+    img.src = 'assets/Boss/Hexian-feng.png';
+    return cv;
+  }
 
   /** 祖国人美术资源：加载 assets/Boss/zuguoren.png（240×256，正面像素风）。
    *  Sprites.homelanderL 直接指向本 canvas（正面图无需翻转，异步加载不可 flip 预拷）。 */
@@ -823,6 +840,61 @@
     };
     img.onerror = () => console.warn('[Sprites] dawang_2.png 加载失败');
     img.src = 'assets/Boss/dawang_2.png';
+    return cv;
+  }
+
+  /* ---------------- 斧王阶段3（蜥蜴脸西装礼帽持双斧飞空形态，已朝左） ----------------
+   *  加载 assets/Boss/dawang_3.png（240×304）。Sprites.bossMan3L 直接指向本 canvas（已朝左不翻转）。 */
+  function buildBossMan3() {
+    const W = 240, H = 304;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] dawang_3.png 加载失败');
+    img.src = 'assets/Boss/dawang_3.png';
+    return cv;
+  }
+
+  /* ---------------- 斧王阶段3 追击飞斧（双刃战斧带电光，竖版 128×160） ----------------
+   *  加载 assets/Boss/dawang_3futou.png；游戏内按自旋角旋转绘制（斧刃端为旋转外沿）。 */
+  function buildAxeProj() {
+    const W = 128, H = 160;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] dawang_3futou.png 加载失败');
+    img.src = 'assets/Boss/dawang_3futou.png';
+    return cv;
+  }
+
+  /* ---------------- 斧王阶段3 火车（青电朋克机车+可复制车厢，128×72） ----------------
+   *  加载 assets/Boss/dawang_3huoche.png：源图 x∈[0,58) 为车头（朝左，红色排障器），
+   *  x∈[58,106) 为单节车厢（渲染时复制 4 节），x≥106 透明。游戏内 5 个可破坏部位 = 1 车头 + 4 车厢。 */
+  function buildTrain() {
+    const W = 128, H = 72;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      c.clearRect(0, 0, W, H);
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, 0, 0, W, H);
+    };
+    img.onerror = () => console.warn('[Sprites] dawang_3huoche.png 加载失败');
+    img.src = 'assets/Boss/dawang_3huoche.png';
     return cv;
   }
 
@@ -1814,9 +1886,13 @@
     homelander: buildZuguoren(),
     bossMan: buildDaWang1(),
     bossHead: buildDaWang2(),
+    bossMan3: buildBossMan3(),   // 斧王阶段3（蜥蜴脸西装，临时像素稿）
+    axeProj: buildAxeProj(),     // 追踪斧头（导出参考稿）
+    train: buildTrain(),         // 火车（导出参考稿）
     stranger: buildGuaike(),
     frog: buildFrog(),
     crane: buildCrane(),
+    hexianFeng: buildHexianFeng(),   // 鹤仙龙卷风（144×404，静态漏斗形）
     bigbatA: buildBigBatA(),
     bigbatB: buildBigBatB(),
     /* —— 飞行弹幕类敌人精灵 —— */
@@ -1867,6 +1943,7 @@
   Sprites.homelanderL = Sprites.homelander;  // zuguoren.png 正面图，直接复用（异步加载，不可 flip 预拷）
   Sprites.bossManL = Sprites.bossMan;        // dawang_1.png 正面图，直接复用
   Sprites.bossHeadL = Sprites.bossHead;      // dawang_2.png 正面图，直接复用
+  Sprites.bossMan3L = Sprites.bossMan3;      // dawang_3 正面图，直接复用（临时像素稿）
   Sprites.strangerL = Sprites.stranger;   // guaike.png 已朝左，直接复用（异步加载，不可 flip 预拷）
   Sprites.frogL = Sprites.frog;            // Wage.png 已朝左，直接复用（异步加载，不可 flip 预拷）
   Sprites.craneL = Sprites.crane;          // Hexian.png 已朝左，直接复用（异步加载，不可 flip 预拷）
