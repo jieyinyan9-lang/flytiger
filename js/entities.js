@@ -466,6 +466,25 @@
             Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
         }
       }
+      // 斧王飞斧雷电拖尾：青蓝色分叉闪电粒子 + 电弧感
+      if (this.kind === 'axe' && !this.friendly && !this.neutralized) {
+        this._axeT = (this._axeT || 0) + dt;
+        if (this._axeT > 0.025) {
+          this._axeT = 0;
+          const spd = Math.hypot(this.vx, this.vy) || 1;
+          const bx = -this.vx / spd, by = -this.vy / spd;
+          const cols = ['#7fd8ff', '#a5f3fc', '#ffffff', '#3a8f9e'];
+          for (let i = 0; i < 3; i++) {
+            const jx = rand(-6, 6), jy = rand(-6, 6);
+            g.particles.push(new Particle(
+              this.x + bx * this.r + jx, this.y + by * this.r + jy,
+              bx * rand(40, 180) + rand(-30, 30),
+              by * rand(40, 180) + rand(-30, 30),
+              rand(0.12, 0.3), rand(1.5, 3.5),
+              cols[randi(0, cols.length - 1)]));
+          }
+        }
+      }
       // 火焰弹拖尾：沿飞行反方向持续喷射火焰粒子（弹体越大粒子越粗）；trailCols 可自定义配色（紫焰苹果）
       // trailLite（角色最终形态）：稀疏、细小、短命的微粒，仅作点缀不遮挡战场
       if ((this.fireTrail || this.trailCols) && !this.neutralized) {
@@ -1129,15 +1148,21 @@
       }
       if (k === 'bolt' || k.startsWith('bolt')) {
         const st = BULLET_STYLE['bolt' + this.tier] || BULLET_STYLE.bolt0;
+        // 按 this.r 缩放（BossMan 电击弹 r=13 → 放大），tier 样式为基础尺寸
+        const scale = Math.max(1, this.r / st.r);
+        const br = st.r * scale;
+        const bl = st.len * scale;
         const a = Math.atan2(this.vy, this.vx);
         ctx.save();
         ctx.translate(this.x, this.y); ctx.rotate(a);
+        ctx.shadowColor = st.color;
+        ctx.shadowBlur = 12;
         ctx.fillStyle = st.edge;
-        ctx.fillRect(-st.len / 2 - 2, -st.r * 0.7, st.len + 4, st.r * 1.4);
+        ctx.fillRect(-bl / 2 - 2, -br * 0.7, bl + 4, br * 1.4);
         ctx.fillStyle = st.color;
-        ctx.fillRect(-st.len / 2, -st.r * 0.45, st.len, st.r * 0.9);
+        ctx.fillRect(-bl / 2, -br * 0.45, bl, br * 0.9);
         ctx.fillStyle = '#fff';
-        ctx.fillRect(st.len / 2 - 4, -st.r * 0.25, 4, st.r * 0.5);
+        ctx.fillRect(bl / 2 - 4, -br * 0.25, 4, br * 0.5);
         ctx.restore();
         return;
       }
@@ -1265,7 +1290,17 @@
       if (k === 'axe') {
         // 斧王阶段3 追击飞斧：dawang_3futou 精灵（双刃战斧+电光），绕中心自旋
         if (this.p3spr && Sprites.axeProj) {
-          const s = (this.r / 9) * 0.19;    // r=9 时精灵缩放 0.19 → 显示约 24×30
+          const s = (this.r / 9) * 0.19;    // r=15 时精灵缩放 0.317 → 显示约 40×51
+          // 发光底圈：青蓝色电弧光晕
+          ctx.save();
+          ctx.globalAlpha = 0.5 + Math.sin(this.t * 12) * 0.2;
+          ctx.shadowColor = '#7fd8ff';
+          ctx.shadowBlur = 18;
+          ctx.fillStyle = '#7fe0ff';
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.r * 0.7, 0, TAU);
+          ctx.fill();
+          ctx.restore();
           drawSprite(ctx, Sprites.axeProj, this.x, this.y, s, s, this.spin, 0);
           return;
         }
@@ -1373,7 +1408,7 @@
         // 羽尖高光
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(5, -2, 4, 4);
-        // 红色羽斑（咬剑鹰标识色）
+        // 红色羽斑（铁鹰标识色）
         ctx.fillStyle = '#c0392b';
         ctx.fillRect(-9, -3, 3, 3);
         ctx.restore();

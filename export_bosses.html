@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Boss 图片导出</title>
+<style>
+  body { background:#1b1f2a; color:#dfe6f3; font-family:system-ui,sans-serif; margin:16px; }
+  h2 { font-size:15px; margin:18px 0 6px; color:#9fd0ff; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; }
+  .cell { background:#222838; border:1px solid #333c52; border-radius:6px; padding:6px; text-align:center; }
+  .cell canvas { image-rendering:pixelated; background:
+     repeating-conic-gradient(#2b3245 0% 25%, #252b3b 0% 50%) 0 0/16px 16px; }
+  .cell .nm { font-size:11px; color:#aab6cf; margin-top:4px; word-break:break-all; }
+  #status { color:#7ff0a8; }
+</style>
+</head>
+<body>
+<h2>Boss 图片导出 <span id="status">working…</span></h2>
+<div id="sheet"></div>
+
+<script src="js/config.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/bosses.js"></script>
+<script>
+(function () {
+  'use strict';
+  const EXPORTS = [];   // {name, w, h, url}
+  const sheet = document.getElementById('sheet');
+
+  function addCanvas(name, cv) {
+    const url = cv.toDataURL('image/png');
+    EXPORTS.push({ name, w: cv.width, h: cv.height, url });
+    // 联系表缩略图
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    const t = document.createElement('canvas');
+    const scale = Math.min(1, 180 / Math.max(cv.width, cv.height));
+    t.width = Math.max(1, Math.round(cv.width * scale));
+    t.height = Math.max(1, Math.round(cv.height * scale));
+    const tc = t.getContext('2d');
+    tc.imageSmoothingEnabled = false;
+    tc.drawImage(cv, 0, 0, t.width, t.height);
+    cell.appendChild(t);
+    const lbl = document.createElement('div');
+    lbl.className = 'nm';
+    lbl.textContent = name + ' (' + cv.width + '×' + cv.height + ')';
+    cell.appendChild(lbl);
+    sheet.appendChild(cell);
+  }
+
+  // 水平翻转（与 sprites.js flip 一致）
+  function flipCV(src) {
+    const cv = document.createElement('canvas');
+    cv.width = src.width; cv.height = src.height;
+    const c = cv.getContext('2d');
+    c.save();
+    c.translate(src.width, 0); c.scale(-1, 1);
+    c.imageSmoothingEnabled = false;
+    c.drawImage(src, 0, 0);
+    c.restore();
+    return cv;
+  }
+  // 最近邻放大
+  function scaleCV(src, k) {
+    const cv = document.createElement('canvas');
+    cv.width = src.width * k; cv.height = src.height * k;
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = false;
+    c.drawImage(src, 0, 0, cv.width, cv.height);
+    return cv;
+  }
+  // 自动裁切透明边
+  function autocrop(src, pad) {
+    pad = pad || 2;
+    const w = src.width, h = src.height;
+    const d = src.getContext('2d').getImageData(0, 0, w, h).data;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (d[(y * w + x) * 4 + 3] > 10) {
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+    }
+    if (x1 < 0) return src;
+    x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad);
+    x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
+    const cv = document.createElement('canvas');
+    cv.width = x1 - x0 + 1; cv.height = y1 - y0 + 1;
+    cv.getContext('2d').drawImage(src, -x0, -y0);
+    return cv;
+  }
+
+  // ---------- 像素精灵 Boss ----------
+  // [文件名前缀, 右向精灵, 左向精灵(游戏实际朝向)]
+  const PIX = [
+    ['feizhu',      Sprites.pig,         Sprites.pigL],          // 火焰飞猪王
+    ['leigong',     Sprites.leigong,     Sprites.leigongL],      // 雷公巨兽
+    ['wushi',       Sprites.samurai,     Sprites.samuraiL],      // 飞天日本武士
+    ['yingA',       Sprites.swordEagleA, Sprites.swordEagleAL],  // 铁鹰 帧A
+    ['yingB',       Sprites.swordEagleB, Sprites.swordEagleBL],  // 铁鹰 帧B
+    ['goutou',      Sprites.dogHead,     Sprites.dogHeadL],      // 飞天狗王
+    ['yeji',        Sprites.pheasant,    Sprites.pheasantL],     // 巨型野鸡王
+    ['zuguo',       Sprites.homelander,  Sprites.homelanderL],   // 祖国人
+    ['dawang_tou',  Sprites.bossHead,    Sprites.bossHeadL],     // 大王 第一阶段（巨头）
+    ['dawang_shen', Sprites.bossMan,     Sprites.bossManL],      // 大王 第二阶段（变身）
+    ['dawang_3',    Sprites.bossMan3,    Sprites.bossMan3L],     // 斧王 阶段3（蜥蜴脸西装）
+    ['guaike',      Sprites.stranger,    Sprites.strangerL],     // 怪客
+  ];
+  for (const [pfx, rightSpr, leftSpr] of PIX) {
+    const w = rightSpr.width, h = rightSpr.height;
+    addCanvas(pfx + '_右向_' + w + 'x' + h + '.png', rightSpr);
+    addCanvas(pfx + '_左向_' + w + 'x' + h + '_游戏实际朝向.png', leftSpr);
+    addCanvas(pfx + '_左向_8x放大_' + (w * 8) + 'x' + (h * 8) + '.png', scaleCV(leftSpr, 8));
+  }
+  // 骷髅王：正面骷髅、对称、游戏内直接使用未翻转
+  {
+    const sk = Sprites.skullhead;
+    addCanvas('kulou_正面_' + sk.width + 'x' + sk.height + '.png', sk);
+    addCanvas('kulou_正面_8x放大_' + (sk.width * 8) + 'x' + (sk.height * 8) + '.png', scaleCV(sk, 8));
+  }
+
+  // 追踪斧头 + 火车：正面/对称精灵，导出原尺寸 + 8 倍放大参考稿
+  {
+    const ax = Sprites.axeProj;
+    addCanvas('futou_追踪斧头_' + ax.width + 'x' + ax.height + '.png', ax);
+    addCanvas('futou_追踪斧头_8x放大_' + (ax.width * 8) + 'x' + (ax.height * 8) + '.png', scaleCV(ax, 8));
+  }
+  {
+    const tr = Sprites.train;
+    addCanvas('huoche_火车_' + tr.width + 'x' + tr.height + '.png', tr);
+    addCanvas('huoche_火车_4x放大_' + (tr.width * 4) + 'x' + (tr.height * 4) + '.png', scaleCV(tr, 4));
+  }
+
+  // ---------- 程序化绘制 Boss（狮身人面像 / 牛魔） ----------
+  const stubG = { bossSpawned: 1, playerDps: () => 100, bossHpMul: () => 1 };
+
+  function renderProg(make, W, H, ox, oy, scale) {
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    c.save();
+    c.translate(ox, oy);
+    c.scale(scale, scale);
+    make(c);
+    c.restore();
+    return autocrop(cv, 4);
+  }
+
+  // 狮身人面像：P1(循环1) / P2(循环2) / P3(循环3)
+  try {
+    const SphinxCls = (window.Bosses && window.Bosses.Sphinx) || null;
+    if (!SphinxCls) throw new Error('Sphinx class not exposed');
+    const phases = [
+      ['p1', 1], ['p2', 2], ['p3', 3],
+    ];
+    for (const [ph, cyc] of phases) {
+      const b = new SphinxCls(stubG);
+      b.x = 0; b.y = 0; b.state = ph; b.phase = ph; b.cycle = cyc;
+      b.t = 1.2; b.flash = 0; b.movingDir = 0;
+      b.marks = []; b.hazards = []; b.debris = []; b.pendingSlam = null;
+      b.act = ph === 'p2' ? 'triEye' : null;   // P2 睁眼
+      const cv = renderProg((c) => b.render(c), 640, 680, 320, 400, 2);
+      addCanvas('shishen_' + ph + '_' + cv.width + 'x' + cv.height + '.png', cv);
+    }
+  } catch (e) {
+    console.error('Sphinx export failed:', e);
+  }
+
+  // 牛魔：P1 / P2 / P3（体型随阶段 1 / 1.12 / 1.28）
+  try {
+    const NiuMoCls = (window.Bosses && window.Bosses.NiuMo) || null;
+    if (!NiuMoCls) throw new Error('NiuMo class not exposed');
+    const phases = [['p1', 1], ['p2', 1.12], ['p3', 1.28]];
+    for (const [ph, scl] of phases) {
+      const b = new NiuMoCls(stubG);
+      b.x = 0; b.y = 0; b.state = ph; b.phase = ph; b.scl = scl;
+      b.t = 1.2; b.flash = 0; b.horns = []; b.rings = []; b.aim = null;
+      b._c4 = null; b.lockHpT = 0; b.act = null;
+      const cv = renderProg((c) => b.render(c), 600, 700, 300, 400, 2);
+      addCanvas('niumo_' + ph + '_' + cv.width + 'x' + cv.height + '.png', cv);
+    }
+  } catch (e) {
+    console.error('NiuMo export failed:', e);
+  }
+
+  window.__EXPORTS = EXPORTS;
+  document.getElementById('status').textContent =
+    'done: ' + EXPORTS.length + ' images (window.__EXPORTS)';
+})();
+</script>
+</body>
+</html>

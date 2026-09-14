@@ -898,7 +898,7 @@
     return cv;
   }
 
-  /** 咬剑鹰展翅帧：加载 assets/Boss/ying1.png（224×160，机械鹰翅膀上张，已朝左）。
+  /** 铁鹰展翅帧：加载 assets/Boss/ying1.png（224×160，机械鹰翅膀上张，已朝左）。
    *  Sprites.swordEagleAL 直接指向本 canvas（已朝左，不可 flip 预拷）。 */
   function buildYing1() {
     const W = 224, H = 160;
@@ -916,7 +916,7 @@
     return cv;
   }
 
-  /** 咬剑鹰垂翅帧：加载 assets/Boss/ying2.png（224×160，机械鹰翅膀下垂，已朝左）。
+  /** 铁鹰垂翅帧：加载 assets/Boss/ying2.png（224×160，机械鹰翅膀下垂，已朝左）。
    *  Sprites.swordEagleBL 直接指向本 canvas（已朝左，不可 flip 预拷）。 */
   function buildYing2() {
     const W = 224, H = 160;

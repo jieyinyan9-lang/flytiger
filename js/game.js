@@ -91,7 +91,7 @@
   /** Boss 死法池 key → 显示名 */
   const BOSS_DEATH_NAMES = {
     pigking: '火焰飞猪王', thunderbehemoth: '雷公巨兽', samurai: '飞天日本武士',
-    swordeagle: '咬剑鹰', skullking: '亡灵骷髅王', dogking: '飞天狗王',
+    swordeagle: '铁鹰', skullking: '亡灵骷髅王', dogking: '飞天狗王',
     giantpheasant: '火鸡王', homelander: '怒星使', bossman: '斧王',
     stranger: '怪客', frogking: '蛙哥', cranesage: '鹤仙',
     sphinx: '狮身人面像', niumo: '牛魔', bonedragonking: '巨型骨龙王'
@@ -2249,6 +2249,21 @@
       // 与上一块障碍保持安全间隔
       const rightmost = this.rocks.reduce((m, r) => Math.max(m, r.x), -9999);
       rock.x = Math.max(CFG.W + halfW + 260, rightmost + halfW + rand(480, 820));
+      // 斧王 Boss 战：障碍物刷出后立刻爆炸，形成圆形范围爆炸特效
+      const bossManHere = this.bosses.some(b => b.constructor.name === 'BossMan' && !b.dead);
+      if (bossManHere) {
+        const cx = rock.x, cy = rock.baseY - rock.h * 0.4;
+        this.rocks.push(rock);
+        rock.destroy(this, true);
+        // 圆形范围爆炸：双层扩散冲击波环 + 大范围火球
+        if (this.fxRings) {
+          this.fxRings.push({ x: cx, y: cy, r: 10, vr: 520, t: 0, life: 0.55, col: '#ff7b2e' });
+          this.fxRings.push({ x: cx, y: cy, r: 6, vr: 780, t: 0, life: 0.4, col: '#ffd23b' });
+        }
+        burst(this, cx, cy, 26, ['#ff7b2e', '#ffd23b', '#fff5d0', '#c94a1e', '#fff'], 420, 7, 0.7, 200);
+        this.rockT = rand(1.8, 2.8);
+        return;
+      }
       this.rocks.push(rock);
       this.rockT = rand(2.0, 3.5);
     }

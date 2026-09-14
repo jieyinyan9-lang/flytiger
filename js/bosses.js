@@ -1,7 +1,7 @@
 /* ============================================================
  * bosses.js —— Boss：精英强化型 × 特殊机制型
  *  精英：火焰飞猪王 / 雷公巨兽（体型×4，机制强化）
- *  特殊：飞天日本武士 / 咬剑鹰（独立技能）
+ *  特殊：飞天日本武士 / 铁鹰（独立技能）
  * ============================================================ */
 (function () {
   'use strict';
@@ -386,11 +386,11 @@
     }
   }
 
-  /* ================ B2. 咬剑鹰（特殊机制） ================ */
+  /* ================ B2. 铁鹰（特殊机制） ================ */
   class SwordEagle extends Boss {
     constructor(g) {
       super(g, 20, 48);
-      this.bossName = '咬剑鹰';
+      this.bossName = '铁鹰';
       this.title = '特殊机制型';
       this.hoverX = 680;
       this.featherT = 1.4;
@@ -1163,7 +1163,7 @@
   /* ================ D2. 斧王（两阶段：西装巨人召唤/双手射击/漂浮弹 → 半血碎裂变身巨头） ================ */
   class BossMan extends Boss {
     constructor(g) {
-      super(g, 32, 120);
+      super(g, 32, 100);
       this.bossName = '斧王';
       this.title = '特殊机制型';
       this.hoverX = CFG.W - 190;
@@ -1521,11 +1521,13 @@
       // 阶段3 第二命血量：以参考 DPS 曲线 + 标准交战时长为锚（独立于阶段1-2 的 maxHp）
       const fightTime = CFG.boss.fightTime(g.bossSpawned + 1);
       this.maxHp = Math.round(CFG.boss.refDpsAt(g.bossSpawned + 1) * fightTime * g.hpSoftMul(g.bossSpawned + 1));
-      // 火车：从右下入场，2.5s 高速横穿后停稳占据整个下半屏（1 车头 + 4 节可复制车厢 = 5 个可破坏部位）
+      // 火车：从右下入场，1.6s 高速横穿后停稳占据整个下半屏（1 车头 + 4 节可复制车厢 = 5 个可破坏部位）
       this.train = this.makeP3Train();
       const stopX = Math.max(8, CFG.W - this.train.w - 12);   // 停稳后车头贴左、整车横亘下半屏
-      this.train.vx = (stopX - this.train.x) / 2.5;   // 2.5s 高速横穿到位
+      this.train.vx = (stopX - this.train.x) / 1.6;   // 1.6s 高速横穿到位
       this.p3 = { phase: 'p0', actT: 0, fireT: 0, cycle: 0, dashT: 0, targetX: 0, targetY: 0 };
+      // 阶段3 Boss 体积缩小：碰撞半径贴合实际模型（蜥蜴脸精灵 240×304 缩放 0.68 ≈ 163×207）
+      this.radius = 80;
       // 巨头消失：爆裂粒子
       burst(g, this.x, this.y, 40, ['#2b2f3a', '#e8eef7', '#ffd23b', '#e0453a'], 320, 7, 0.9, 150);
       g.shake(14);
@@ -1540,25 +1542,25 @@
       this.commonMove(dt);
       // 火车部件矩形随车体同步（车头 + 4 车厢宽度不等）；被毁部件持续下沉
       if (this.train) {
+        const tr = this.train;
         for (let i = 0; i < 5; i++) {
-          const part = this.train.parts[i];
+          const part = tr.parts[i];
           if (part.dead) {
-            if (part.sinkY < tr.h * 4) {     // 坠落到 4 倍车高后停止累积（早已淡出屏幕）
-              part.sinkVy += 900 * dt;       // 重力加速
-              part.sinkY += part.sinkVy * dt;
-            }
+            // 残骸持续下沉直到飞出屏幕外（无上限）
+            part.sinkVy += 900 * dt;       // 重力加速
+            part.sinkY += part.sinkVy * dt;
           } else {
-            const r = this.trainPartRect(this.train, i);
+            const r = this.trainPartRect(tr, i);
             part.x = r.x;
             part.w = r.w;
           }
         }
         // 爆炸冲击波环扩张
-        if (this.train.rings) {
-          for (let i = this.train.rings.length - 1; i >= 0; i--) {
-            const r = this.train.rings[i];
+        if (tr.rings) {
+          for (let i = tr.rings.length - 1; i >= 0; i--) {
+            const r = tr.rings[i];
             r.t += dt; r.r += r.vr * dt;
-            if (r.t >= r.life) this.train.rings.splice(i, 1);
+            if (r.t >= r.life) tr.rings.splice(i, 1);
           }
         }
       }
@@ -1614,7 +1616,7 @@
         if (st < 0.1 && !this._warnToast) { this._warnToast = true; g.toast('右下方传来轰鸣……！', 1.6, 'lt'); SFX.warn(); }
         return;
       }
-      // 0.8..3.3s 火车高速横穿（2.5s）
+      // 0.8..2.4s 火车高速横穿（1.6s）
       if (!tr.stopped) {
         tr.x += tr.vx * dt;
         // 烟囱烟尘
@@ -1638,7 +1640,7 @@
           // 撞击火星
           burst(g, pl.x + pl.radius, pl.y, 8, ['#ffd23b', '#ff7b2e', '#fff'], 200, 3, 0.3);
         }
-        if (st >= 3.3) {
+        if (st >= 2.4) {
           tr.stopped = true;
           tr.x = Math.max(8, CFG.W - tr.w - 12);   // 钉死停止位置
           // 急停冲击：大范围火星 + 冲击波 + 烟尘
@@ -1654,7 +1656,7 @@
         }
       } else if (!tr.exploded) {
         // 停稳 1.5s 后斧王从火车中飞出
-        if (st >= 4.8) {
+        if (st >= 3.9) {
           tr.exploded = true;
           this.x = tr.x + tr.w * 0.6;
           this.y = tr.y - 56;
@@ -1753,17 +1755,23 @@
       }
     }
 
-    /* ── P3 酒壶炸弹（5s 无敌 → 虚影碎裂 → 投掷酒壶抛物线，落地爆炸 + 8 向溅射）── */
+    /* ── P3 酒壶炸弹（5s 无敌（仍持续投斧攻击） → 虚影碎裂 → 投掷酒壶抛物线，落地爆炸 + 8 向溅射）── */
     updateP3Pot(dt, g, p) {
       const pp = this.p3;
-      // 无敌期间减速悬停
+      // 无敌期间减速悬停 + 持续投斧攻击
       if (this.phase3Invuln > 0) {
         this.flyHover(dt, g, p, 0.4);
+        pp.fireT = (pp.fireT || 0) - dt;
+        if (pp.fireT <= 0) {
+          pp.fireT = rand(1.0, 1.5);
+          this.throwAxe(g, p, 360);
+        }
         // 无敌结束瞬间：虚影碎裂效果
         if (this.phase3Invuln <= dt) {
           burst(g, this.x, this.y, 28, ['#ff3bd0', '#ff8be0', '#fff'], 300, 6, 0.7, 140);
           g.shake(8); SFX.phaseRise();
           g.toast('无敌解除！', 1.4, 'lt');
+          pp.fireT = 0.5;
         }
         return;
       }
@@ -1895,7 +1903,11 @@
       if (!this.train || this.train.stopped === false) return;   // 火车未停或已消失不检测
       const tr = this.train;
       for (const b of g.bullets) {
-        if (b.dead || b.kind !== 'axe' || b.friendly) continue;
+        if (b.dead) continue;
+        // 敌方飞斧（未命中玩家时击中火车）或 玩家子弹（主动轰击火车部件）
+        const isEnemyAxe = b.kind === 'axe' && !b.friendly;
+        const isPlayerShot = b.friendly;
+        if (!isEnemyAxe && !isPlayerShot) continue;
         for (let i = 0; i < 5; i++) {
           const part = tr.parts[i];
           if (part.dead) continue;
@@ -1950,7 +1962,7 @@
         const a = base + (n > 1 ? (i - 1) * 0.28 : 0);
         g.bullets.push(new Bullet(this.x - 30, this.y - 10,
           Math.cos(a) * speed, Math.sin(a) * speed,
-          { kind: 'axe', r: 9, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 5,
+          { kind: 'axe', r: 15, dmg: 13 * g.atkScale, dmgScale: g.atkScale, life: 5,
             spinRate: 12, color: '#cfd8e3', src: this.dsrc, p3spr: true }));
       }
       SFX.enemyShoot();
@@ -1967,7 +1979,7 @@
       const vy = (dy - 0.5 * g0 * tFly * tFly) / tFly;
       const self = this;
       const b = new Bullet(this.x - 20, this.y, vx, vy,
-        { kind: 'potbomb', r: 11, dmg: 16 * g.atkScale, dmgScale: g.atkScale, life: 5,
+        { kind: 'potbomb', r: 17, dmg: 16 * g.atkScale, dmgScale: g.atkScale, life: 5,
           grav: g0, spinRate: 6, src: this.dsrc });
       b.onExpire = (gg, bb) => {
         // 爆炸范围伤害
@@ -1983,7 +1995,7 @@
           const a = (TAU / dirs) * i + rand(-0.06, 0.06);
           const sp = (big ? 230 : 180) + rand(-20, 20);
           gg.bullets.push(new Bullet(bb.x, bb.y, Math.cos(a) * sp, Math.sin(a) * sp,
-            { kind: 'liquid', r: 6, dmg: 9 * gg.atkScale, dmgScale: gg.atkScale, life: 4,
+            { kind: 'liquid', r: 10, dmg: 9 * gg.atkScale, dmgScale: gg.atkScale, life: 4,
               spinRate: 4, src: self.dsrc }));
         }
       };
@@ -1995,7 +2007,7 @@
     fireEbolt(g, ang, mul) {
       const sp = 620 * (mul || 1);
       const b = new Bullet(this.x, this.y + 10, Math.cos(ang) * sp, Math.sin(ang) * sp,
-        { kind: 'bolt', r: 7, dmg: 14 * g.atkScale, dmgScale: g.atkScale, life: 2.2,
+        { kind: 'bolt', r: 13, dmg: 14 * g.atkScale, dmgScale: g.atkScale, life: 2.2,
           color: '#7fe0ff', spinRate: 0, src: this.dsrc });
       // 电击拖尾色
       b.trailCols = ['#3b9eff', '#7fe0ff', '#ffffff'];
@@ -2512,25 +2524,35 @@
     }
   }
 
-  /* ================ C2. 鹤仙（特殊机制：双阶段风之主宰） ================
-   * P1 瞬移+风炮：空中换位 → 连发4发风炮（高速直线弹）/ 原地旋转生成1个龙卷风（蛇形慢速移动）
-   * 阶段转换：HP≤50% → 血量回满 + 锁血10s（全身闪蓝 + 气波冲击驱离贴脸）
-   * P2 多目标+强化：持续飞行 + 4浮空镜面反射激光 + 双龙卷风 + 高速风刃
-   * 循环（P1）：瞬移 → 风炮×4 → 换位 → 龙卷风 → 换位 → 风炮……
-   * 循环（P2）：飞行 → 镜面布置 → 反射激光 → 双龙卷风 → 高速风刃 → 换位……
+  /* ================ C2. 鹤仙（特殊机制：双阶段） ================
+   * P1（第一条血）：羽针 needles → 鹤鸣 cry → 俯冲 dive → 旋羽 whirl 固定循环，间隔 3.6-4.6s；
+   *                半血后每 3 个技能插播 1 次万羽天葬 burial，间隔缩短 3.0-3.8s。
+   * 阶段转换：第一条血打完（HP≤0）→ 血量回满 + 锁血10s（全身闪蓝 + 气波冲击）
+   * P2（第二条血）：持续飞行 + 4浮空镜面反射激光 + 双龙卷风 + 高速风刃/风炮
    * ---------------------------------------------------------------- */
   class CraneSage extends Boss {
     constructor(g) {
-      super(g, 18, 80);
+      super(g, 20, 88);
       this.bossName = '鹤仙';
       this.title = '特殊机制型';
-      this.hoverX = 640;
-      this.phase = 1;               // 1 / 2
-      this.act = null;              // 子状态机
+      this.hoverX = 660;
+      // —— P1 技能序列字段（原版）——
+      this.phase = 1;               // 1 / 2（大阶段；俯冲子阶段用 divePhase）
+      this.skillT = 2.6;
+      this.seq = 0;                 // 技能序列：羽针→鹤鸣→俯冲→旋羽（→天葬）
+      this.needles = [];            // 已发射羽针 {b,t,boosted}（3.2s 后提速）
+      this.whirlOrbs = [];
+      this.fallMarks = [];          // 万羽天葬落点预警 { x, t }
+      this.waveIdx = 0; this.waveT = 0;
+      this.fallRound = 0; this.fallT = 0;
+      this.needleN = 0; this.needleT = 0;
+      this.divePhase = null;        // 俯冲子阶段：up/aim/fall/blast
+      // —— P2 风之机制字段 ——
+      this.act = null;              // P2 子状态机
       this.actT = 0;
       this.actFired = false;        // 当前子状态是否已触发一次性动作
-      this.tornadoes = [];           // {x,y,t,dir,spd,freq,amp,ph,life,hitCd,topR,botR,height,spin}
-      this.mirrors = [];             // {x,y,ang,spin,t,born,dy}
+      this.tornadoes = [];           // {x,t,dir,spd,freq,amp,ph,life,hitCd,topR,botR,height,spin,born}
+      this.mirrors = [];             // {x,y,ang,spin,t,born,dy,hp,maxHp,flash,dead,size}
       this.beams = [];               // {segs:[{x1,y1,x2,y2}],t,warn,active,dealt,dmg,dead}
       this.shockwaves = [];          // {x,y,r,vr,t,life,dmg,dealt}
       this.blueFlash = 0;           // 阶段转换蓝闪强度 0..1
@@ -2539,28 +2561,28 @@
       this.teleGlow = [];            // 瞬移残影点 {x,y,t}
       this.cannonN = 0;             // 风炮已发数
       this.cannonT = 0;             // 风炮发射计时
-      this.p1Seq = 0;               // P1 攻击序号（偶=风炮 奇=龙卷风 交替）
       this.phaseTransT = 0;         // 锁血剩余秒数
       this.spinAng = 0;             // Boss 旋转角度（生成龙卷风时的高速自旋）
       this.spinT = 0;               // 自旋剩余时间
       this._contactBase = this.contactDmg;   // 基础接触伤害（瞬移/锁血期间置 0）
       this.deathCols = ['#f4f6f2', '#7fd8ff', '#3a8f9e', '#bfe9ff', '#fff'];
     }
-    /* ---------- 伤害与阶段转换 ---------- */
+    /* ---------- 伤害与阶段转换（唯一权威入口） ---------- */
     takeDamage(dmg, g) {
       if (this.dead || this.state === 'enter' || this.state === 'phaseTrans') return;   // 入场/锁血免伤
       this.hp -= dmg;
       this.hitFlash();
       if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#7fd8ff', '#fff'], 130, 3, 0.18);
-      // P1 → P2 转换：第一条生命结束（HP ≤ 50%）
-      if (this.phase === 1 && this.hp > 0 && this.hp <= this.maxHp * 0.5) {
-        this.startPhaseTrans(g);
+      // P1：第一条血打完（锁血到 0，防高爆发跳过阶段机）→ 转阶段
+      if (this.phase === 1) {
+        if (this.hp <= 0) { this.hp = 0; this.startPhaseTrans(g); }
         return;
       }
+      // P2：正常死亡
       if (this.hp <= 0) { this.hp = 0; this.die(g); }
     }
     startPhaseTrans(g) {
-      this.hp = this.maxHp;                 // 血量回满
+      this.hp = this.maxHp;                 // 第二条血回满
       this.phase = 2;
       this.state = 'phaseTrans';
       this.stateT = 0;
@@ -2568,6 +2590,11 @@
       this.blueFlash = 1.0;
       this.contactDmg = 0;                 // 锁血期不造成接触伤害
       this.act = null;
+      this.divePhase = null;
+      // P1 残留实体清理
+      this.needles.length = 0;
+      this.whirlOrbs.length = 0;
+      this.fallMarks.length = 0;
       // 形成气波：中半径冲击波驱离贴脸玩家
       this.shockwaves.push({ x: this.x, y: this.y, r: 24, vr: 460, t: 0, life: 1.0,
         dmg: Math.round(20 * g.atkScale), dealt: false });
@@ -2585,6 +2612,9 @@
       this.mirrors.length = 0;
       this.beams.length = 0;
       this.shockwaves.length = 0;
+      this.needles.length = 0;
+      this.whirlOrbs.length = 0;
+      this.fallMarks.length = 0;
       super.die(g);
     }
     /* ---------- 主更新 ---------- */
@@ -2592,12 +2622,12 @@
       this.t += dt; this.stateT += dt; this.actT += dt;
       this.flash = Math.max(0, this.flash - dt);
       this.blueFlash = Math.max(0, this.blueFlash - dt * 0.4);
-      // Boss 自旋（生成龙卷风时高速旋转，衰减回 0）
+      // Boss 自旋（P2 生成龙卷风时高速旋转，衰减回 0）
       if (this.spinT > 0) {
         this.spinT -= dt;
-        this.spinAng += dt * 18;   // 高速自旋
+        this.spinAng += dt * 18;
       } else {
-        this.spinAng *= (1 - dt * 4);   // 缓慢回正
+        this.spinAng *= (1 - dt * 4);
       }
       this.commonMove(dt);
       const p = g.player;
@@ -2615,56 +2645,183 @@
       if (this.state === 'enter') {
         this.x -= 150 * dt;
         this.y = this.baseY + Math.sin(this.t * 2) * 30;
-        if (this.x <= this.hoverX) {
-          this.state = 'p1'; this.stateT = 0;
-          this.pickTelePos(g); this.setAct('teleport');
-        }
+        if (this.x <= this.hoverX) { this.state = 'fight'; this.stateT = 0; }
         return;
       }
-      if (this.state === 'p1') this.updateP1(dt, g, p);
-      else if (this.state === 'phaseTrans') this.updatePhaseTrans(dt, g, p);
+      if (this.state === 'phaseTrans') this.updatePhaseTrans(dt, g, p);
       else if (this.state === 'p2') this.updateP2(dt, g, p);
+      else this.updateP1States(dt, g, p);   // fight/needles/cry/dive/whirl/burialUp/burial
     }
-    /* ---------- P1：瞬移 + 风炮 + 龙卷风 ---------- */
-    updateP1(dt, g, p) {
-      if (this.act === 'teleport') {
-        this.updateTeleport(dt, g, () => {
-          // 瞬移完成 → 按序号选攻击
-          if (this.p1Seq % 2 === 0) { this.cannonN = 0; this.cannonT = 0.14; this.setAct('windCannon'); }
-          else { this.setAct('tornadoSpin'); }
-        });
-      }
-      else if (this.act === 'windCannon') {
-        this.hoverDrift(dt, p, 0.6);
-        this.cannonT -= dt;
-        const maxShots = 6;   // 4 → 6 发提升密度
-        if (this.cannonT <= 0 && this.cannonN < maxShots) {
-          this.cannonN++; this.cannonT = 0.14;
-          this.fireWindCannon(g, p);
-        }
-        if (this.cannonN >= maxShots && this.actT > 0.4) {
-          this.p1Seq++;
-          this.pickTelePos(g); this.setAct('teleport');
+    /* ---------- P1：羽针 / 鹤鸣 / 俯冲 / 旋羽 / 万羽天葬（原版恢复） ---------- */
+    updateP1States(dt, g, p) {
+      // 羽针 3.2s 未被击毁 → 高速冲刺（任何状态都计时）
+      this.needles = this.needles.filter(n => !n.b.dead);
+      for (const n of this.needles) {
+        n.t -= dt;
+        if (n.t <= 0 && !n.boosted) {
+          n.boosted = true;
+          n.b.vx *= 1.45; n.b.vy *= 1.45; n.b.turnRate = 2.6;
+          burst(g, n.b.x, n.b.y, 5, ['#fff', '#c9d2cc'], 140, 3, 0.25);
         }
       }
-      else if (this.act === 'tornadoSpin') {
-        // Boss 快速原地旋转蓄力 → 生成龙卷风
-        this.hoverDrift(dt, p, 0.3);
-        if (!this.actFired && this.actT > 0.15) {
-          this.actFired = true;
-          this.spinT = 0.5;            // 触发 0.5s 高速自旋
-          g.toast('龙卷风！', 1.0, 'lt');
+      // 万羽天葬落点预警计时（任何状态都结算）
+      this.fallMarks = this.fallMarks.filter(m => {
+        m.t -= dt;
+        if (m.t <= 0) {
+          g.bullets.push(new Bullet(m.x, -30, 0, 430,
+            { kind: 'feather', r: 9, dmg: Math.round(12 * g.atkScale), life: 4, color: '#f4f6f2' }));
+          return false;
         }
-        if (this.actT > 0.65 && this.spinT <= 0 && this.tornadoes.length === 0) {
-          this.spawnTornado(g, p, 1);
+        return true;
+      });
+
+      if (this.state === 'fight') {
+        // 缓慢游弋
+        this.baseY += (clamp(p.y + 20, 110, CFG.GROUND_Y - 140) - this.baseY) * dt * 1.1;
+        this.y = this.baseY + Math.sin(this.t * 1.7) * 42;
+        this.x = this.hoverX + Math.sin(this.t * 0.9) * 66;
+        this.skillT -= dt;
+        if (this.skillT <= 0) {
+          const order = ['needles', 'cry', 'dive', 'whirl'];
+          const next = order[this.seq % order.length];
+          this.seq++;
+          this.stateT = 0;
+          // 半血后每 3 个技能插播一次万羽天葬，节奏加快
+          if (this.hp <= this.maxHp * 0.5 && this.seq % 3 === 0) {
+            this.state = 'burialUp';
+            this.skillT = rand(3.0, 3.8);
+            return;
+          }
+          this.skillT = rand(3.6, 4.6);
+          this.state = next;
+          if (next === 'cry') { this.waveIdx = 0; this.waveT = 0.7; g.toast('鹤鸣震荡！', 1.2, 'lt'); SFX.sweep(); }
+          if (next === 'needles') { this.needleN = 0; this.needleT = 0.1; }
+          if (next === 'dive') { g.toast('鹤仙入天！', 1.2, 'lt'); }
+          if (next === 'whirl') { this.spawnWhirl(g); g.toast('旋羽领域！', 1.2, 'lt'); }
         }
-        if (this.actT > 2.0) {
-          this.p1Seq++;
-          this.pickTelePos(g); this.setAct('teleport');
+      }
+      else if (this.state === 'needles') {
+        this.hoverDrift(dt, p);
+        this.needleT -= dt;
+        if (this.needleT <= 0 && this.needleN < 5) {
+          this.needleN++; this.needleT = 0.36;
+          const a = Math.atan2(p.y - this.y, p.x - this.x) + rand(-0.3, 0.3);
+          const b = new Bullet(this.x - 60, this.y - 25,
+            Math.cos(a) * 350, Math.sin(a) * 350,
+            { kind: 'feather', r: 7, dmg: Math.round(13 * g.atkScale), life: 7, color: '#fff',
+              homing: true, turnRate: 1.0, hp: 1, invuln: 3 });
+          this.needles.push({ b, t: 3.2, boosted: false });
+          g.bullets.push(b);
+          SFX.enemyShoot();
+        }
+        if (this.needleN >= 5 && this.stateT > 2.0) { this.state = 'fight'; this.stateT = 0; }
+      }
+      else if (this.state === 'cry') {
+        this.hoverDrift(dt, p, 0.4);
+        this.waveT -= dt;
+        if (this.waveT <= 0 && this.waveIdx < 3) {
+          // 三层声波圈：速度不同均可扩散至全屏；疏密交替（密 24 / 疏 14 / 密 24）
+          const speeds = [150, 210, 280];
+          const counts = [24, 14, 24];
+          const sp = speeds[this.waveIdx];
+          const n = counts[this.waveIdx];
+          for (let i = 0; i < n; i++) {
+            const a = i * TAU / n + this.waveIdx * 0.21;
+            g.bullets.push(new Bullet(this.x - 50, this.y - 25, Math.cos(a) * sp, Math.sin(a) * sp,
+              { kind: 'wave', r: this.waveIdx === 1 ? 15 : 13, dmg: Math.round(11 * g.atkScale), life: 7, color: '#38bdf8' }));
+          }
+          this.waveIdx++; this.waveT = 0.55;
+          g.shake(3); SFX.enemyShoot();
+        }
+        if (this.waveIdx >= 3 && this.stateT > 3.2) { this.state = 'fight'; this.stateT = 0; }
+      }
+      else if (this.state === 'dive') {
+        // 子阶段：up → aim → fall → blast
+        if (!this.divePhase || this.divePhase === 'up') {
+          this.divePhase = 'up';
+          this.x += (this.hoverX - this.x) * dt * 2;
+          this.y += (-70 - this.y) * dt * 2.4;
+          if (this.stateT > 0.9 && this.y < -20) { this.divePhase = 'aim'; this.stateT = 0; this.aim = { x: p.x }; }
+        } else if (this.divePhase === 'aim') {
+          // 顶部悬停锁定，落点预警
+          this.aim.x += (p.x - this.aim.x) * dt * 2.0;
+          if (this.stateT > 0.85) {
+            this.divePhase = 'fall';
+            this.x = this.aim.x; this.y = -40;
+            this.contactDmg = Math.round(26 * g.atkScale);
+            SFX.dash(); g.shake(4);
+          }
+        } else if (this.divePhase === 'fall') {
+          this.y += 780 * dt;
+          if (this.y >= CFG.GROUND_Y - 64) {
+            this.divePhase = 'blast'; this.stateT = 0;
+            this.contactDmg = this._contactBase;
+            g.shake(10);
+            burst(g, this.x, CFG.GROUND_Y - 30, 16, ['#fff', '#c9d2cc', '#8a5a2b'], 260, 5, 0.5);
+            for (let i = 0; i < 8; i++) {
+              const a = i * TAU / 8;
+              g.bullets.push(new Bullet(this.x, CFG.GROUND_Y - 60, Math.cos(a) * 250, Math.sin(a) * 250,
+                { kind: 'wave', r: 12, dmg: Math.round(12 * g.atkScale), life: 3, color: '#38bdf8' }));
+            }
+            SFX.explode();
+          }
+        } else if (this.divePhase === 'blast') {
+          // 回归
+          this.y += (this.baseY - this.y) * dt * 2.2;
+          if (this.stateT > 0.7) { this.divePhase = null; this.state = 'fight'; this.stateT = 0; }
+        }
+      }
+      else if (this.state === 'whirl') {
+        this.hoverDrift(dt, p, 0.5);
+        if (this.stateT > 3.0) {
+          // 结束：羽沿切线飞散
+          for (const b of this.whirlOrbs) b.orbit = null;
+          this.whirlOrbs = [];
+          this.state = 'fight'; this.stateT = 0;
+        }
+      }
+      else if (this.state === 'burialUp') {
+        this.y += (-60 - this.y) * dt * 2.2;
+        this.x += (CFG.W * 0.55 - this.x) * dt * 1.5;
+        if (this.stateT > 1.1 && this.y < -10) {
+          this.state = 'burial'; this.stateT = 0;
+          this.fallRound = 0; this.fallT = 0.2;
+          g.toast('万羽天葬！', 1.6, 'lt'); SFX.sweep(); g.shake(5);
+        }
+      }
+      else if (this.state === 'burial') {
+        this.fallT -= dt;
+        if (this.fallT <= 0 && this.fallRound < 4) {
+          // 新一轮落羽：全屏宽度投放，后期密度增大、预警更短
+          this.fallRound++;
+          const n = this.fallRound >= 3 ? 16 : 12;
+          const warn = this.fallRound >= 3 ? 0.55 : 0.75;
+          for (let i = 0; i < n; i++) this.fallMarks.push({ x: rand(40, CFG.W - 40), t: warn + i * 0.04 });
+          this.fallT = 0.95;
+        }
+        if (this.fallRound >= 4 && this.fallMarks.length === 0 && this.stateT > 1.5) {
+          this.state = 'fight'; this.stateT = 0;
         }
       }
     }
-    /* ---------- 阶段转换：锁血10s ---------- */
+    hoverDrift(dt, p, spd = 1) {
+      this.baseY += (clamp(p.y + 20, 110, CFG.GROUND_Y - 140) - this.baseY) * dt * 1.1 * spd;
+      this.y = this.baseY + Math.sin(this.t * 1.7) * 42;
+      this.x = this.hoverX + Math.sin(this.t * 0.9) * 66;
+    }
+    spawnWhirl(g) {
+      // 14 根羽毛环绕，半径渐扩至全屏（70 → ~450），寿命覆盖整个领域
+      for (let i = 0; i < 14; i++) {
+        const ang = i * TAU / 14;
+        const b = new Bullet(this.x, this.y, 0, 0,
+          { kind: 'feather', r: 8, dmg: Math.round(11 * g.atkScale), life: 5.0, color: '#fff' });
+        b.orbit = { ang, angSpd: 2.2, radius: 70, grow: 90, pivot: () => this.dead ? null : { x: this.x, y: this.y } };
+        this.whirlOrbs.push(b);
+        g.bullets.push(b);
+      }
+      SFX.enemyShoot();
+    }
+    /* ---------- 阶段转换：锁血10s（无敌但持续攻击） ---------- */
     updatePhaseTrans(dt, g, p) {
       // 缓慢升至场中高空
       this.baseY += (CFG.H * 0.34 - this.baseY) * dt * 0.8;
@@ -2676,6 +2833,12 @@
         g.particles.push(new Particle(
           this.x + rand(-44, 44), this.y + rand(-54, 54),
           rand(-30, 30), rand(-50, -10), rand(0.4, 0.8), rand(3, 6), '#7fd8ff'));
+      }
+      // 锁血期持续攻击：风炮连射
+      this.cannonT = (this.cannonT || 0) - dt;
+      if (this.cannonT <= 0) {
+        this.cannonT = 0.28;
+        this.fireWindCannon(g, p);
       }
       if (this.phaseTransT <= 0) {
         this.state = 'p2'; this.stateT = 0;
@@ -2707,13 +2870,14 @@
         if (this.actT > 1.5) this.setAct('dualTornadoSpin');
       }
       else if (this.act === 'dualTornadoSpin') {
-        // Boss 旋转蓄力 → 双龙卷风
+        // Boss 旋转蓄力 → 双龙卷风（用独立标志，场上旧龙卷风不阻塞新生成）
         if (!this.actFired && this.actT > 0.15) {
           this.actFired = true;
           this.spinT = 0.45;
           g.toast('双龙卷风！', 0.9, 'lt');
         }
-        if (this.actT > 0.6 && this.spinT <= 0 && this.tornadoes.length === 0) {
+        if (this.actT > 0.6 && this.spinT <= 0 && !this._tornSpawned) {
+          this._tornSpawned = true;
           this.spawnTornado(g, p, 2);
         }
         if (this.actT > 1.6) this.setAct('windBlade');
@@ -2773,12 +2937,7 @@
         y: rand(110, CFG.GROUND_Y - 210)
       };
     }
-    setAct(act) { this.act = act; this.actT = 0; this.actFired = false; }
-    hoverDrift(dt, p, spd = 1) {
-      this.baseY += (clamp(p.y + 20, 110, CFG.GROUND_Y - 150) - this.baseY) * dt * 1.1 * spd;
-      this.y = this.baseY + Math.sin(this.t * 1.7) * 42;
-      this.x = this.hoverX + Math.sin(this.t * 0.9) * 66;
-    }
+    setAct(act) { this.act = act; this.actT = 0; this.actFired = false; this._tornSpawned = false; }
     /* ---------- 攻击：风炮（P2 更大更密 + 风拖尾） ---------- */
     fireWindCannon(g, p) {
       const a = Math.atan2(p.y - this.y, p.x - this.x);
@@ -2856,20 +3015,25 @@
         if (t.life <= 0 || this.dead) this.tornadoes.splice(i, 1);
       }
     }
-    /* ---------- 镜面（P2，可被玩家击碎，至少 10 下） ---------- */
+    /* ---------- 镜面（P2，可被玩家击碎，至少 10 下；每轮仅补齐缺失位） ---------- */
     placeMirrors(g) {
-      this.mirrors.length = 0;
       const ps = [
         { x: CFG.W * 0.22, y: CFG.GROUND_Y - 200 },
         { x: CFG.W * 0.78, y: CFG.GROUND_Y - 200 },
         { x: CFG.W * 0.32, y: CFG.GROUND_Y - 340 },
         { x: CFG.W * 0.68, y: CFG.GROUND_Y - 340 }
       ];
+      let spawned = 0;
       for (const pos of ps) {
-        this.mirrors.push({ x: pos.x, y: pos.y, ang: rand(0, TAU), spin: 1.4, t: 0, born: 0, dy: 0,
-          hp: 10, maxHp: 10, flash: 0, dead: false, size: 22 });
+        // 该位置 60px 内已有存活镜子则保留（不重置玩家已打掉的血量）
+        const exists = this.mirrors.some(m => !m.dead && Math.hypot(m.x - pos.x, m.y - pos.y) < 60);
+        if (!exists) {
+          this.mirrors.push({ x: pos.x, y: pos.y, ang: rand(0, TAU), spin: 1.4, t: 0, born: 0, dy: 0,
+            hp: 10, maxHp: 10, flash: 0, dead: false, size: 22 });
+          spawned++;
+        }
       }
-      SFX.craneMirror();
+      if (spawned > 0) SFX.craneMirror();
     }
     updateMirrors(dt, g) {
       for (let i = this.mirrors.length - 1; i >= 0; i--) {
@@ -2985,6 +3149,28 @@
       this.renderBeams(ctx);
       // 气波
       this.renderShockwaves(ctx);
+      // —— P1 特效：万羽天葬落点预警圈（地面红色脉动圈）——
+      for (const m of this.fallMarks) {
+        const blink = Math.floor(this.t * 10) % 2 === 0;
+        if (blink) {
+          ctx.strokeStyle = 'rgba(255,60,60,0.85)'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(m.x, CFG.GROUND_Y - 18, 16, 0, TAU); ctx.stroke();
+          ctx.strokeStyle = 'rgba(255,120,120,0.5)'; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.arc(m.x, CFG.GROUND_Y - 18, 22, 0, TAU); ctx.stroke();
+        }
+      }
+      // —— P1 特效：俯冲锁定地面红色预警条 ——
+      if (this.state === 'dive' && this.divePhase === 'aim' && this.aim) {
+        const on = Math.floor(this.stateT * 12) % 2 === 0;
+        if (on) {
+          ctx.save();
+          ctx.strokeStyle = '#ff3838'; ctx.lineWidth = 5; ctx.setLineDash([16, 10]);
+          ctx.beginPath();
+          ctx.moveTo(this.aim.x, 0); ctx.lineTo(this.aim.x, CFG.GROUND_Y);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
       // 瞬移残影
       for (const gl of this.teleGlow) {
         const a = clamp(gl.t / 0.4, 0, 1);
@@ -2996,7 +3182,9 @@
       if (alpha > 0.02) {
         ctx.save();
         ctx.globalAlpha = alpha;
-        const ang = Math.sin(this.t * 2) * 0.07 + this.spinAng;   // 自旋叠加（生成龙卷风时高速旋转）
+        // 角度：待机微倾 + P2 自旋 + 俯冲下落时精灵旋转 90° 垂直
+        let ang = Math.sin(this.t * 2) * 0.07 + this.spinAng;
+        if (this.state === 'dive' && this.divePhase === 'fall') ang += Math.PI * 0.5;
         drawBossSprite(ctx, Sprites.craneL, this.x, this.y, 0.8125, 0.8125, ang, this.flash);
         // 阶段转换蓝闪
         if (this.blueFlash > 0) {
@@ -3005,7 +3193,36 @@
         }
         ctx.restore();
       }
-      // Boss 自旋时的青色旋转气环（视觉强调）
+      // —— P1 特效：鹤鸣时喙部三层声波纹（喙部锚点 x-60,y-30）——
+      if (this.state === 'cry') {
+        const t = this.stateT;
+        for (let i = 0; i < 3; i++) {
+          const k = (t - i * 0.55) / 1.6;
+          if (k > 0 && k < 1) {
+            const rr = 30 + k * 110;
+            ctx.strokeStyle = `rgba(120,220,255,${0.6 * (1 - k)})`;
+            ctx.lineWidth = 3 - i * 0.6;
+            ctx.beginPath();
+            ctx.arc(this.x - 60, this.y - 30, rr, -0.9, 0.9);
+            ctx.stroke();
+          }
+        }
+      }
+      // —— P1 特效：旋羽领域双弧旋转气旋 ——
+      if (this.state === 'whirl') {
+        const grow = Math.min(this.stateT / 3.0, 1);
+        const sR = 70 + grow * 380;
+        const sp = this.t * 2.2;
+        for (let d = 0; d < 2; d++) {
+          const a0 = sp * (d === 0 ? 1 : -1) + d * Math.PI;
+          ctx.strokeStyle = d === 0 ? 'rgba(191,233,255,0.55)' : 'rgba(95,208,240,0.4)';
+          ctx.lineWidth = d === 0 ? 2.5 : 4;
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, sR, a0, a0 + Math.PI * 1.3);
+          ctx.stroke();
+        }
+      }
+      // Boss 自旋时的青色旋转气环（P2 视觉强调）
       if (this.spinT > 0) {
         const sR = 50 + Math.sin(this.t * 10) * 10;
         ctx.strokeStyle = `rgba(95,208,240,${0.5 * (this.spinT / 0.5)})`;
@@ -5464,7 +5681,7 @@
     { cls: PigKing, weight: 3, music: 'boss-1' },          // 火焰飞猪王
     { cls: ThunderBehemoth, weight: 3, music: 'boss-1' }, // 雷公巨兽
     { cls: Samurai, weight: 3, music: 'boss-wushi' },     // 飞天日本武士
-    { cls: SwordEagle, weight: 3, music: 'boss-ying' },   // 咬剑鹰
+    { cls: SwordEagle, weight: 3, music: 'boss-ying' },   // 铁鹰
     { cls: SkullKing, weight: 3, music: 'boss-2' },       // 亡灵骷髅王
     { cls: DogKing, weight: 3, music: 'boss-1' },         // 飞天狗王
     { cls: GiantPheasant, weight: 3, ground: true, music: 'boss-1' },  // 火鸡王：地面突击型

@@ -15,7 +15,7 @@
  *   boss-2  亡灵骷髅王 / 祖国人 / 怪客 / 蛙哥
  *   boss-niumowang 牛魔王  boss-shishenrenmian 狮身人面像
  *   boss-gulongwang 巨型骨龙王  boss-hexian 鹤仙
- *   boss-fuwang 大王  boss-ying 咬剑鹰  boss-wushi 飞天日本武士
+ *   boss-fuwang 大王  boss-ying 铁鹰  boss-wushi 飞天日本武士
  *
  * 对外接口（与旧程序化引擎保持一致）：
  *   Music.unlock() / play(name) / setDuck(v) /
@@ -57,7 +57,7 @@
   var ALIASES = {
     tide: 'bgm-guaiwuchao',          // 怪物潮
     boss: 'boss-1',                  // 通用 Boss 兜底
-    eagle: 'boss-ying',              // 咬剑鹰
+    eagle: 'boss-ying',              // 铁鹰
     pheasant: 'boss-1',              // 巨型野鸡王
     hero: 'boss-2',                  // 祖国人
     imperial: 'boss-fuwang',         // 大王
