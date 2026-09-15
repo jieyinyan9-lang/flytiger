@@ -2720,7 +2720,7 @@
           if (d < R + (e.radius || 16)) {
             const nx = dx / (d || 1), ny = dy / (d || 1);
             if (w.dmg) e.takeDamage(w.dmg, g, { x: nx * w.kb, y: ny * w.kb * 0.6 - 50 });
-            else if (!e.def.noKnockback && !e.def.ground) { e.kbX += nx * w.kb; e.kbY += ny * w.kb * 0.6 - 60; }   // 斗兽场精英/所有地面单位免疫击退
+            else e.applyKb(nx * w.kb, ny * w.kb * 0.6 - 60);   // 冲击波同样受 3 次击退衰减上限约束（地面/免击退单位内部过滤）
             if (w.slow) e.slowT = Math.max(e.slowT || 0, w.slow);
             burst(g, e.x, e.y, 6, ['#ffd23b', '#fff'], 170, 4, 0.3);
           }
@@ -3510,6 +3510,7 @@
       this.hurtT = 0;          // 持续受伤红染（>0 时叠加红色 tint，不闪烁）
       this.spawnInvuln = 0;    // 出场无敌时间
       this.kbX = 0; this.kbY = 0;
+      this.kbCount = 0;        // 已被击退次数（每只小怪至多被击退 3 次，力度递减，3 次后免疫）
 
       // 元素持续伤害（火焰/毒液/寒冰弹道命中后生效）
       this.dotT = 0;           // DoT 剩余时间
@@ -3598,18 +3599,14 @@
         this.radius = def.radius * 1.6;  // 体积变大
       }
 
-      // 飞鹰：出场 3s 无敌
-      if (type === 'eagle') this.spawnInvuln = 3;
+      // 飞鹰：无出场无敌（锁血已移除，出场即可承伤）
       // 小超人：出场 7s 无敌
       if (type === 'superboy') this.spawnInvuln = 7;
-      // 大型蝙蝠：飞行精英，悬停甩黑色飞刀（S 形弹/散射）；无敌 4s / 可承伤 4s 持续循环
+      // 大型蝙蝠：飞行精英，悬停甩黑色飞刀（S 形弹/散射）；锁血已移除，全程可承伤
       if (type === 'bigbat') {
         this.state = 'hover';
         this.atkT = rand(1.4, 2.2);
         this.volley = 0;
-        this.invPhase = true;      // true=无敌期，false=可承伤期
-        this.invCycleT = 4;        // 阶段倒计时（每 4s 切换）
-        this.spawnInvuln = 4;      // 首个无敌期 4s
       }
 
       // 刺羽鸟：悬停抖动，单发瞄准弹 / 环形散射交替发射
@@ -3746,13 +3743,22 @@
       }
     }
 
+    /** 施加击退：每只小怪至多被击退 3 次，力度按 100%→60%→30% 衰减，第 4 次起免疫；地面/免击退单位不计次 */
+    applyKb(kx, ky) {
+      if (this.def.noKnockback || this.def.ground) return;
+      if (this.kbCount >= 3) return;
+      const mul = this.kbCount === 0 ? 1 : (this.kbCount === 1 ? 0.6 : 0.3);
+      this.kbX += kx * mul; this.kbY += ky * mul;
+      this.kbCount++;
+    }
+
     takeDamage(dmg, g, kb) {
       if (this.dead || this.dying) return;
       if (this.spawnInvuln > 0) return;   // 出场无敌期内不受伤
       this.hp -= dmg;
       this.flash = 0.08;
       this.hurtT = 0.12;   // 持续受伤红染：连续命中时 hurtT 始终 >0，不会闪烁
-      if (kb && !this.def.noKnockback && !this.def.ground) { this.kbX += kb.x; this.kbY += kb.y; }   // 斗兽场精英/所有地面单位免疫击退
+      if (kb) this.applyKb(kb.x, kb.y);   // 击退统一走 applyKb：3 次递减后免疫（地面/免击退单位在其内部过滤）
       burst(g, this.x - 10, this.y, 2, ['#fff', '#ffe08a'], 120, 3, 0.18);
       SFX.hit();
       if (this.hp <= 0) this.die(g);
@@ -4205,18 +4211,6 @@
 
     /* 大型蝙蝠：保持中距悬停，交替甩出 S 形黑色飞刀（单发）/ 散射飞刀群（5 发小幅 S 走向） */
     aiBigBat(dt, g, p) {
-      // 无敌 4s → 可承伤 4s 持续循环；无敌期借用 spawnInvuln（免伤/金色护盾环/元素弹破无敌/大招清除均自动生效）
-      this.invCycleT -= dt;
-      if (this.invCycleT <= 0) {
-        this.invCycleT = 4;
-        this.invPhase = !this.invPhase;
-        if (this.invPhase) {
-          this.spawnInvuln = 4;     // 进入无敌期
-          this.invulnBreakT = 0;    // 清掉元素弹留下的破无敌倒计时，防止新无敌期被旧计时提前打断
-        } else {
-          this.spawnInvuln = 0;     // 进入可承伤期
-        }
-      }
       const sp = 105 * this.speedMul;
       const wantX = p.x + 330;
       if (this.state === 'enter') {

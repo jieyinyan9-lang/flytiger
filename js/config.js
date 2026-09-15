@@ -253,7 +253,7 @@
       bigbat: {
         name: '大型蝙蝠', hp: 90, speed: 100, contact: 18,
         bulletDmg: 12, xp: 18, score: 42, radius: 30, weight: 4, minBossKills: 3, elite: true,
-        dynamicHp: true, fightTime: [3, 4]   // 动态血量：仅可承伤期(每8s中4s)能输出，反推血量保证墙钟交战 6-8 秒
+        dynamicHp: true, fightTime: [6, 8]   // 动态血量：锁血已移除、全程可承伤，反推血量保证墙钟交战 6-8 秒
       },
       grassdragon: {
         name: '草龙', hp: 26, speed: 150, contact: 16,

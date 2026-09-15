@@ -539,14 +539,6 @@
       } else {
         drawBossSprite(ctx, spr, this.x, this.y, 0.65, 0.65, angle, this.flash);
       }
-      // 爪中剑
-      ctx.save();
-      ctx.translate(this.x - 30, this.y + 14);
-      ctx.rotate(0.5 + (this.state === 'rush' ? Math.sin(this.t * 12) * 0.4 : 0));
-      ctx.fillStyle = '#0d1018'; ctx.fillRect(-22, -3, 40, 6);
-      ctx.fillStyle = '#e8eef7'; ctx.fillRect(-20, -2, 34, 2);
-      ctx.fillStyle = '#c0392b'; ctx.fillRect(14, -4, 6, 8);
-      ctx.restore();
     }
   }
 
