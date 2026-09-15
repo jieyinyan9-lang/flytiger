@@ -1880,6 +1880,10 @@
     niu2: buildNiu('niu2.png', 388, 466),
     niu3: buildNiu('niu3.png', 524, 638),
     gulongHead: buildGulongHead(),
+    /* —— 三张新 Boss 立绘（均朝左，直接复用 buildNiu 通用图片加载工厂） —— */
+    hyena: buildNiu('caoyuan-1.png', 368, 208),       // 癫狂鬣狗：侧面奔跑鬣狗（草原限定）
+    rover: buildNiu('saibo-1.png', 500, 300),         // 浣熊漫游者：悬浮板赛博浣熊（霓虹喵都限定）
+    sandWalker: buildNiu('shamo-1.png', 368, 208),    // 沙之行者：蛇身沙漠术士（沙漠限定）
     dogHead: buildGoutou(),
     pheasant: buildHuoji(),
     superboy: buildSuperboy(),

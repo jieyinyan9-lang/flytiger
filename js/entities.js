@@ -551,6 +551,26 @@
           }
         }
       }
+      // 沙之行者沙之刺：记录飞行轨迹点（长沙尘拖尾数据源）+ 沙尘粒子
+      if (this.kind === 'sandSpike' && !this.dead) {
+        if (!this.sandPts) this.sandPts = [];
+        this.sandPts.push({ x: this.x, y: this.y });
+        if (this.sandPts.length > 22) this.sandPts.shift();
+        if (!this.neutralized) {
+          this.trail += dt;
+          if (this.trail > 0.03) {
+            this.trail = 0;
+            const spd = Math.hypot(this.vx, this.vy) || 1;
+            const bx = this.vx / spd, by = this.vy / spd;
+            g.particles.push(new Particle(
+              this.x - bx * 10 + rand(-5, 5), this.y - by * 10 + rand(-5, 5),
+              -bx * rand(20, 70) + rand(-20, 20),
+              -by * rand(20, 70) + rand(-20, 20) - 8,
+              rand(0.25, 0.55), rand(2, 5),
+              Math.random() < 0.5 ? '#d8a86a' : '#f5e3b8'));
+          }
+        }
+      }
       // 怪客巨型十字弹：快速自转；先高速追踪玩家，逼近后绕天空区域边缘转一圈再碎裂
       if (this.kind === 'cross' && !this.neutralized && !this.dead) {
         const xL = 60, xR = CFG.W - 60, yTop = 70, yBot = CFG.GROUND_Y - 40, rc = 40;  // 绕场路径：贴天空边缘，底边沿地面上方
@@ -1951,6 +1971,74 @@
         ctx.strokeStyle = 'rgba(220,245,255,0.9)';
         ctx.lineWidth = 1.6;
         ctx.beginPath(); ctx.arc(0, 0, r * 0.78, -0.95, 0.95); ctx.stroke();
+        ctx.restore();
+        return;
+      }
+      if (k === 'sandSpike') {
+        // 长沙尘拖尾：历史轨迹点连成沙尘色渐变线（外宽内亮、向尾端渐细渐散）
+        const spts = this.sandPts;
+        if (spts && spts.length > 2) {
+          const n = spts.length;
+          const baseA = ctx.globalAlpha;
+          ctx.save();
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          // 外层沙尘宽晕
+          ctx.strokeStyle = 'rgba(216,168,106,0.22)';
+          ctx.lineWidth = 18;
+          ctx.beginPath();
+          ctx.moveTo(spts[0].x, spts[0].y);
+          for (let i = 1; i < n; i++) ctx.lineTo(spts[i].x, spts[i].y);
+          ctx.stroke();
+          // 中层沙黄主体：逐段向尾端渐细
+          for (let i = 1; i < n; i++) {
+            const f = i / n;
+            ctx.globalAlpha = baseA * (0.15 + 0.7 * f);
+            ctx.strokeStyle = '#d8a86a';
+            ctx.lineWidth = 11 * (0.25 + 0.75 * f);
+            ctx.beginPath();
+            ctx.moveTo(spts[i - 1].x, spts[i - 1].y);
+            ctx.lineTo(spts[i].x, spts[i].y);
+            ctx.stroke();
+          }
+          // 内层亮沙芯
+          for (let i = 1; i < n; i++) {
+            const f = i / n;
+            ctx.globalAlpha = baseA * (0.1 + 0.8 * f);
+            ctx.strokeStyle = '#f5e3b8';
+            ctx.lineWidth = 4 * (0.2 + 0.8 * f);
+            ctx.beginPath();
+            ctx.moveTo(spts[i - 1].x, spts[i - 1].y);
+            ctx.lineTo(spts[i].x, spts[i].y);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = baseA;
+          ctx.restore();
+        }
+        // 沙之行者沙之刺：大而清晰的沙质尖刺，尖端朝飞行方向，深棕描边 + 沙黄主体 + 亮沙芯
+        const r = this.r;
+        const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        const spikePath = () => {
+          ctx.beginPath();
+          ctx.moveTo(r * 1.4, 0);                                        // 尖端
+          ctx.quadraticCurveTo(r * 0.15, -r * 0.55, -r * 1.15, -r * 0.2);  // 上缘
+          ctx.quadraticCurveTo(-r * 0.8, 0, -r * 1.15, r * 0.2);          // 尾部收拢
+          ctx.quadraticCurveTo(r * 0.15, r * 0.55, r * 1.4, 0);           // 下缘
+          ctx.closePath();
+        };
+        ctx.fillStyle = '#4a2f14'; spikePath(); ctx.fill();   // 深棕底
+        ctx.save(); ctx.scale(0.82, 0.7);
+        ctx.fillStyle = '#d8a86a'; spikePath(); ctx.fill();   // 沙黄主体
+        ctx.restore();
+        ctx.save(); ctx.scale(0.5, 0.34);
+        ctx.fillStyle = '#f5e3b8'; spikePath(); ctx.fill();   // 亮沙芯
+        ctx.restore();
+        // 沙粒点缀
+        ctx.fillStyle = 'rgba(245,227,184,0.9)';
+        for (let i = 0; i < 3; i++) {
+          const gx = -r * 0.5 + i * r * 0.42, gy = (i % 2 ? 1 : -1) * r * 0.14;
+          ctx.fillRect(gx, gy, 2, 2);
+        }
         ctx.restore();
         return;
       }

@@ -153,6 +153,12 @@
       noiseAt(0, 0.08, 0.04, 'highpass', 3000, 5200);
     },
     shock() { noise(0.35, 0.3, 400); tone(90, 0.4, 'sawtooth', 0.14, 30); },
+    /** 鬣狗狗叫：中低频短促汪声 + 气声，带快速下滑 */
+    bark() {
+      tone(420, 0.1, 'sawtooth', 0.2, 160);
+      tone(280, 0.13, 'square', 0.1, 90, 0.015);
+      noiseAt(0, 0.09, 0.05, 'bandpass', 1600, 2800);
+    },
     hurt() { tone(320, 0.25, 'sawtooth', 0.14, 90); },
     levelup() {
       tone(523, 0.1, 'square', 0.09);

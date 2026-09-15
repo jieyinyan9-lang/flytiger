@@ -85,7 +85,10 @@
       cranesage: ['风炮连射击穿了胸膛', '龙卷风卷碎了全身骨头', '镜面反射的激光切成了两半', '高速风刃凌迟成了碎片', '锁血气波冲击震碎了内脏'],
       sphinx: ['双爪扇形石片割开了喉咙', '贴地冲击波震断了双腿后倒地摔死', '双眼扫射烧穿了胸腔', '横冲撞甩月牙刃腰斩了', '双螺旋弹幕和三组连击绞成了肉渣'],
       niumo: ['牛角散射射穿了五脏六腑', '牛头冲撞顶碎了胸腔', '双角夹击挤成了肉饼', '追踪魔角追击后穿颅而亡', '魔王爆发齐射轰成了碎末'],
-      bonedragonking: ['钻地出土时冲撞砸烂了全身', '绿火连射烧成了骨渣', '头部碎裂后崩解的骨龙群啃食殆尽', '小骨蛇缠满全身绞断了每一根骨头']
+      bonedragonking: ['钻地出土时冲撞砸烂了全身', '绿火连射烧成了骨渣', '头部碎裂后崩解的骨龙群啃食殆尽', '小骨蛇缠满全身绞断了每一根骨头'],
+      madhyena: ['怒吼声波震裂了全身骨骼', '疾冲撞击顶穿了胸膛', '钻地突袭从脚下刺穿了肚子'],
+      raccoonrover: ['玫红能量印记炸碎了半边身子', '悬浮板疾冲撞飞后高空坠落摔死', '游走轨迹的连环能量残爆撕碎了内脏'],
+      sandwalker: ['巨型沙之刺钉穿了身体', '全屏沙刺弹幕扎成了筛子', '召唤的双头飞蛇缠住绞杀了']
     }
   };
   /** Boss 死法池 key → 显示名 */
@@ -94,7 +97,8 @@
     swordeagle: '铁鹰', skullking: '亡灵骷髅王', dogking: '飞天狗王',
     giantpheasant: '火鸡王', homelander: '怒星使', bossman: '斧王',
     stranger: '怪客', frogking: '蛙哥', cranesage: '鹤仙',
-    sphinx: '狮身人面像', niumo: '牛魔', bonedragonking: '巨型骨龙王'
+    sphinx: '狮身人面像', niumo: '牛魔', bonedragonking: '巨型骨龙王',
+    madhyena: '癫狂鬣狗', raccoonrover: '浣熊漫游者', sandwalker: '沙之行者'
   };
   /** 死亡演出时序（秒）：黑气涌入 2.4s → 文本逐字 → 完全显示后停留 3s（总上限 10s）→ 黑色淡出 1.6s */
   const DEATH_FX = { BLACK_IN: 2.4, HOLD_AFTER: 3, AUTO_MAX: 10, FADE_OUT: 1.6 };
@@ -466,11 +470,12 @@
 
       // 地图：每次进入游戏随机刷新一张（阻碍特性与草地一致）
       this.rollMap();
-      // 测试模式：锁定草原地图（牛魔草原专属）+ 首个 Boss 3 秒后出现，便于反复测试
-      if (this.testBoss === 'NiuMo') {
-        this.mapChoice = 'grassland';
-        const m = CFG.maps.find(x => x.id === 'grassland') || this.map;
-        this.map = m; this.mapId = 'grassland';
+      // 测试模式：Boss 专属地图锁定（牛魔/鬣狗→草原、浣熊→霓虹喵都、沙行者→沙漠）+ 首个 Boss 3 秒后出现，便于反复测试
+      const testMap = { NiuMo: 'grassland', MadHyena: 'grassland', RaccoonRover: 'cyber', SandWalker: 'desert' }[this.testBoss];
+      if (testMap) {
+        this.mapChoice = testMap;
+        const m = CFG.maps.find(x => x.id === testMap) || this.map;
+        this.map = m; this.mapId = testMap;
         this.crater = null; this.sea = null;
         this.bossT = 3;
       } else if (this.testBoss) {
@@ -1002,6 +1007,14 @@
       }));
       box.appendChild(r4);
 
+      // 新Boss召唤测试：自动锁定对应地图并开局（B 键战斗中可再立即召唤）
+      box.appendChild(label('新Boss召唤（自动锁图开局）'));
+      const r5 = document.createElement('div');
+      r5.appendChild(btn('🦁 鬣狗', () => this.testStartBoss('MadHyena', 'grassland'), '#6b4d1f'));
+      r5.appendChild(btn('🛹 浣熊', () => this.testStartBoss('RaccoonRover', 'cyber'), '#5a1d6f'));
+      r5.appendChild(btn('🐍 沙行者', () => this.testStartBoss('SandWalker', 'desert'), '#7a5a20'));
+      box.appendChild(r5);
+
       // 战斗中：P0-P5 跳转
       box.appendChild(label('斧王阶段3跳转（战斗中）'));
       const bossMan = () => this.bosses.find(b => b.constructor.name === 'BossMan');
@@ -1033,6 +1046,17 @@
       box.appendChild(r3);
 
       document.body.appendChild(box);
+    }
+
+    /** 本地测试：强制指定 Boss 出场并锁定地图开局（测试面板专用） */
+    testStartBoss(name, mapId) {
+      this.testBoss = name;
+      this.testP3 = false;
+      window.__TEST_BOSS__ = name;
+      window.__TEST_P3__ = false;
+      this.mapChoice = mapId;   // rollMap 尊重具体地图选择：本局及重开均锁定该图
+      this.stageMode = false;
+      this.start();
     }
 
     gameOver() {
@@ -1778,10 +1802,8 @@
         !(b.ground && this.mapId === 'ocean');
       let pool = window.BOSS_LIST.filter(b => ordOk(b) && mapOk(b));
       if (!pool.length) {
-        // 兜底1：放宽大海地面限制等通用地图限制（专属 Boss 的地图限定不可放宽，防止空池卡死）
-        pool = window.BOSS_LIST.filter(b => ordOk(b) &&
-          b.cls.name !== 'Sphinx' && b.cls.name !== 'NiuMo' &&
-          b.cls.name !== 'BoneDragonKing');
+        // 兜底1：放宽大海地面限制等通用地图限制（地图限定 Boss 均带 map 属性，不可放宽，防止空池卡死）
+        pool = window.BOSS_LIST.filter(b => ordOk(b) && b.map === undefined);
       }
       if (!pool.length) pool = window.BOSS_LIST.slice();
       // 不连续两轮出现同一个 Boss：从最终候选池剔除上一只（池中有其他选择时才剔除）
@@ -1828,10 +1850,9 @@
       this.lastBossName = cls.name;   // 记录上一只：下一轮抽取时剔除，禁止连续重复
       try { localStorage.setItem('flytiger_last_boss', cls.name); } catch (e) {}  // 跨局记忆：新局首只也剔除
       this.bossSeen.add(cls.name);   // 登记出场：后续抽取权重减半
-      // 所有非地图专属 Boss（狮身人面像/牛魔/骨龙王除外）均已轮过一遍 → 清空记录，概率恢复正常。
-      // 专属 Boss 无单次限制：强制轮后即等权留在本图普通池，仅受权重减半与不连续重复约束
-      const cyclable = (window.BOSS_LIST || []).filter(e =>
-        e.cls.name !== 'Sphinx' && e.cls.name !== 'NiuMo' && e.cls.name !== 'BoneDragonKing');
+      // 所有非地图限定 Boss（带 map 属性的专属 Boss 永久留在本图普通池）均已轮过一遍
+      // → 清空记录，概率恢复正常。专属 Boss 无单次限制：仅受权重减半与不连续重复约束
+      const cyclable = (window.BOSS_LIST || []).filter(e => e.map === undefined);
       if (cyclable.length && cyclable.every(e => this.bossSeen.has(e.cls.name))) {
         this.bossSeen.clear();
       }
@@ -1849,6 +1870,16 @@
         SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
       }
       this.shake(6);
+      // 癫狂鬣狗出场：场景内刷出更多障碍物（草原山石），增加战场复杂度
+      if (cls.name === 'MadHyena') {
+        for (let i = 0; i < 6; i++) {
+          const kind = Math.floor(Math.random() * 5);
+          const rock = new Rock(0, 'grass' + kind);
+          rock.x = CFG.W + 100 + i * 170 + Math.random() * 80;
+          this.rocks.push(rock);
+        }
+        this.toast('场景中出现了更多障碍物！', 1.6, 'lt');
+      }
     }
     onBossDefeated(boss) {
       this.bossCount++;

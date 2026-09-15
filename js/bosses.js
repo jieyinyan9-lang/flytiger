@@ -29,7 +29,8 @@
     SwordEagle: 'swordeagle', SkullKing: 'skullking', DogKing: 'dogking',
     GiantPheasant: 'giantpheasant', Homelander: 'homelander', BossMan: 'bossman',
     Stranger: 'stranger', FrogKing: 'frogking', CraneSage: 'cranesage',
-    Sphinx: 'sphinx', NiuMo: 'niumo', BoneDragonKing: 'bonedragonking'
+    Sphinx: 'sphinx', NiuMo: 'niumo', BoneDragonKing: 'bonedragonking',
+    MadHyena: 'madhyena', RaccoonRover: 'raccoonrover', SandWalker: 'sandwalker'
   };
 
   class Boss {
@@ -5670,7 +5671,704 @@
     }
   }
 
-  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage, Sphinx, NiuMo, BoneDragonKing };
+  /* ================ 癫狂鬣狗（草原限定） ================
+   * 怒吼 3 道环形声波 ↔ 瞄准冲刺，持续循环；每损 30% 血钻入地面 4s，
+   * 出土后锁定玩家进行一次瞄准冲刺。美术：caoyuan-1.png（368×208，已朝左） */
+  class MadHyena extends Boss {
+    constructor(g) {
+      super(g, 24, 60);
+      this.bossName = '癫狂鬣狗';
+      this.title = '草原猎手';
+      this.x = CFG.W + 130;
+      this.y = CFG.GROUND_Y - 60;
+      this.baseY = this.y;
+      this.loop = 'roar';        // roar ↔ dash 持续循环
+      this.sub = '';             // 冲刺子状态 wind / air / rest
+      this.subT = 0;
+      this.roarFired = 0;        // 本次怒吼已发出的声波道数
+      this.rings = [];           // 声波 {x,y,r,vr,life,t,dealt,dmg}
+      this.aim = null;           // 冲刺锁定点
+      this.nextBurrowAt = this.maxHp * 0.7;   // 下次钻地血线：70% → 40% → 10%
+      this.burrowPhase = '';     // '' / sink / under / emerge
+      this.burrowT = 0;
+      this.face = -1;            // -1 朝左（默认贴图）/ 1 朝右（水平翻转）
+      this.contactBase = 24;
+      this.tilt = 0;             // 当前身体旋转角（撞击前微调，让正面垂直于玩家连线）
+      this.targetTilt = 0;       // 目标旋转角
+      this.dashWarn = false;     // 冲刺路径预警标记
+      this.dashCount = 0;        // 本轮已撞击次数（达 4~6 次后回怒吼发声波）
+      this.dashTarget = 5;       // 本轮撞击目标次数（roar 时随机 4~6）
+      this.deathCols = ['#8a6a3a', '#c9a05a', '#5a4426', '#fff'];
+      this.xpValue = 240;
+    }
+
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const p = g.player;
+      this._px = p.x; this._py = p.y;   // 缓存玩家位置供 render 画预警线
+
+      if (this.state === 'enter') {
+        this.x -= 200 * dt;
+        this.y = CFG.GROUND_Y - 60 + Math.abs(Math.sin(this.t * 9)) * -6;
+        this.face = -1;
+        if (this.x <= CFG.W - 250) { this.state = 'fight'; this.stateT = 0; this.subT = 0; }
+        return;
+      }
+
+      // 钻地突袭：期间免伤、无接触伤害、无碰撞体积（radius=0）
+      if (this.burrowPhase) { this.updateBurrow(dt, g); this.updateRings(dt, g); return; }
+      if (this.state !== 'fight') return;
+
+      if (this.loop === 'roar') this.updateRoar(dt, g);
+      else this.updateDash(dt, g);
+      this.updateRings(dt, g);
+
+      // 地面巡逻：仅怒吼阶段缓慢逼近玩家；冲刺全阶段（wind/air/rest/fall）保持位置不被拉回
+      if (this.loop === 'roar') {
+        const dx = p.x - this.x;
+        if (Math.abs(dx) > 130) {
+          this.x += Math.sign(dx) * 58 * dt;
+          this.face = dx > 0 ? 1 : -1;
+        }
+        this.x = clamp(this.x, CFG.W * 0.4, CFG.W - 80);
+        this.y = CFG.GROUND_Y - 60 + Math.abs(Math.sin(this.t * 8)) * -6;
+      }
+      // 撞毁山石
+      g.rocks.forEach(r => { if (!r.dead && r.contains(this.x, this.y, this.radius)) r.destroy(g); });
+    }
+
+    /* —— 怒吼：发 2 道声波（配狗叫），结束后进入撞击循环（撞击 4~6 次才回怒吼）—— */
+    updateRoar(dt, g) {
+      this.subT += dt;
+      // 进入怒吼时重置撞击计数并随机下一轮撞击目标次数（4~6）
+      if (this.roarFired === 0 && this.subT <= dt + 0.001) {
+        this.dashCount = 0;
+        this.dashTarget = 4 + Math.floor(Math.random() * 3);   // 4, 5, 6
+      }
+      if (this.subT > 0.4 + this.roarFired * 0.35 && this.roarFired < 2) {
+        this.roarFired++;
+        this.fireRing(g);
+        SFX.bark();            // 声波时狗叫一声
+        if (this.roarFired === 1) g.shake(4);
+      }
+      if (this.subT > 1.1) {
+        this.loop = 'dash'; this.sub = 'wind'; this.subT = 0;
+        this.aim = null;
+        SFX.bossCharge();
+        g.toast('癫狂鬣狗压低了身子！', 1.2, 'lt');
+      }
+    }
+
+    /* —— 冲刺：wind 1.5s 狗叫+路径预警+角度微调（最后 0.15s 锁定撞击点）→ air 朝锁定点冲（不追踪）→ 低概率下落 → 怒吼 —— */
+    updateDash(dt, g) {
+      const p = g.player;
+      this.subT += dt;
+      if (this.sub === 'wind') {
+        // 撞击前转向面向玩家
+        this.face = p.x > this.x ? 1 : -1;
+        // 狗叫 + 路径预警（进入 wind 时触发一次）
+        if (this.subT <= dt + 0.001) {
+          SFX.bark();
+          this.dashWarn = true;
+          this.aim = null;
+        }
+        // 头部面对玩家：贴图头部默认朝左(180°)，face=1 翻转后朝右(0°)
+        // face=1 时 tilt=a 即头朝玩家；face=-1 时 tilt=a-π 即头朝玩家
+        const a = Math.atan2(p.y - this.y, p.x - this.x);
+        this.targetTilt = this.face === -1 ? a - Math.PI : a;
+        this.tilt += (this.targetTilt - this.tilt) * Math.min(1, dt * 14);
+        // 最后 0.15s 锁定撞击点（玩家当前位置），之后不再更新——玩家可躲开
+        if (this.subT > 1.35 && !this.aim) {
+          this.aim = { x: p.x, y: p.y };
+        }
+        if (this.subT > 1.5) {
+          if (!this.aim) this.aim = { x: p.x, y: p.y };
+          this.sub = 'air'; this.subT = 0;
+          this.contactDmg = 30;   // 冲刺撞击高额伤害（接触伤害由 Player.update 统一结算）
+          this.dashWarn = false;
+          SFX.dash(); g.shake(5);
+        }
+      } else if (this.sub === 'air') {
+        // 朝 wind 阶段锁定的撞击点冲刺（不持续追踪玩家，玩家可横向躲开）
+        this.face = this.aim.x > this.x ? 1 : -1;
+        // 夸张拖尾：大量尘土粒子
+        for (let i = 0; i < 5; i++) {
+          g.particles.push(new Particle(this.x + rand(-26, 26), this.y + rand(-16, 20),
+            rand(-120, 120), rand(-60, 30), 0.35, rand(4, 10), i % 2 ? '#b09468' : '#8a6a3a'));
+        }
+        // 变速：ease-in 加速，lerp 系数从 3（慢）平方增长到 25（快），整体再次降速，前半段明显更慢
+        const prog = clamp(this.subT / 0.5, 0, 1);
+        const lerpK = 3 + prog * prog * 22;
+        const k = Math.min(1, dt * lerpK);
+        this.x += (this.aim.x - this.x) * k;
+        this.y += (this.aim.y - this.y) * k;
+        // 到达锁定撞击点即判定命中（玩家不在该点则扑空）
+        if (Math.hypot(this.aim.x - this.x, this.aim.y - this.y) < 14 || this.subT > 0.55) {
+          this.onDashHit(g);
+          return;
+        }
+      } else if (this.sub === 'fall') {
+        // 撞到点后下落：视觉表现鬣狗冲撞力竭下坠
+        this.y += 540 * dt;
+        if (this.subT > 0.45) {
+          this.loop = 'roar'; this.sub = ''; this.subT = 0; this.roarFired = 0;
+          this.y = CFG.GROUND_Y - 60;
+          this.contactDmg = this.contactBase;
+        }
+      } else if (this.sub === 'rest') {
+        // 撞击后停留在撞击位置，短暂停顿：达目标次数回怒吼发声波，否则继续瞄准玩家撞击
+        if (this.subT > 0.35) {
+          this.contactDmg = this.contactBase;
+          if (this.dashCount >= this.dashTarget) {
+            this.loop = 'roar'; this.sub = ''; this.subT = 0; this.roarFired = 0;
+          } else {
+            this.sub = 'wind'; this.subT = 0;
+          }
+        }
+      }
+      // 非 air/wind 阶段：tilt 逐步回正到小幅摆动
+      if (this.sub !== 'air' && this.sub !== 'wind') {
+        this.tilt += (Math.sin(this.t * 3) * 0.04 - this.tilt) * Math.min(1, dt * 6);
+      }
+    }
+    /** 冲刺命中：夸张爆炸特效 + 强震屏 + 计数 + 10% 概率落地，90% 停在撞击点 */
+    onDashHit(g) {
+      this.dashCount++;   // 累计撞击次数
+      // 夸张爆炸：大量粒子 + 双层冲击波环 + 强震屏
+      burst(g, this.x, this.y, 32, ['#ffd23b', '#fff', '#b09468', '#8a6a3a', '#ff6a1e'], 380, 9, 0.55);
+      g.fxRings.push({ x: this.x, y: this.y, r: 10, vr: 680, t: 0, life: 0.5, col: '#ffd23b' });
+      g.fxRings.push({ x: this.x, y: this.y, r: 6, vr: 920, t: 0, life: 0.35, col: '#fff' });
+      g.shake(11); SFX.shock();
+      this.contactDmg = this.contactBase;
+      // 10% 概率落地（落地后回怒吼），90% 短暂停顿后继续瞄准玩家撞击
+      if (Math.random() < 0.1) {
+        this.sub = 'fall'; this.subT = 0;
+      } else {
+        this.sub = 'rest'; this.subT = 0;
+      }
+    }
+
+    /* —— 钻地突袭：下沉 0.45s → 地下潜行 3s → 出土后直接瞬移到玩家位置撞击 —— */
+    startBurrow(g) {
+      this.burrowPhase = 'sink'; this.burrowT = 0;
+      this.contactDmg = 0; this.radius = 0;
+      this.rings.length = 0;
+      g.toast('癫狂鬣狗钻入了地面！', 1.6, 'lt');
+      SFX.shock(); g.shake(4);
+      burst(g, this.x, CFG.GROUND_Y - 10, 12, ['#8a6a3a', '#b09468', '#5a4426'], 180, 5, 0.5);
+    }
+    updateBurrow(dt, g) {
+      const p = g.player;
+      this.burrowT += dt;
+      if (this.burrowPhase === 'sink') {
+        this.y += 130 * dt;
+        this.face = p.x > this.x ? 1 : -1;
+        if (this.burrowT > 0.45) { this.burrowPhase = 'under'; this.burrowT = 0; }
+      } else if (this.burrowPhase === 'under') {
+        // 地下潜行：朝玩家 x 缓慢移动，地面留尘土
+        const dx = p.x - this.x;
+        if (Math.abs(dx) > 24) this.x += Math.sign(dx) * 140 * dt;
+        this.x = clamp(this.x, 60, CFG.W - 60);
+        this.y = CFG.GROUND_Y + 14;
+        if (Math.random() < 0.4) {
+          g.particles.push(new Particle(this.x + rand(-20, 20), CFG.GROUND_Y - 4,
+            rand(-40, 40), rand(-90, -30), 0.4, rand(3, 6), '#8a6a3a'));
+        }
+        if (this.burrowT > 3.0) {
+          this.burrowPhase = 'emerge'; this.burrowT = 0;
+          this.radius = 60; this.contactDmg = this.contactBase;
+          this.y = CFG.GROUND_Y - 50;
+          burst(g, this.x, CFG.GROUND_Y - 20, 20, ['#8a6a3a', '#b09468', '#ffd23b', '#fff'], 260, 6, 0.55);
+          SFX.shock(); g.shake(8);
+        }
+      } else if (this.burrowPhase === 'emerge') {
+        this.y += (CFG.GROUND_Y - 60 - this.y) * Math.min(1, dt * 8);
+        if (this.burrowT > 0.4) {
+          this.burrowPhase = '';
+          // 地下突袭：不用转向，直接移到玩家位置撞击
+          const p2 = g.player;
+          this.contactDmg = 30;
+          this.x = p2.x; this.y = p2.y;
+          // 夸张拖尾：大量尘土粒子从地下冲起
+          for (let i = 0; i < 26; i++) {
+            g.particles.push(new Particle(this.x + rand(-55, 55), this.y + rand(-45, 45),
+              rand(-200, 200), rand(-160, 70), 0.6, rand(4, 11), i % 2 ? '#8a6a3a' : '#b09468'));
+          }
+          g.fxRings.push({ x: this.x, y: CFG.GROUND_Y - 10, r: 16, vr: 700, t: 0, life: 0.5, col: '#8a6a3a' });
+          g.shake(9); SFX.shock();
+          this.onDashHit(g);
+        }
+      }
+    }
+
+    fireRing(g) {
+      this.rings.push({
+        x: this.x + 62 * this.face, y: this.y - 16,
+        r: 26, vr: 330, t: 0, dealt: false,
+        maxR: 230,   // 飞行到此半径后衰减消失
+        dmg: Math.round(12 * g.atkScale)
+      });
+      SFX.shock();
+    }
+    updateRings(dt, g) {
+      const p = g.player;
+      for (const r of this.rings) {
+        r.t += dt; r.r += r.vr * dt;
+        if (!r.dealt && Math.abs(Math.hypot(p.x - r.x, p.y - r.y) - r.r) < 26 + p.radius * 0.7) {
+          r.dealt = true; p.hurt(r.dmg, g, this.dsrc);
+        }
+      }
+      // 飞行距离达到 maxR 即衰减消失
+      this.rings = this.rings.filter(r => r.r < r.maxR);
+    }
+
+    takeDamage(dmg, g) {
+      if (this.dead || this.state === 'enter' || this.burrowPhase) return;   // 入场/钻地免伤
+      this.hp -= dmg;
+      this.hitFlash();
+      if (Math.random() < 0.3) burst(g, this.x - 14, this.y, 2, ['#ff3b3b', '#ff7b2e'], 130, 3, 0.18);
+      if (!this.enraged && this.hp > 0 && this.hp <= this.maxHp * 0.3) {
+        this.enraged = true;
+        SFX.bossEnrage(); g.shake(10);
+        g.toast(`${this.bossName} 狂暴了！`, 1.8, 'lt');
+        burst(g, this.x, this.y, 24, ['#ff3b3b', '#ffd23b', '#fff'], 280, 6, 0.6, 130);
+      }
+      // 每损 30% 血：钻入地面（一次大额伤害跨多条血线只触发一次，剩余血线顺延）
+      if (this.hp > 0 && this.hp <= this.nextBurrowAt) {
+        while (this.nextBurrowAt > 0 && this.hp <= this.nextBurrowAt) this.nextBurrowAt -= this.maxHp * 0.3;
+        this.startBurrow(g);
+      }
+      if (this.hp <= 0) { this.hp = 0; this.die(g); }
+    }
+
+    render(ctx) {
+      // 声波：双层虚线圆环，随扩散距离衰减
+      for (const r of this.rings) {
+        const a = 1 - r.r / r.maxR;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,214,130,${0.6 * a})`;
+        ctx.lineWidth = 5;
+        ctx.setLineDash([16, 11]);
+        ctx.lineDashOffset = -r.t * 90;
+        ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = `rgba(255,255,255,${0.35 * a})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(r.x, r.y, Math.max(1, r.r - 9), 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      // 钻地期间只画地面尘土堆
+      if (this.burrowPhase === 'sink' || this.burrowPhase === 'under') {
+        ctx.fillStyle = 'rgba(138,106,58,0.75)';
+        ctx.beginPath(); ctx.ellipse(this.x, CFG.GROUND_Y - 4, 52, 14, 0, Math.PI, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(90,68,38,0.6)';
+        ctx.beginPath(); ctx.ellipse(this.x, CFG.GROUND_Y - 2, 30, 8, 0, Math.PI, TAU); ctx.fill();
+        return;
+      }
+      const bob = Math.abs(Math.sin(this.t * 8)) * -5;
+      // 冲刺路径预警：wind 阶段画一条从鬣狗到玩家的红色虚线，末端圆圈标记撞击点
+      if (this.dashWarn && this._px !== undefined) {
+        const px = this._px, py = this._py;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,60,40,${0.4 + 0.3 * Math.sin(this.t * 12)})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([14, 10]);
+        ctx.lineDashOffset = -this.t * 60;
+        ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(px, py); ctx.stroke();
+        // 撞击点标记圈
+        ctx.setLineDash([]);
+        ctx.strokeStyle = `rgba(255,80,60,${0.5 + 0.3 * Math.sin(this.t * 10)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px, py, 24 + Math.sin(this.t * 8) * 4, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      // caoyuan-1.png 368×208 缩放 0.62 → 约 228×129；图像中鬣狗躯干偏左，
+      // 按朝向平移让碰撞中心对准身体；朝右冲刺时水平翻转
+      const dx = this.face === -1 ? 28 : -28;
+      const sx = this.face === -1 ? 0.62 : -0.62;
+      // 使用 this.tilt（撞击前微调角度，让正面垂直于玩家连线）
+      drawBossSprite(ctx, Sprites.hyena, this.x + dx, this.y + bob, sx, 0.62, this.tilt, this.flash);
+      // 怒吼蓄势红光
+      if (this.loop === 'roar' && this.subT > 0.2 && this.roarFired < 3) {
+        const mx = this.x + 62 * this.face, my = this.y - 16;
+        const glow = ctx.createRadialGradient(mx, my, 0, mx, my, 34);
+        glow.addColorStop(0, 'rgba(255,120,60,0.55)');
+        glow.addColorStop(1, 'rgba(255,60,30,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(mx, my, 34, 0, TAU); ctx.fill();
+      }
+    }
+  }
+
+  /* ================ 浣熊漫游者（霓虹喵都限定） ================
+   * 不停快速移动：围绕玩家 → 瞄准突进 → 走边框，各 5s 循环；
+   * 移动处留下玫红能量印记（4s 消散），玩家接触触发小范围爆炸。美术：saibo-1.png（500×300，已朝左） */
+  class RaccoonRover extends Boss {
+    constructor(g) {
+      super(g, 20, 52);
+      this.bossName = '浣熊漫游者';
+      this.title = '霓虹浪客';
+      this.x = CFG.W + 130;
+      this.y = 150;
+      this.route = 'orbit';      // orbit → aim → border 循环，各 5s
+      this.routeT = 0;
+      this.orbitAng = 0;
+      this.aimSub = 'wind';      // 瞄准路线子状态 wind / dash / brake
+      this.aimT = 0;
+      this.aimV = null;          // 突进速度向量
+      this.borderIdx = 0;
+      this.marks = [];           // 玫红印记 {x,y,r,life,max,hit}
+      this.markT = 0;
+      this.face = -1;
+      this.deathCols = ['#ff2ec8', '#b46bff', '#45e6ff', '#fff'];
+      this.xpValue = 240;
+    }
+
+    /** 边框路点：贴着屏幕边框的八点环路 */
+    borderPts() {
+      return [[CFG.W - 110, 110], [CFG.W / 2, 80], [110, 110], [80, CFG.H / 2],
+        [110, CFG.GROUND_Y - 100], [CFG.W / 2, CFG.GROUND_Y - 70],
+        [CFG.W - 110, CFG.GROUND_Y - 100], [CFG.W - 80, CFG.H / 2]];
+    }
+
+    update(dt, g) {
+      this.t += dt; this.stateT += dt; this.routeT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const p = g.player;
+
+      if (this.state === 'enter') {
+        this.x += (CFG.W - 250 - this.x) * Math.min(1, dt * 2.4);
+        this.y += (150 - this.y) * Math.min(1, dt * 2.4);
+        this.face = -1;
+        if (Math.abs(this.x - (CFG.W - 250)) < 14) { this.state = 'fight'; this.stateT = 0; }
+        this.dropMark(dt, g);
+        return;
+      }
+      if (this.state !== 'fight') return;
+
+      if (this.route === 'orbit') this.updateOrbit(dt, g);
+      else if (this.route === 'aim') this.updateAim(dt, g);
+      else this.updateBorder(dt, g);
+
+      // 路线切换：各 5s，orbit → aim → border 循环
+      if (this.routeT > 5) {
+        this.routeT = 0;
+        this.route = this.route === 'orbit' ? 'aim' : this.route === 'aim' ? 'border' : 'orbit';
+        this.aimSub = 'wind'; this.aimT = 0; this.aimV = null;
+        if (this.route === 'orbit') this.orbitAng = Math.atan2(this.y - p.y, this.x - p.x);
+        if (this.route === 'border') this.nearestBorderPt();
+        g.toast('浣熊漫游者改变了路线！', 1.2, 'lt');
+      }
+
+      this.x = clamp(this.x, 46, CFG.W - 46);
+      this.y = clamp(this.y, 60, CFG.GROUND_Y - 60);
+      this.dropMark(dt, g);
+      this.updateMarks(dt, g);
+    }
+
+    updateOrbit(dt, g) {
+      const p = g.player;
+      this.orbitAng += 2.6 * dt;
+      const tx = p.x + Math.cos(this.orbitAng) * 195;
+      const ty = clamp(p.y + Math.sin(this.orbitAng) * 195, 80, CFG.GROUND_Y - 80);
+      const px = this.x;
+      this.x += (tx - this.x) * Math.min(1, dt * 10);
+      this.y += (ty - this.y) * Math.min(1, dt * 10);
+      if (Math.abs(this.x - px) > 0.5) this.face = this.x > px ? 1 : -1;
+    }
+
+    updateAim(dt, g) {
+      const p = g.player;
+      this.aimT += dt;
+      if (this.aimSub === 'wind') {
+        // 原地高频抖动蓄力
+        this.x += Math.sin(this.t * 42) * 26 * dt;
+        this.y += Math.cos(this.t * 38) * 20 * dt;
+        this.face = p.x > this.x ? 1 : -1;
+        if (this.aimT > 0.5) {
+          this.aimSub = 'dash'; this.aimT = 0;
+          const a = Math.atan2(p.y - this.y, p.x - this.x);
+          this.aimV = { x: Math.cos(a) * 560, y: Math.sin(a) * 560 };
+          this.face = this.aimV.x >= 0 ? 1 : -1;
+          SFX.dash();
+        }
+      } else if (this.aimSub === 'dash') {
+        this.x += this.aimV.x * dt; this.y += this.aimV.y * dt;
+        g.particles.push(new Particle(this.x + rand(-16, 16), this.y + rand(-10, 22),
+          rand(-40, 40), rand(-20, 30), 0.3, rand(2, 5), '#ff2ec8'));
+        if (this.aimT > 0.55) { this.aimSub = 'brake'; this.aimT = 0; }
+      } else {
+        this.x += this.aimV.x * dt * (1 - this.aimT / 0.45) * 0.4;
+        this.y += this.aimV.y * dt * (1 - this.aimT / 0.45) * 0.4;
+        if (this.aimT > 0.45) { this.aimSub = 'wind'; this.aimT = 0; }
+      }
+    }
+
+    updateBorder(dt, g) {
+      const pts = this.borderPts();
+      const wp = pts[this.borderIdx];
+      const dx = wp[0] - this.x, dy = wp[1] - this.y, d = Math.hypot(dx, dy) || 1;
+      const st = 430 * dt;
+      if (Math.abs(dx) > 2) this.face = dx > 0 ? 1 : -1;
+      if (d < st + 12) this.borderIdx = (this.borderIdx + 1) % pts.length;
+      else { this.x += dx / d * Math.min(st, d); this.y += dy / d * Math.min(st, d); }
+    }
+    nearestBorderPt() {
+      const pts = this.borderPts();
+      let best = 0, bestD = Infinity;
+      pts.forEach((wp, i) => {
+        const d = (wp[0] - this.x) ** 2 + (wp[1] - this.y) ** 2;
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      this.borderIdx = best;
+    }
+
+    /* —— 玫红印记：移动沿途撒落，4s 消散；玩家接触即小范围爆炸 —— */
+    dropMark(dt, g) {
+      this.markT -= dt;
+      if (this.markT > 0) return;
+      this.markT = 0.11;
+      this.marks.push({ x: this.x, y: this.y + 42, r: 21, life: 4, max: 4, hit: false });
+      if (this.marks.length > 48) this.marks.shift();
+    }
+    updateMarks(dt, g) {
+      const p = g.player;
+      for (const m of this.marks) {
+        m.life -= dt;
+        if (!m.hit && m.life > 0 &&
+            Math.hypot(p.x - m.x, p.y - m.y) < m.r + p.radius * 0.65) {
+          m.hit = true; m.life = 0;
+          // 小范围爆炸
+          p.hurt(Math.round(13 * g.atkScale), g, this.dsrc);
+          burst(g, m.x, m.y, 16, ['#ff2ec8', '#b46bff', '#fff', '#45e6ff'], 220, 5, 0.45);
+          g.fxRings.push({ x: m.x, y: m.y, r: 10, vr: 640, t: 0, life: 0.45, col: '#ff2ec8' });
+          SFX.explode(false); g.shake(5);
+        }
+      }
+      this.marks = this.marks.filter(m => m.life > 0);
+    }
+
+    render(ctx) {
+      // 玫红印记：将沿途落点连成一条粗笔画线（像喷漆涂鸦），带发光，越靠近头部越淡
+      const baseA = ctx.globalAlpha;
+      const ms = this.marks;
+      if (ms.length > 1) {
+        ctx.save();
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        // 外层发光晕
+        ctx.shadowColor = '#ff2ec8';
+        ctx.shadowBlur = 16;
+        ctx.strokeStyle = 'rgba(255,46,200,0.32)';
+        ctx.lineWidth = 30;
+        ctx.beginPath();
+        ctx.moveTo(ms[0].x, ms[0].y);
+        for (let i = 1; i < ms.length; i++) ctx.lineTo(ms[i].x, ms[i].y);
+        ctx.stroke();
+        // 中层玫红主体
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = 'rgba(255,46,200,0.78)';
+        ctx.lineWidth = 20;
+        ctx.beginPath();
+        ctx.moveTo(ms[0].x, ms[0].y);
+        for (let i = 1; i < ms.length; i++) ctx.lineTo(ms[i].x, ms[i].y);
+        ctx.stroke();
+        // 内层亮粉高光：逐段按生命衰减（最老的点最淡，形成笔画起笔消散效果）
+        ctx.shadowBlur = 0;
+        for (let i = 1; i < ms.length; i++) {
+          const a = ms[i].life / ms[i].max;
+          ctx.strokeStyle = `rgba(255,180,235,${0.85 * a})`;
+          ctx.lineWidth = 9 * (0.5 + 0.5 * a);
+          ctx.beginPath();
+          ctx.moveTo(ms[i - 1].x, ms[i - 1].y);
+          ctx.lineTo(ms[i].x, ms[i].y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      const bob = Math.sin(this.t * 3.2) * 7;
+      // saibo-1.png 500×300 缩放 0.46 → 约 230×138；朝右时水平翻转
+      const sx = this.face === -1 ? 0.46 : -0.46;
+      const tilt = this.route === 'aim' && this.aimSub === 'dash' ? 0.1 * this.face : Math.sin(this.t * 2) * 0.05;
+      drawBossSprite(ctx, Sprites.rover, this.x, this.y + bob, sx, 0.46, tilt, this.flash);
+      // 瞄准蓄力红眼光晕
+      if (this.route === 'aim' && this.aimSub === 'wind') {
+        const ex = this.x + 40 * this.face, ey = this.y - 26 + bob;
+        const glow = ctx.createRadialGradient(ex, ey, 0, ex, ey, 26);
+        glow.addColorStop(0, 'rgba(255,46,90,0.65)');
+        glow.addColorStop(1, 'rgba(255,46,90,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(ex, ey, 26, 0, TAU); ctx.fill();
+      }
+    }
+  }
+
+  /* ================ 沙之行者（沙漠限定） ================
+   * 双阶段弹幕循环：①上中下循环移动 ②S 路线走边框；血量 50%-100% 时①比重更长，
+   * 0-50% 时②比重更长；每损 10% 血召唤 1 只双头蛇。美术：shamo-1.png（368×208，已朝左） */
+  class SandWalker extends Boss {
+    constructor(g) {
+      super(g, 22, 58);
+      this.bossName = '沙之行者';
+      this.title = '荒漠术士';
+      this.x = CFG.W + 130;
+      this.y = 150;
+      this.phase = 1;            // 1 上中下循环 / 2 S 路线边框
+      this.phaseT = 0;
+      this.pDur = 6;             // 当前阶段时长（按血量比重动态计算）
+      this.lane = 1;             // 0 上 / 1 中 / 2 下
+      this.laneT = 0;
+      this.fireT = 1.2;
+      this.bpIdx = 0;
+      this.nextSummonAt = this.maxHp * 0.9;   // 每损 10% 血召唤 1 只双头蛇
+      this.face = -1;
+      this.deathCols = ['#d8a86a', '#8a5a2e', '#a86bd8', '#fff'];
+      this.xpValue = 260;
+    }
+
+    laneY(i) { return [110, CFG.H / 2 - 10, CFG.GROUND_Y - 115][i]; }
+    borderPts() {
+      return [[CFG.W - 120, 120], [CFG.W / 2, 190], [120, 120], [190, CFG.H / 2],
+        [120, CFG.GROUND_Y - 110], [CFG.W / 2, CFG.GROUND_Y - 150],
+        [CFG.W - 120, CFG.GROUND_Y - 110], [CFG.W - 190, CFG.H / 2]];
+    }
+
+    update(dt, g) {
+      this.t += dt; this.stateT += dt; this.phaseT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const p = g.player;
+
+      if (this.state === 'enter') {
+        this.x += (CFG.W - 240 - this.x) * Math.min(1, dt * 2.2);
+        this.y += (265 - this.y) * Math.min(1, dt * 2.2);
+        this.face = -1;
+        if (Math.abs(this.x - (CFG.W - 240)) < 14) {
+          this.state = 'fight'; this.stateT = 0;
+          this.pDur = this.phaseDur();
+        }
+        return;
+      }
+      if (this.state !== 'fight') return;
+
+      if (this.phase === 1) this.updateLanes(dt, g);
+      else this.updateSRoute(dt, g);
+
+      // 阶段切换：血量 50%-100% 时阶段①比重更长，0-50% 时阶段②更长
+      if (this.phaseT > this.pDur) {
+        this.phase = this.phase === 1 ? 2 : 1;
+        this.phaseT = 0; this.pDur = this.phaseDur();
+        this.laneT = 0;
+        if (this.phase === 2) this.nearestBorderPt();
+        burst(g, this.x, this.y, 14, ['#d8a86a', '#f5e3b8', '#a86bd8'], 200, 5, 0.45);
+        g.toast('沙之行者变换了走位！', 1.3, 'lt');
+        SFX.enemyShoot();
+      }
+
+      // 弹幕：大而清晰的沙之刺，指向玩家
+      this.fireT -= dt;
+      if (this.fireT <= 0) {
+        this.fireT = this.phase === 1 ? 1.05 : 0.95;
+        this.fireSpikes(g, p);
+      }
+
+      this.x = clamp(this.x, 60, CFG.W - 60);
+      this.y = clamp(this.y, 70, CFG.GROUND_Y - 70);
+      // 沙尘拖尾
+      if (Math.random() < 0.35) {
+        g.particles.push(new Particle(this.x + rand(-30, 30), this.y + rand(-16, 30),
+          rand(-30, 10), rand(-14, 26), 0.45, rand(2, 5), '#d8b078'));
+      }
+    }
+
+    /** 阶段时长：4s 基础 + 4s 按血量比重线性倾斜（满血 8/4，残血 4/8） */
+    phaseDur() {
+      const ratio = clamp(this.hp / this.maxHp, 0, 1);
+      return this.phase === 1 ? 4 + 4 * ratio : 4 + 4 * (1 - ratio);
+    }
+
+    /* —— 阶段①：上中下三条航道循环移动 —— */
+    updateLanes(dt, g) {
+      this.laneT += dt;
+      if (this.laneT > 1.5) { this.laneT = 0; this.lane = (this.lane + 1) % 3; }
+      const ty = this.laneY(this.lane);
+      const px = this.x;
+      this.x = 700 + Math.sin(this.t * 1.1) * 130;
+      this.y += (ty - this.y) * Math.min(1, dt * 3.2);
+      if (Math.abs(this.x - px) > 0.5) this.face = this.x > px ? 1 : -1;
+    }
+
+    /* —— 阶段②：S 路线贴边框巡游 —— */
+    updateSRoute(dt, g) {
+      const pts = this.borderPts();
+      const wp = pts[this.bpIdx];
+      const dx = wp[0] - this.x, dy = wp[1] - this.y, d = Math.hypot(dx, dy) || 1;
+      const st = 300 * dt;
+      if (Math.abs(dx) > 2) this.face = dx > 0 ? 1 : -1;
+      if (d < st + 12) this.bpIdx = (this.bpIdx + 1) % pts.length;
+      else { this.x += dx / d * Math.min(st, d); this.y += dy / d * Math.min(st, d); }
+    }
+    nearestBorderPt() {
+      const pts = this.borderPts();
+      let best = 0, bestD = Infinity;
+      pts.forEach((wp, i) => {
+        const d = (wp[0] - this.x) ** 2 + (wp[1] - this.y) ** 2;
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      this.bpIdx = best;
+    }
+
+    /** 沙之刺扇形齐射：阶段① 4 发 / 阶段② 3 发（不密但持续覆盖全屏） */
+    fireSpikes(g, p) {
+      const n = this.phase === 1 ? 4 : 3;
+      const spread = this.phase === 1 ? 0.5 : 0.75;
+      const base = Math.atan2(p.y - this.y, p.x - this.x);
+      for (let i = 0; i < n; i++) {
+        const tt = n === 1 ? 0.5 : i / (n - 1);
+        const a = base + (tt - 0.5) * spread;
+        const sp = this.phase === 1 ? 255 : 245;
+        g.bullets.push(new Bullet(this.x - 30, this.y - 6,
+          Math.cos(a) * sp, Math.sin(a) * sp,
+          { kind: 'sandSpike', r: 13, dmg: Math.round(12 * g.atkScale), life: 6 }));
+      }
+      SFX.enemyShoot();
+    }
+
+    takeDamage(dmg, g) {
+      super.takeDamage(dmg, g);
+      if (this.dead || this.hp <= 0) return;
+      // 每损 10% 血召唤 1 只双头蛇（大额伤害跨多条血线逐条补齐；场上软上限 4 只）
+      while (this.nextSummonAt > 0 && this.hp <= this.nextSummonAt) {
+        this.nextSummonAt -= this.maxHp * 0.1;
+        this.summonSnake(g);
+      }
+    }
+    summonSnake(g) {
+      if (g.enemies.filter(e => e.type === 'twinsnake' && !e.dead).length >= 4) return;
+      g.enemies.push(new Enemy('twinsnake', g));
+      burst(g, this.x, this.y, 14, ['#d8a86a', '#8a5a2e', '#f5e3b8'], 200, 5, 0.4);
+      g.toast('沙之行者召唤了双头飞蛇！', 1.4, 'lt');
+      SFX.enemyShoot();
+    }
+
+    render(ctx) {
+      const bob = Math.sin(this.t * 2.6) * 9;
+      // shamo-1.png 368×208 缩放 0.72 → 约 265×150；蛇尾拖影在身后，无需翻转平移
+      const sx = this.face === -1 ? 0.72 : -0.72;
+      drawBossSprite(ctx, Sprites.sandWalker, this.x, this.y + bob, sx, 0.72, Math.sin(this.t * 1.8) * 0.06, this.flash);
+      // 掌中紫焰魔珠光晕（对应立绘中的紫色魔珠）
+      const ox = this.x - 66 * (this.face === -1 ? 1 : -1), oy = this.y - 28 + bob;
+      const pul = 1 + Math.sin(this.t * 5) * 0.16;
+      const glow = ctx.createRadialGradient(ox, oy, 0, ox, oy, 24 * pul);
+      glow.addColorStop(0, 'rgba(170,80,255,0.6)');
+      glow.addColorStop(1, 'rgba(170,80,255,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(ox, oy, 24 * pul, 0, TAU); ctx.fill();
+    }
+  }
+
+  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage, Sphinx, NiuMo, BoneDragonKing, MadHyena, RaccoonRover, SandWalker };
   /**
    * Boss 池：所有 Boss 等权（weight 相同），每一轮都可能出现。
    * 本局已出场过的 Boss 后续抽取权重持续减半（game.js bossSeen 加权抽取）；
@@ -5705,6 +6403,12 @@
     // 巨型骨龙王：荒地永久限定（map）；第2轮70%/第3轮80%独立强制出场，
     // 强制轮后（无论是否命中过）拉平为荒地普通池等权成员，可反复出场
     { cls: BoneDragonKing, weight: 3, map: 'wasteland', minOrd: 2,
-      forceChance: { 2: 0.7, 3: 0.8 }, music: 'boss-gulongwang' }
+      forceChance: { 2: 0.7, 3: 0.8 }, music: 'boss-gulongwang' },
+    // 癫狂鬣狗：草原永久限定（map），进入草原普通池即可反复出场
+    { cls: MadHyena, weight: 3, map: 'grassland', ground: true, music: 'boss-1' },
+    // 浣熊漫游者：霓虹喵都永久限定（map），进入霓虹喵都普通池即可反复出场
+    { cls: RaccoonRover, weight: 3, map: 'cyber', music: 'boss-2' },
+    // 沙之行者：沙漠永久限定（map），进入沙漠普通池即可反复出场
+    { cls: SandWalker, weight: 3, map: 'desert', music: 'boss-1' }
   ];
 })();
