@@ -6530,6 +6530,9 @@
       this.maxHp = segHp0 * n;
       this.hp = this.maxHp;
       this.dustT = 0;
+      // 视觉首节（龙头）是否已在地面以上：用于检测“破土而出”的上升沿。
+      // 分裂小段的断裂点可能本就在空中，初始按实际位置定，避免下钻再出土前被误判为出土
+      this.headWasAbove = !!(this.segments[0] && this.segments[0].y < CFG.GROUND_Y);
     }
 
     /* ---------------- 行为 ---------------- */
@@ -6572,6 +6575,18 @@
 
       this.advanceTrail();
       this.updateSegments();
+
+      // 出场无敌只保护“尚未出土”阶段：视觉龙头（首节）破土而出的瞬间，把剩余免伤截断为
+      // 0.35s 的短暂出土保护——露头后龙身立即可被击中。原先固定 1.8s 无敌覆盖整个出土动画，
+      // 表现为“龙从地底钻出来时怎么打都不掉血”（地下阶段仍保持无敌，不会被提前消耗）
+      {
+        const hd0 = this.segments[0];
+        const headAbove = !!(hd0 && !hd0.dead && hd0.y < CFG.GROUND_Y);
+        if (!this.headWasAbove && headAbove && this.spawnInvuln > 0.35) {
+          this.spawnInvuln = 0.35;
+        }
+        this.headWasAbove = headAbove;
+      }
 
       // 钻地扬尘（地面土垄追踪）
       if (this.y >= CFG.GROUND_Y) {
