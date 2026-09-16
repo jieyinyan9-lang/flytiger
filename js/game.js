@@ -2183,8 +2183,15 @@
       if ((this.bossActive || this.isTide) && Math.random() > 0.15) return;
       this.spawnBreakable(ev.spec);
     }
+    /** 破碎障碍耐久的轮次成长系数：每轮 +12%，封顶 3 倍（第1轮=1） */
+    breakHpMul() {
+      return Math.min(3, 1 + (this.round - 1) * 0.12);
+    }
     spawnBreakable(spec) {
-      const b = new Breakable(0, spec.id, { style: spec.styles ? randi(0, spec.styles - 1) : 0 });
+      const b = new Breakable(0, spec.id, {
+        style: spec.styles ? randi(0, spec.styles - 1) : 0,
+        hpMul: this.breakHpMul(),
+      });
       const rightmost = this.breakables.reduce((m, q) => Math.max(m, q.x), -9999);
       b.x = Math.max(CFG.W + b.w / 2 + 220, rightmost + b.w / 2 + rand(320, 620));
       if (b.float) b.cy = rand(195, 285);   // 漂浮在屏幕中部

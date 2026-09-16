@@ -5846,8 +5846,9 @@
       this.def = BREAK[id];
       this.w = this.def.w;
       this.h = this.def.h;
-      this.maxHp = this.def.hp;
-      this.hp = this.def.hp;
+      // 耐久随轮次成长（opts.hpMul，由 spawnBreakable 按当前轮次给出）
+      this.maxHp = Math.round(this.def.hp * (opts.hpMul || 1));
+      this.hp = this.maxHp;
       this.x = x;
       this.float = !!this.def.float;
       this.baseY = this.float ? 0 : CFG.GROUND_Y;
