@@ -5587,22 +5587,22 @@
    * ============================================================ */
   const BREAK = {
     // 城堡：中世纪军事塔楼（高=屏宽40%）
-    bkTower: { w: 96,  h: Math.round(CFG.W * 0.40), hp: 20, shape: 'bktower',
+    bkTower: { w: 96,  h: Math.round(CFG.W * 0.40), hp: 40, shape: 'bktower',
       debris: ['#a89a7e', '#8a7d64', '#c8bca2', '#5e5546', '#3a342c'] },
     // 天空：巨大建筑残骸（高=屏宽50%，漂浮）
-    bkWreck: { w: 128, h: Math.round(CFG.W * 0.50), hp: 20, shape: 'bkwreck', float: true,
+    bkWreck: { w: 128, h: Math.round(CFG.W * 0.50), hp: 40, shape: 'bkwreck', float: true,
       debris: ['#4a5468', '#333c4e', '#7fe3ff', '#9aa6bd', '#20262f'] },
     // 仙人洞：持续转动的白色魔方（高=屏宽40%，漂浮）
-    bkCube: { w: Math.round(CFG.W * 0.40), h: Math.round(CFG.W * 0.40), hp: 25, shape: 'bkcube', float: true,
+    bkCube: { w: Math.round(CFG.W * 0.40), h: Math.round(CFG.W * 0.40), hp: 50, shape: 'bkcube', float: true,
       debris: ['#f4f8fc', '#cdd9e6', '#8fe8ff', '#9fb4c8', '#ffffff'] },
     // 群山：巨大尖锐山峰（高=屏宽70%，接地）
-    bkPeak: { w: 176, h: Math.round(CFG.W * 0.70), hp: 25, shape: 'bkpeak',
+    bkPeak: { w: 176, h: Math.round(CFG.W * 0.70), hp: 50, shape: 'bkpeak',
       debris: ['#6d7880', '#525c63', '#8b98a0', '#cdd8de', '#3f484e'] },
     // 群山：低矮宽阔山峰（较宽，高=屏宽50%，接地）
-    bkMesa: { w: 300, h: Math.round(CFG.W * 0.50), hp: 20, shape: 'bkmesa',
+    bkMesa: { w: 300, h: Math.round(CFG.W * 0.50), hp: 40, shape: 'bkmesa',
       debris: ['#727d82', '#565f64', '#93a0a4', '#aab6ba', '#464e53'] },
     // 魔窟：幽蓝荧光枯木（较宽，高=屏宽80%，接地，3 种样式随机）
-    bkWood: { w: 150, h: Math.round(CFG.W * 0.80), hp: 30, shape: 'bkwood', styles: 3,
+    bkWood: { w: 150, h: Math.round(CFG.W * 0.80), hp: 60, shape: 'bkwood', styles: 3,
       debris: ['#15122a', '#0c0a1c', '#2c2350', '#54e0ff', '#7af0ff', '#3a9cff'] }
   };
 
