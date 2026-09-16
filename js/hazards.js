@@ -176,13 +176,15 @@
         w.solid = !w.solid;
         if (w.solid) w.hit.clear();          // 新一轮实体：可再次命中
       }
-      // 扫描粒子
+      // 扫描粒子（实体态红色，虚拟态绿色）
       if (Math.random() < dt * 14) {
         const spans = wallSpans(w);
         const sp = spans[randi(0, spans.length - 1)];
+        const pcol = w.solid
+          ? (Math.random() < 0.8 ? '#ff3b30' : '#ff8a7a')
+          : (Math.random() < 0.8 ? '#35ff9e' : '#35e0ff');
         g.particles.push(new Particle(w.x + rand(-C.w / 2, C.w / 2), rand(sp[0], sp[1]),
-          rand(-40, 20), rand(-30, 30), rand(0.3, 0.6), rand(2, 4),
-          Math.random() < 0.8 ? '#35ff9e' : '#35e0ff'));
+          rand(-40, 20), rand(-30, 30), rand(0.3, 0.6), rand(2, 4), pcol));
       }
       if (w.solid) collideDataWall(g, w);
     }
@@ -200,7 +202,7 @@
       w.hit.add(p);
       p.hurt(Math.max(1, Math.ceil(p.hp * dmgRatio)), g, { k: 'env', key: 'datawall' });
       p.x = Math.max(40, p.x - 34);
-      burst(g, p.x, p.y, 22, ['#35ff9e', '#a8ffd8', '#35e0ff', '#fff'], 340, 6, 0.5, 200);
+      burst(g, p.x, p.y, 22, ['#ff3b30', '#ff8a7a', '#ffb0a4', '#fff'], 340, 6, 0.5, 200);
       g.shake(8);
     }
     // 敌人 / Boss（入场/转场免伤）
@@ -210,7 +212,7 @@
       if (inWallX(e.x, e.radius || 16) && inWallY(e.y)) {
         w.hit.add(e);
         e.takeDamage(Math.max(1, Math.ceil(e.hp * dmgRatio)), g, { x: -200, y: 0 });
-        burst(g, e.x, e.y, 18, ['#35ff9e', '#a8ffd8', '#35e0ff'], 300, 5, 0.5, 180);
+        burst(g, e.x, e.y, 18, ['#ff3b30', '#ff8a7a', '#ffb0a4'], 300, 5, 0.5, 180);
       }
     });
   }
@@ -356,22 +358,58 @@
   function renderBlizzard(ctx, ev, c) {
     const active = ev.t >= c.warn;
     ctx.save();
-    // 斜向半透明风带（平行四边形）
     const x1 = ev.x;
-    ctx.fillStyle = active ? 'rgba(214,232,248,0.22)' : 'rgba(214,232,248,0.08)';
+    const topY = CFG.TOP_Y - 20, botY = CFG.GROUND_Y + 20;
+    // 加宽斜向半透明风带（平行四边形），预警期也保持可见
+    const warnA = 0.10 + 0.06 * Math.sin(ev.t * 8);
+    ctx.fillStyle = active ? 'rgba(206,226,246,0.32)' : 'rgba(206,226,246,' + warnA + ')';
     ctx.beginPath();
-    ctx.moveTo(x1, CFG.TOP_Y - 20);
-    ctx.lineTo(x1 - 380, CFG.GROUND_Y + 20);
-    ctx.lineTo(x1 - 680, CFG.GROUND_Y + 20);
-    ctx.lineTo(x1 - 300, CFG.TOP_Y - 20);
+    ctx.moveTo(x1, topY);
+    ctx.lineTo(x1 - 380, botY);
+    ctx.lineTo(x1 - 740, botY);
+    ctx.lineTo(x1 - 360, topY);
     ctx.closePath(); ctx.fill();
+    // 风带前缘亮线
+    ctx.strokeStyle = active ? 'rgba(255,255,255,0.75)'
+      : 'rgba(255,255,255,' + (0.25 + 0.3 * Math.abs(Math.sin(ev.t * 10))) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x1, topY); ctx.lineTo(x1 - 380, botY); ctx.stroke();
+    // 等距走向箭头（沿右上→左下，预警期与持续期均显示，动画沿线流动）
+    const ux = -0.629, uy = 0.778, nx = 0.778, ny = 0.629;   // 走向单位向量与法向
+    const speed = active ? 0.22 : 0.12;
+    const tt = (ev.t * speed) % 1;
+    const arrowA = active ? 0.9 : 0.45 + 0.35 * Math.abs(Math.sin(ev.t * 12));
+    ctx.fillStyle = 'rgba(255,255,255,' + arrowA + ')';
+    for (let i = 0; i < 6; i++) {
+      const f = (tt + i / 6) % 1;
+      const px = x1 - 380 * f - 180, py = topY + (botY - topY) * f;
+      const tx = px + ux * 15, ty = py + uy * 15;
+      const bx = px - ux * 10, by = py - uy * 10;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(bx + nx * 9, by + ny * 9);
+      ctx.lineTo(bx - nx * 9, by - ny * 9);
+      ctx.closePath(); ctx.fill();
+    }
     if (!active) {
-      // 预警：沿斜线的闪烁雪晶标记
-      ctx.fillStyle = 'rgba(255,255,255,' + (0.4 + 0.4 * Math.sin(ev.t * 16)) + ')';
-      ctx.font = '22px serif'; ctx.textAlign = 'center';
+      // 预警：沿中线闪烁雪晶，强化区域提示
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + 0.4 * Math.sin(ev.t * 16)) + ')';
+      ctx.font = '20px serif'; ctx.textAlign = 'center';
       for (let i = 0; i < 5; i++) {
-        const y = CFG.TOP_Y + 30 + i * 88;
-        ctx.fillText('❄', diagX(y, x1), y);
+        const y = CFG.TOP_Y + 34 + i * 88;
+        ctx.fillText('❄', diagX(y, x1) - 150, y);
+      }
+    } else {
+      // 持续期：风带内雪线（沿走向短划）
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      for (let i = 0; i < 26; i++) {
+        const f = ((tt * 1.6 + i / 26) % 1);
+        const off = -40 - ((i * 97) % 260);
+        const px = x1 - 380 * f + off, py = topY + (botY - topY) * f + ((i * 53) % 40 - 20) * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px - ux * 14, py - uy * 14);
+        ctx.stroke();
       }
     }
     ctx.restore();
@@ -441,33 +479,37 @@
     const entering = !w.warned;
     const k = entering ? clamp(w.t / C.warn, 0, 1) : 1;
     const alpha = entering ? 0.25 + 0.35 * Math.abs(Math.sin(w.t * 14)) : (w.solid ? 0.82 : 0.22);
+    const red = w.solid;
     for (const sp of spans) {
       const y0 = sp[0], hgt = sp[1] - sp[0];
-      // 墙体填充
-      ctx.fillStyle = w.solid ? 'rgba(10,60,38,' + alpha + ')' : 'rgba(10,40,30,' + alpha + ')';
+      // 墙体填充（实体态暗红，虚拟态暗绿）
+      ctx.fillStyle = red ? 'rgba(90,12,10,' + alpha + ')' : 'rgba(10,40,30,' + alpha + ')';
       ctx.fillRect(w.x - C.w / 2, y0, C.w, hgt);
       // 荧光边框
-      ctx.strokeStyle = w.solid ? 'rgba(53,255,158,' + (0.55 + k * 0.4) + ')' : 'rgba(53,255,158,0.35)';
-      ctx.lineWidth = w.solid ? 3 : 2;
+      const edgeA = entering ? (0.35 + 0.35 * Math.abs(Math.sin(w.t * 14)))
+        : red ? (0.55 + k * 0.4) : 0.35;
+      ctx.strokeStyle = red ? 'rgba(255,59,48,' + edgeA + ')' : 'rgba(53,255,158,' + edgeA + ')';
+      ctx.lineWidth = red ? 3 : 2;
       ctx.strokeRect(w.x - C.w / 2, y0, C.w, hgt);
+      // 实体态：内壁红色辉光
+      if (red) {
+        ctx.fillStyle = 'rgba(255,80,60,0.10)';
+        ctx.fillRect(w.x - C.w / 2 + 3, y0 + 3, C.w - 6, hgt - 6);
+      }
       // 横向代码扫描线
-      ctx.fillStyle = w.solid ? 'rgba(53,255,158,0.85)' : 'rgba(53,255,158,0.4)';
+      ctx.fillStyle = red ? 'rgba(255,107,94,0.85)' : 'rgba(53,255,158,' + (entering ? 0.7 : 0.4) + ')';
       for (let y = y0 + 8 + (Math.floor(performance.now() / 300) % 12); y < sp[1] - 4; y += 16) {
         ctx.fillRect(w.x - C.w / 2 + 6, y, C.w - 12, 2);
         const lw = 8 + ((Math.floor(y * 7 + w.x) % 28));
         ctx.fillRect(w.x - C.w / 2 + 6, y + 4, lw, 3);
       }
       // 口子边缘发光箭头
-      ctx.fillStyle = 'rgba(168,255,216,0.9)';
+      ctx.fillStyle = red ? 'rgba(255,154,144,0.95)' : 'rgba(168,255,216,0.9)';
       ctx.font = '13px monospace'; ctx.textAlign = 'center';
       const markerY = sp === spans[0] ? sp[1] - 4 : sp[0] + 10;
       if (w.gap === 'center') { ctx.fillText(sp === spans[0] ? '▲' : '▼', w.x, sp === spans[0] ? sp[1] - 4 : sp[0] + 12); }
       else { ctx.fillText(w.gap === 'top' ? '▲' : '▼', w.x, w.gap === 'top' ? sp[0] + 12 : markerY); }
     }
-    // 实体/虚拟状态字
-    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-    ctx.fillStyle = w.solid ? '#35ff9e' : 'rgba(53,255,158,0.6)';
-    ctx.fillText(w.solid ? '实体' : '虚拟', w.x, CFG.TOP_Y + 14);
     ctx.restore();
   }
 
