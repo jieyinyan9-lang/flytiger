@@ -88,7 +88,10 @@
       bonedragonking: ['钻地出土时冲撞砸烂了全身', '绿火连射烧成了骨渣', '头部碎裂后崩解的骨龙群啃食殆尽', '小骨蛇缠满全身绞断了每一根骨头'],
       madhyena: ['怒吼声波震裂了全身骨骼', '疾冲撞击顶穿了胸膛', '钻地突袭从脚下刺穿了肚子'],
       raccoonrover: ['玫红能量印记炸碎了半边身子', '悬浮板疾冲撞飞后高空坠落摔死', '游走轨迹的连环能量残爆撕碎了内脏'],
-      sandwalker: ['巨型沙之刺钉穿了身体', '全屏沙刺弹幕扎成了筛子', '召唤的双头飞蛇缠住绞杀了']
+      sandwalker: ['巨型沙之刺钉穿了身体', '全屏沙刺弹幕扎成了筛子', '召唤的双头飞蛇缠住绞杀了'],
+      captaingeorge: ['大号橙红炮弹轰成了碎渣', '弧形俯冲撞碎了全身骨头', '俯冲过后的炮火追着炸成了焦炭'],
+      fireblind: ['半屏宽火焰斩拦腰烧成了两截', '火龙冲刺挥刀劈成了两半', '三道窄火焰斩交错切成了碎片'],
+      purplehand: ['紫红扇形魔弹打成了筛子', '高速狐火弹贯穿了心脏', '自转巨牌弧线扫中后削掉了脑袋', '六牌阵齐射的魔光绞成了肉末']
     }
   };
   /** Boss 死法池 key → 显示名 */
@@ -98,7 +101,8 @@
     giantpheasant: '火鸡王', homelander: '怒星使', bossman: '斧王',
     stranger: '怪客', frogking: '蛙哥', cranesage: '鹤仙',
     sphinx: '狮身人面像', niumo: '牛魔', bonedragonking: '巨型骨龙王',
-    madhyena: '癫狂鬣狗', raccoonrover: '浣熊漫游者', sandwalker: '沙之行者'
+    madhyena: '癫狂鬣狗', raccoonrover: '浣熊漫游者', sandwalker: '沙之行者',
+    captaingeorge: '乔治船长', fireblind: '火遮眼', purplehand: '紫手'
   };
   /** 死亡演出时序（秒）：黑气涌入 2.4s → 文本逐字 → 完全显示后停留 3s（总上限 10s）→ 黑色淡出 1.6s */
   const DEATH_FX = { BLACK_IN: 2.4, HOLD_AFTER: 3, AUTO_MAX: 10, FADE_OUT: 1.6 };
@@ -471,12 +475,13 @@
       // 地图：每次进入游戏随机刷新一张（阻碍特性与草地一致）
       this.rollMap();
       // 测试模式：Boss 专属地图锁定（牛魔/鬣狗→草原、浣熊→霓虹喵都、沙行者→沙漠）+ 首个 Boss 3 秒后出现，便于反复测试
-      const testMap = { NiuMo: 'grassland', MadHyena: 'grassland', RaccoonRover: 'cyber', SandWalker: 'desert' }[this.testBoss];
+      const testMap = { NiuMo: 'grassland', MadHyena: 'grassland', RaccoonRover: 'cyber', SandWalker: 'desert',
+        CaptainGeorge: 'ocean', FireBlind: 'volcano', PurpleHand: 'wasteland' }[this.testBoss];
       if (testMap) {
         this.mapChoice = testMap;
-        const m = CFG.maps.find(x => x.id === testMap) || this.map;
-        this.map = m; this.mapId = testMap;
-        this.crater = null; this.sea = null;
+        // 重新 rollMap 按锁定图重建场景物件（大海 sea 海平面 / 火焰山 crater 火山口）；
+        // 手工置 null 会导致这些地图专属物件在测试时消失
+        this.rollMap();
         this.bossT = 3;
       } else if (this.testBoss) {
         this.bossT = 3;   // 其他测试 Boss 同样 3 秒后登场（B 键可再立即召唤）
@@ -1013,6 +1018,9 @@
       r5.appendChild(btn('🦁 鬣狗', () => this.testStartBoss('MadHyena', 'grassland'), '#6b4d1f'));
       r5.appendChild(btn('🛹 浣熊', () => this.testStartBoss('RaccoonRover', 'cyber'), '#5a1d6f'));
       r5.appendChild(btn('🐍 沙行者', () => this.testStartBoss('SandWalker', 'desert'), '#7a5a20'));
+      r5.appendChild(btn('⚓ 船长', () => this.testStartBoss('CaptainGeorge', 'ocean'), '#1f4d7a'));
+      r5.appendChild(btn('🔥 火遮眼', () => this.testStartBoss('FireBlind', 'volcano'), '#7a2a10'));
+      r5.appendChild(btn('🃏 紫手', () => this.testStartBoss('PurpleHand', 'wasteland'), '#4a1d6f'));
       box.appendChild(r5);
 
       // 战斗中：P0-P5 跳转
@@ -2822,7 +2830,18 @@
       for (const b of this.bullets) {
         if (b.friendly || b.dead || b.neutralized) continue;
         const rr = b.r + p.radius * 0.8;
-        if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < rr * rr) {
+        let hit = (b.x - p.x) ** 2 + (b.y - p.y) ** 2 < rr * rr;
+        // 火焰斩：圆形之外追加沿飞行方向的旋转矩形大判定盒（半屏宽弧形斩）
+        if (!hit && b.boxW > 0 && (b.vx || b.vy)) {
+          const sp = Math.hypot(b.vx, b.vy);
+          const ux = b.vx / sp, uy = b.vy / sp;
+          const dx = p.x - b.x, dy = p.y - b.y;
+          const lx = dx * ux + dy * uy - (b.boxOff || 0);   // 弹体局部：前后（盒中心前移 boxOff）
+          const ly = -dx * uy + dy * ux;                    // 弹体局部：左右
+          const pr = p.radius * 0.8;
+          if (Math.abs(lx) < b.boxW / 2 + pr && Math.abs(ly) < b.boxH / 2 + pr) hit = true;
+        }
+        if (hit) {
           // 战狂血怒铠甲：命中的子弹转化为血色尖刺（长菱形），朝最近敌人反弹
           if (p.bloodArmorT > 0) {
             b.dead = true;

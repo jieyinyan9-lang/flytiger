@@ -1884,6 +1884,10 @@
     hyena: buildNiu('caoyuan-1.png', 368, 208),       // 癫狂鬣狗：侧面奔跑鬣狗（草原限定）
     rover: buildNiu('saibo-1.png', 500, 300),         // 浣熊漫游者：悬浮板赛博浣熊（霓虹喵都限定）
     sandWalker: buildNiu('shamo-1.png', 368, 208),    // 沙之行者：蛇身沙漠术士（沙漠限定）
+    /* —— 第二批三张新 Boss 立绘（500×300，均朝左，复用 buildNiu 通用图片加载工厂） —— */
+    captain: buildNiu('haishang-1.png', 500, 300),      // 乔治船长：鱼尾海盗船长（大海限定）
+    fireBlind: buildNiu('huoyanshan-1.png', 500, 300),  // 火遮眼：熔岩冲浪火魔（火焰山限定）
+    purpleHand: buildNiu('huangyuan-1.png', 500, 300),  // 紫手：九尾狐紫焰卡师（紫色荒地限定）
     dogHead: buildGoutou(),
     pheasant: buildHuoji(),
     superboy: buildSuperboy(),

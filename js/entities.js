@@ -222,6 +222,12 @@
       this.sineWave = opts.sine || null;       // S 形弹道：{ amp, freq, phase }（飞刀线性 S 走向）
       this.fireTrail = !!opts.fireTrail;       // 火焰弹：飞行时喷射火焰粒子拖尾 + 火焰分层渲染
       this.trailCols = opts.trailCols || null; // 自定义拖尾粒子配色（紫焰苹果等），设置后即启用拖尾
+      /* —— 大型波形式弹幕（火遮眼火焰斩等）：沿速度方向的旋转矩形判定盒 —— */
+      this.boxW = opts.boxW || 0;              // 判定盒沿飞行方向全长（0=退化为圆形判定）
+      this.boxH = opts.boxH || 0;              // 判定盒垂直飞行方向全宽
+      this.boxOff = opts.boxOff || 0;          // 判定盒中心沿飞行方向的前移偏移
+      this.slashR = opts.slashR || 150;        // 火焰斩弧形半径（渲染几何）
+      this.slashSpan = opts.slashSpan || 1.02; // 火焰斩弧形张角半角（弧度）
       /* —— 角色专属弹种扩展 —— */
       this.glv = opts.glv || 0;                // 角色子弹样式阶段（0-3）
       this.gmax = !!opts.gmax;                 // 最终形态
@@ -570,6 +576,72 @@
               Math.random() < 0.5 ? '#d8a86a' : '#f5e3b8'));
           }
         }
+      }
+      // 乔治船长重型炮弹：记录飞行轨迹点（橙黄色长拖尾数据源）+ 余烬/黑烟粒子
+      if (this.kind === 'capShell' && !this.dead) {
+        if (!this.capPts) this.capPts = [];
+        this.capPts.push({ x: this.x, y: this.y });
+        if (this.capPts.length > 28) this.capPts.shift();
+        if (!this.neutralized) {
+          this.trail += dt;
+          if (this.trail > 0.028) {
+            this.trail = 0;
+            const spd = Math.hypot(this.vx, this.vy) || 1;
+            const bx = this.vx / spd, by = this.vy / spd;
+            const cols = ['#ff8a2a', '#ffd23b', '#fff0b0', '#6a4a3a'];
+            g.particles.push(new Particle(
+              this.x - bx * 13 + rand(-5, 5), this.y - by * 13 + rand(-5, 5),
+              -bx * rand(20, 80) + rand(-26, 26),
+              -by * rand(20, 80) + rand(-26, 26) - 12,
+              rand(0.3, 0.62), rand(2.5, 6),
+              cols[randi(0, cols.length - 1)]));
+          }
+        }
+      }
+      // 火遮眼火焰斩：周期性留下斩击残影（月牙刃渐隐副本）+ 通体燃烧的火焰粒子
+      if (this.kind === 'fireSlash' && !this.dead) {
+        if (!this.slashGhosts) this.slashGhosts = [];
+        for (const gh of this.slashGhosts) gh.age += dt;
+        this.slashGhosts = this.slashGhosts.filter(gh => gh.age < 0.3);
+        this.trail += dt;
+        if (this.trail > 0.06) {
+          this.trail = 0;
+          this.slashGhosts.push({ x: this.x, y: this.y, age: 0 });
+          if (this.slashGhosts.length > 5) this.slashGhosts.shift();
+        }
+        if (!this.neutralized && Math.random() < 0.78) {
+          const R = this.slashR, span = this.slashSpan;
+          const ang = Math.atan2(this.vy, this.vx);
+          // 在月牙刃通体（弧向均匀、径向带厚度）随机取点火苗
+          const aa = rand(-span, span);
+          const rr = R + rand(-30, 28);
+          const ca = Math.cos(ang), sa = Math.sin(ang);
+          const lx0 = Math.cos(aa) * rr, ly0 = Math.sin(aa) * rr;
+          const px = this.x + ca * lx0 - sa * ly0;
+          const py = this.y + sa * lx0 + ca * ly0;
+          const ra = ang + aa;                        // 该点朝外径向
+          const cols = ['#ff3b08', '#ff7a1a', '#ffb13b', '#ffd23b', '#fff3c0'];
+          g.particles.push(new Particle(
+            px + rand(-3, 3), py + rand(-3, 3),
+            Math.cos(ra) * rand(18, 85) + rand(-22, 22),
+            Math.sin(ra) * rand(18, 85) + rand(-22, 22) - 28,
+            rand(0.3, 0.64), rand(2.2, 5.5),
+            cols[randi(0, cols.length - 1)], -42));
+        }
+      }
+      // 紫手狐火弹：记录轨迹点（紫色火焰短缎带数据源）
+      if (this.kind === 'foxFire' && !this.dead) {
+        if (!this.foxPts) this.foxPts = [];
+        this.foxPts.push({ x: this.x, y: this.y });
+        if (this.foxPts.length > 12) this.foxPts.shift();
+      }
+      // 紫手巨型飞牌：自转弧线飞行时洒落紫色魔光微粒
+      if (this.kind === 'pCard' && !this.dead && !this.neutralized && Math.random() < 0.5) {
+        g.particles.push(new Particle(
+          this.x + rand(-16, 16), this.y + rand(-20, 20),
+          rand(-40, 10), rand(-36, 20),
+          rand(0.25, 0.5), rand(1.8, 4),
+          Math.random() < 0.6 ? '#c06bff' : '#ff5ad0'));
       }
       // 怪客巨型十字弹：快速自转；先高速追踪玩家，逼近后绕天空区域边缘转一圈再碎裂
       if (this.kind === 'cross' && !this.neutralized && !this.dead) {
@@ -2111,6 +2183,255 @@
         ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.4, 0, TAU); ctx.fill();
         ctx.fillStyle = '#fff0d0';
         ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.17, 0, TAU); ctx.fill();
+        return;
+      }
+      if (k === 'capShell') {
+        // 乔治船长重型炮弹：橙黄色长拖尾（外宽晕 → 橙主体 → 黄芯，向尾端渐细渐散）
+        const cpts = this.capPts;
+        if (cpts && cpts.length > 2) {
+          const n = cpts.length;
+          const baseA = ctx.globalAlpha;
+          ctx.save();
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.strokeStyle = 'rgba(255,120,30,0.22)';
+          ctx.lineWidth = 26;
+          ctx.beginPath();
+          ctx.moveTo(cpts[0].x, cpts[0].y);
+          for (let i = 1; i < n; i++) ctx.lineTo(cpts[i].x, cpts[i].y);
+          ctx.stroke();
+          for (let i = 1; i < n; i++) {
+            const f = i / n;
+            ctx.globalAlpha = baseA * (0.12 + 0.72 * f);
+            ctx.strokeStyle = '#ff7b1e';
+            ctx.lineWidth = 16 * (0.22 + 0.78 * f);
+            ctx.beginPath();
+            ctx.moveTo(cpts[i - 1].x, cpts[i - 1].y);
+            ctx.lineTo(cpts[i].x, cpts[i].y);
+            ctx.stroke();
+          }
+          for (let i = 1; i < n; i++) {
+            const f = i / n;
+            ctx.globalAlpha = baseA * (0.1 + 0.82 * f);
+            ctx.strokeStyle = '#ffd23b';
+            ctx.lineWidth = 6 * (0.18 + 0.82 * f);
+            ctx.beginPath();
+            ctx.moveTo(cpts[i - 1].x, cpts[i - 1].y);
+            ctx.lineTo(cpts[i].x, cpts[i].y);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = baseA;
+          ctx.restore();
+        }
+        // 弹体：烧红的大型铁炮弹（黑铁外壳 + 赤热箍环 + 橙红热光 + 引线火星）
+        const r = this.r;
+        const f = 1 + Math.sin(this.t * 10) * 0.07;
+        const glow = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, r * 2.1 * f);
+        glow.addColorStop(0, 'rgba(255,140,40,0.55)');
+        glow.addColorStop(1, 'rgba(255,140,40,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 2.1 * f, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#241712';
+        ctx.beginPath(); ctx.arc(this.x, this.y, r * 1.12, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#3a2620';
+        ctx.beginPath(); ctx.arc(this.x - r * 0.15, this.y - r * 0.15, r * 0.95, 0, TAU); ctx.fill();
+        // 赤热箍环（随速度方向横置）
+        const a0 = Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a0);
+        ctx.strokeStyle = '#ff5a1a'; ctx.lineWidth = 2.6;
+        ctx.beginPath(); ctx.ellipse(0, 0, r * 1.02, r * 0.5, 0, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = '#ffb13b'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.ellipse(-r * 0.3, 0, r * 0.8, r * 0.38, 0, 0, TAU); ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = '#ff7b2e';
+        ctx.beginPath(); ctx.arc(this.x + r * 0.25, this.y + r * 0.3, r * 0.3, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ffe39a';
+        ctx.beginPath(); ctx.arc(this.x + r * 0.2, this.y + r * 0.26, r * 0.13, 0, TAU); ctx.fill();
+        return;
+      }
+      if (k === 'fireSlash') {
+        // 斩击残影：飞行路径上留下的月牙刃副本，随龄收窄 + 平方渐隐（火魂质感）
+        const R = this.slashR, span = this.slashSpan;
+        const fl = 1 + Math.sin(this.t * 16) * 0.05;
+        const ang = Math.atan2(this.vy, this.vx);
+        const baseA = ctx.globalAlpha;
+        const ghosts = this.slashGhosts;
+        if (ghosts && ghosts.length) {
+          ctx.save();
+          for (const gh of ghosts) {
+            const fade = 1 - gh.age / 0.3;                  // 1=新生 0=消散
+            if (fade <= 0) continue;
+            const fa = fade * fade;
+            ctx.save();
+            ctx.translate(gh.x, gh.y); ctx.rotate(ang);
+            const gband = (rad, th) => {
+              ctx.beginPath();
+              ctx.arc(0, 0, rad + th, -span, span);
+              ctx.arc(0, 0, rad - th, span, -span, true);
+              ctx.closePath();
+            };
+            ctx.globalAlpha = baseA * fa * 0.4; ctx.fillStyle = '#ff3c10'; gband(R, 22 + 12 * fade); ctx.fill();
+            ctx.globalAlpha = baseA * fa * 0.5; ctx.fillStyle = '#ff7a1c'; gband(R, 13); ctx.fill();
+            ctx.globalAlpha = baseA * fa * 0.42; ctx.fillStyle = '#ffd23b'; gband(R, 5); ctx.fill();
+            ctx.restore();
+          }
+          ctx.restore();
+          ctx.globalAlpha = baseA;
+        }
+        // 火焰斩本体：朝飞行方向张开的巨型弧形火刃（月牙波，宽度可填充半屏）
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(ang);
+        const arcBand = (rad, th) => {
+          ctx.beginPath();
+          ctx.arc(0, 0, rad + th, -span, span);
+          ctx.arc(0, 0, rad - th, span, -span, true);
+          ctx.closePath();
+        };
+        // 波头扇面：弦与外弧之间填满火焰渐变，让月牙刃有厚实火浪体积
+        const Rc = R * Math.cos(span), Rs = R * Math.sin(span);
+        const hg = ctx.createLinearGradient(Rc, 0, R + 34 * fl, 0);
+        hg.addColorStop(0, 'rgba(150,22,4,0.62)');
+        hg.addColorStop(0.5, 'rgba(255,74,14,0.8)');
+        hg.addColorStop(0.82, 'rgba(255,150,40,0.85)');
+        hg.addColorStop(1, 'rgba(255,224,120,0.9)');
+        ctx.fillStyle = hg;
+        ctx.beginPath();
+        ctx.arc(0, 0, R + 32 * fl, -span, span);
+        ctx.lineTo(Rc, -Rs);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,70,20,0.22)'; arcBand(R, 46 * fl); ctx.fill();
+        ctx.fillStyle = '#c92a08'; arcBand(R, 32); ctx.fill();
+        ctx.fillStyle = '#ff4a12'; arcBand(R, 24); ctx.fill();
+        ctx.fillStyle = '#ff8a2a'; arcBand(R, 15); ctx.fill();
+        ctx.fillStyle = '#ffd23b'; arcBand(R, 7); ctx.fill();
+        // 外沿白炽刃口
+        ctx.strokeStyle = 'rgba(255,240,200,0.9)';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, 0, R + 30 * fl, -span, span); ctx.stroke();
+        // 两端焰尖
+        for (const sgn of [-1, 1]) {
+          const hx = Math.cos(span * sgn) * R, hy = Math.sin(span * sgn) * R;
+          const g2 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 26 * fl);
+          g2.addColorStop(0, 'rgba(255,230,150,0.95)');
+          g2.addColorStop(0.5, 'rgba(255,120,30,0.6)');
+          g2.addColorStop(1, 'rgba(255,60,10,0)');
+          ctx.fillStyle = g2;
+          ctx.beginPath(); ctx.arc(hx, hy, 26 * fl, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+        return;
+      }
+      if (k === 'foxFire') {
+        // 紫手狐火弹：紫色火焰短缎带拖尾
+        const fpts = this.foxPts;
+        if (fpts && fpts.length > 2) {
+          const n = fpts.length;
+          const baseA = ctx.globalAlpha;
+          ctx.save();
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.strokeStyle = 'rgba(150,60,255,0.24)';
+          ctx.lineWidth = 13;
+          ctx.beginPath();
+          ctx.moveTo(fpts[0].x, fpts[0].y);
+          for (let i = 1; i < n; i++) ctx.lineTo(fpts[i].x, fpts[i].y);
+          ctx.stroke();
+          for (let i = 1; i < n; i++) {
+            const f = i / n;
+            ctx.globalAlpha = baseA * (0.12 + 0.7 * f);
+            ctx.strokeStyle = '#9a3cff';
+            ctx.lineWidth = 7 * (0.2 + 0.8 * f);
+            ctx.beginPath();
+            ctx.moveTo(fpts[i - 1].x, fpts[i - 1].y);
+            ctx.lineTo(fpts[i].x, fpts[i].y);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = baseA;
+          ctx.restore();
+        }
+        // 弹体：高速锥形紫焰（外紫光晕 → 紫主体 → 白紫芯，尖端朝飞行方向）
+        const r = this.r;
+        const a = Math.atan2(this.vy, this.vx);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.4);
+        glow.addColorStop(0, 'rgba(180,90,255,0.6)');
+        glow.addColorStop(1, 'rgba(140,40,255,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(0, 0, r * 2.4, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#5a1aa0';
+        ctx.beginPath();
+        ctx.moveTo(r * 1.9, 0); ctx.quadraticCurveTo(-r * 0.3, -r * 1.05, -r * 1.25, 0);
+        ctx.quadraticCurveTo(-r * 0.3, r * 1.05, r * 1.9, 0); ctx.fill();
+        ctx.fillStyle = '#a64dff';
+        ctx.beginPath();
+        ctx.moveTo(r * 1.6, 0); ctx.quadraticCurveTo(-r * 0.2, -r * 0.72, -r * 0.9, 0);
+        ctx.quadraticCurveTo(-r * 0.2, r * 0.72, r * 1.6, 0); ctx.fill();
+        ctx.fillStyle = '#f0d8ff';
+        ctx.beginPath();
+        ctx.moveTo(r * 1.1, 0); ctx.quadraticCurveTo(-r * 0.1, -r * 0.32, -r * 0.5, 0);
+        ctx.quadraticCurveTo(-r * 0.1, r * 0.32, r * 1.1, 0); ctx.fill();
+        ctx.restore();
+        return;
+      }
+      if (k === 'purpleFan') {
+        // 紫手紫红扇形弹：紫红菱形魔光弹（黑紫描边 → 洋红主体 → 亮粉芯）
+        const r = this.r;
+        const a = Math.atan2(this.vy, this.vx);
+        const f = 1 + Math.sin(this.t * 12) * 0.12;
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.2 * f);
+        glow.addColorStop(0, 'rgba(255,60,160,0.5)');
+        glow.addColorStop(1, 'rgba(180,40,200,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(0, 0, r * 2.2 * f, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#4a0f38';
+        ctx.beginPath(); ctx.moveTo(r * 1.25, 0); ctx.lineTo(0, -r); ctx.lineTo(-r * 1.05, 0); ctx.lineTo(0, r);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#d63a9a';
+        ctx.beginPath(); ctx.moveTo(r, 0); ctx.lineTo(0, -r * 0.72); ctx.lineTo(-r * 0.78, 0); ctx.lineTo(0, r * 0.72);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ff8ad0';
+        ctx.beginPath(); ctx.moveTo(r * 0.5, 0); ctx.lineTo(0, -r * 0.34); ctx.lineTo(-r * 0.36, 0); ctx.lineTo(0, r * 0.34);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+        return;
+      }
+      if (k === 'pCard') {
+        // 紫手巨型飞牌：高速自转的紫晶卡牌（发光牌框 + 暗紫牌面 + 中心菱形魔纹）
+        const w = 27, h = 38;
+        const rr = (x, y, ww, hh, rad) => {
+          ctx.beginPath();
+          ctx.moveTo(x + rad, y);
+          ctx.arcTo(x + ww, y, x + ww, y + hh, rad);
+          ctx.arcTo(x + ww, y + hh, x, y + hh, rad);
+          ctx.arcTo(x, y + hh, x, y, rad);
+          ctx.arcTo(x, y, x + ww, y, rad);
+          ctx.closePath();
+        };
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.spin);
+        ctx.shadowColor = 'rgba(200,80,255,0.9)'; ctx.shadowBlur = 16;
+        rr(-w, -h, w * 2, h * 2, 7);
+        ctx.fillStyle = '#2a1245'; ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 3; ctx.strokeStyle = '#c04dff'; ctx.stroke();
+        ctx.lineWidth = 1.2; ctx.strokeStyle = '#ff8ae0';
+        rr(-w + 5, -h + 5, w * 2 - 10, h * 2 - 10, 5); ctx.stroke();
+        // 中心发光菱形魔纹
+        const cf = 1 + Math.sin(this.t * 9) * 0.18;
+        ctx.fillStyle = '#ff4fc0';
+        ctx.beginPath(); ctx.moveTo(0, -15 * cf); ctx.lineTo(11 * cf, 0); ctx.lineTo(0, 15 * cf); ctx.lineTo(-11 * cf, 0);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffd8f4';
+        ctx.beginPath(); ctx.moveTo(0, -7 * cf); ctx.lineTo(5 * cf, 0); ctx.lineTo(0, 7 * cf); ctx.lineTo(-5 * cf, 0);
+        ctx.closePath(); ctx.fill();
+        // 四角小菱形
+        ctx.fillStyle = '#b06bff';
+        for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+          ctx.beginPath(); ctx.moveTo(sx * (w - 8), sy * (h - 12) - sy * 4);
+          ctx.lineTo(sx * (w - 4), sy * (h - 8));
+          ctx.lineTo(sx * (w - 8), sy * (h - 4));
+          ctx.lineTo(sx * (w - 12), sy * (h - 8));
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
         return;
       }
     }

@@ -30,7 +30,8 @@
     GiantPheasant: 'giantpheasant', Homelander: 'homelander', BossMan: 'bossman',
     Stranger: 'stranger', FrogKing: 'frogking', CraneSage: 'cranesage',
     Sphinx: 'sphinx', NiuMo: 'niumo', BoneDragonKing: 'bonedragonking',
-    MadHyena: 'madhyena', RaccoonRover: 'raccoonrover', SandWalker: 'sandwalker'
+    MadHyena: 'madhyena', RaccoonRover: 'raccoonrover', SandWalker: 'sandwalker',
+    CaptainGeorge: 'captaingeorge', FireBlind: 'fireblind', PurpleHand: 'purplehand'
   };
 
   class Boss {
@@ -6368,7 +6369,720 @@
     }
   }
 
-  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage, Sphinx, NiuMo, BoneDragonKing, MadHyena, RaccoonRover, SandWalker };
+  /* ================ 乔治船长（大海限定） ================
+   * 常驻屏幕右上/右侧区域小幅上下移动；固定循环 炮击 → 俯冲：
+   *  炮击：停下瞄准 → 3 发大型慢速橙红炮弹（橙黄长拖尾、威力不俗）；
+   *  俯冲：短暂停顿瞄准 → 沿随机弧线快速斜向俯冲，冲过玩家后离场、右上方重新出现。
+   * 低血量（狂暴）：俯冲加速，炮击增至 5 发。美术：haishang-1.png（500×300，已朝左） */
+  class CaptainGeorge extends Boss {
+    constructor(g) {
+      super(g, 24, 50);
+      this.bossName = '乔治船长';
+      this.title = '深海劫掠者';
+      this.x = CFG.W + 140;
+      this.y = 150;
+      this.homeX = CFG.W - 150;
+      this.homeY = 146;
+      this.act = 'cannon';      // cannon ↔ dive 固定循环（首招炮击）
+      this.sub = '';
+      this.subT = 0;
+      this.dive = null;         // 俯冲贝塞尔 {P0,P1,P2,u,rate}
+      this.aimX = 0; this.aimY = 0;
+      this.face = -1;
+      this.tilt = 0;
+      this.contactBase = 24;
+      this.bubT = 0;
+      this.deathCols = ['#2b6ea8', '#45c8ff', '#ff9d2e', '#fff'];
+      this.xpValue = 250;
+    }
+
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const p = g.player;
+      this._px = p.x; this._py = p.y;
+
+      if (this.state === 'enter') {
+        this.x += (this.homeX - this.x) * Math.min(1, dt * 2.2);
+        this.y += (this.homeY - this.y) * Math.min(1, dt * 2.2);
+        this.tilt += (0 - this.tilt) * Math.min(1, dt * 5);
+        if (Math.abs(this.x - this.homeX) < 14) {
+          this.state = 'fight'; this.stateT = 0;
+          this.startCannon();
+        }
+        this.bubbles(dt, g);
+        return;
+      }
+      if (this.state !== 'fight') return;
+
+      if (this.act === 'cannon') this.updateCannon(dt, g);
+      else this.updateDive(dt, g);
+      this.bubbles(dt, g);
+    }
+
+    startCannon() {
+      this.act = 'cannon'; this.sub = 'wind'; this.subT = 0;
+      // 本轮炮击 2-4 次、间隔 1.5s；其中随机一轮为连发 2 次（间隔 0.28s）
+      this.shotTotal = 2 + Math.floor(Math.random() * 3);
+      this.doubleShot = Math.floor(Math.random() * this.shotTotal);
+      this.shotsFired = 0;
+      this.doubleDone = false;
+    }
+    startDive() { this.act = 'dive'; this.sub = 'pause'; this.subT = 0; this.dive = null; }
+    get windTime() { return this.enraged ? 0.5 : 0.72; }
+    get gapTime() { return this.enraged ? 1.15 : 1.5; }
+    get pauseTime() { return this.enraged ? 0.36 : 0.5; }
+
+    /* —— 炮击：停泊上下浮动 + 炮口蓄力；2-4 轮齐射（一轮双连发）后进入俯冲 —— */
+    updateCannon(dt, g) {
+      const p = g.player;
+      this.subT += dt;
+      this.x += (this.homeX - this.x) * Math.min(1, dt * 4);
+      this.y += (this.homeY + Math.sin(this.t * 1.7) * 22 - this.y) * Math.min(1, dt * 4);
+      this.tilt += (Math.sin(this.t * 1.7) * 0.05 - this.tilt) * Math.min(1, dt * 6);
+      if (this.sub === 'wind') {
+        if (this.subT > this.windTime) {
+          this.fireCannon(g, p);
+          this.shotsFired = 1; this.doubleDone = false;
+          this.sub = 'gap'; this.subT = 0;
+        }
+      } else {
+        const idx = this.shotsFired - 1;   // 刚发射的是第几轮
+        // 指定轮次的快速双连发：主射击后 0.28s 追加一轮
+        if (idx === this.doubleShot && !this.doubleDone && this.subT > 0.28) {
+          this.fireCannon(g, p);
+          this.doubleDone = true;
+        }
+        if (this.subT > this.gapTime) {
+          if (this.shotsFired >= this.shotTotal) { this.startDive(); return; }
+          this.fireCannon(g, p);
+          this.shotsFired++; this.doubleDone = false;
+          this.subT = 0;
+        }
+      }
+    }
+
+    fireCannon(g, p) {
+      const mx = this.x - 74, my = this.y - 8;
+      const n = this.enraged ? 5 : 3;
+      const spread = n === 5 ? 0.36 : 0.22;
+      const base = Math.atan2(p.y - my, p.x - mx);
+      for (let i = 0; i < n; i++) {
+        const tt = n === 1 ? 0 : i / (n - 1);
+        const a = base + (tt - 0.5) * spread;
+        g.bullets.push(new Bullet(mx, my, Math.cos(a) * 188, Math.sin(a) * 188,
+          { kind: 'capShell', r: 15, dmg: Math.round(15 * g.atkScale), life: 5.5 }));
+      }
+      SFX.shock(); g.shake(4);
+      burst(g, mx, my, 12, ['#ff9d2e', '#ffd23b', '#fff0b0', '#6a4a3a'], 200, 5, 0.4);
+    }
+
+    /* —— 俯冲：停顿瞄准 → 随机弧线贝塞尔斜冲 → 离场 → 右上复返 —— */
+    updateDive(dt, g) {
+      const p = g.player;
+      this.subT += dt;
+      if (this.sub === 'pause') {
+        this.x += (this.homeX - this.x) * Math.min(1, dt * 5);
+        this.aimX = p.x; this.aimY = p.y;   // 离弦瞬间锁定玩家当前位置
+        this.tilt += (0 - this.tilt) * Math.min(1, dt * 6);
+        if (this.subT > this.pauseTime) {
+          this.setupDive();
+          this.sub = 'fly'; this.subT = 0;
+          this.contactDmg = 30;
+          SFX.dash(); g.shake(5);
+        }
+      } else if (this.sub === 'fly') {
+        const d = this.dive;
+        d.u += dt * d.rate;
+        const u = Math.min(1, d.u), iu = 1 - u;
+        this.x = iu * iu * d.P0.x + 2 * iu * u * d.P1.x + u * u * d.P2.x;
+        this.y = iu * iu * d.P0.y + 2 * iu * u * d.P1.y + u * u * d.P2.y;
+        // 机头沿贝塞尔切线方向
+        const vx = 2 * iu * (d.P1.x - d.P0.x) + 2 * u * (d.P2.x - d.P1.x);
+        const vy = 2 * iu * (d.P1.y - d.P0.y) + 2 * u * (d.P2.y - d.P1.y);
+        this.tilt = Math.atan2(vy, vx) + Math.PI;
+        for (let i = 0; i < 4; i++) {
+          g.particles.push(new Particle(this.x + rand(-26, 26), this.y + rand(-16, 26),
+            rand(-130, 60), rand(-90, 60), rand(0.3, 0.6), rand(2.5, 6),
+            Math.random() < 0.5 ? '#45c8ff' : '#bfeeff'));
+        }
+        if (u >= 1) {
+          this.sub = 'back'; this.subT = 0;
+          this.x = CFG.W + 150; this.y = rand(60, 180);
+          this.contactDmg = this.contactBase;
+          this.tilt = 0;
+          burst(g, CFG.W + 30, this.y, 18, ['#45c8ff', '#bfeeff', '#fff'], 220, 5, 0.5);
+        }
+      } else if (this.sub === 'back') {
+        this.x += (this.homeX - this.x) * Math.min(1, dt * 2.6);
+        this.y += (this.homeY - this.y) * Math.min(1, dt * 2.6);
+        this.tilt += (0 - this.tilt) * Math.min(1, dt * 5);
+        if (Math.abs(this.x - this.homeX) < 14) this.startCannon();
+      }
+    }
+
+    /** 二次贝塞尔俯冲：出口在玩家身后屏幕外，控制点加随机大弯（弧上/弧下各半） */
+    setupDive() {
+      const P0 = { x: this.x, y: this.y };
+      const aa = Math.atan2(this.aimY - P0.y, this.aimX - P0.x);
+      const exit = {
+        x: -180,
+        y: clamp(this.aimY + Math.sin(aa) * 360, -60, CFG.GROUND_Y - 20)
+      };
+      const bend = (0.45 + Math.random() * 0.65) * (Math.random() < 0.5 ? -1 : 1) * 280;
+      const P1 = {
+        x: (P0.x + exit.x) / 2 + -Math.sin(aa) * bend,
+        y: (P0.y + exit.y) / 2 + Math.cos(aa) * bend
+      };
+      const chord = Math.hypot(exit.x - P0.x, exit.y - P0.y);
+      const arcLen = chord + Math.abs(bend) * 0.9;
+      const speed = this.enraged ? 660 : 480;
+      this.dive = { P0, P1, P2: exit, u: 0, rate: speed / arcLen };
+    }
+
+    /** 常驻蓝色水泡/水花点缀 */
+    bubbles(dt, g) {
+      this.bubT -= dt;
+      if (this.bubT > 0) return;
+      this.bubT = 0.12;
+      g.particles.push(new Particle(
+        this.x - 70 + rand(-20, 30), this.y + rand(-20, 30),
+        rand(-60, -10), rand(-50, -14), rand(0.4, 0.8), rand(2, 5),
+        Math.random() < 0.6 ? 'rgba(120,200,255,0.85)' : '#bfeeff'));
+    }
+
+    render(ctx) {
+      // 炮击蓄力：炮口橙红光晕 + 瞄准虚线
+      if (this.act === 'cannon' && this.sub === 'wind') {
+        const mx = this.x - 74, my = this.y - 8;
+        const k = clamp(this.subT / this.windTime, 0, 1);
+        const glow = ctx.createRadialGradient(mx, my, 0, mx, my, 22 + 24 * k);
+        glow.addColorStop(0, `rgba(255,180,60,${0.5 + 0.3 * k})`);
+        glow.addColorStop(1, 'rgba(255,120,30,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(mx, my, 22 + 24 * k, 0, TAU); ctx.fill();
+        if (this._px !== undefined) {
+          ctx.save();
+          ctx.strokeStyle = `rgba(255,150,60,${0.25 + 0.3 * k})`;
+          ctx.lineWidth = 2; ctx.setLineDash([10, 10]);
+          ctx.lineDashOffset = -this.t * 50;
+          ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(this._px, this._py); ctx.stroke();
+          ctx.restore();
+        }
+      }
+      // 俯冲停顿：红色预警线 + 锁定圈
+      if (this.act === 'dive' && this.sub === 'pause' && this._px !== undefined) {
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,70,50,${0.4 + 0.3 * Math.sin(this.t * 12)})`;
+        ctx.lineWidth = 3; ctx.setLineDash([14, 10]);
+        ctx.lineDashOffset = -this.t * 60;
+        ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this._px, this._py); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = `rgba(255,90,70,${0.5 + 0.3 * Math.sin(this.t * 10)})`;
+        ctx.beginPath(); ctx.arc(this._px, this._py, 22 + Math.sin(this.t * 8) * 4, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      const bob = Math.sin(this.t * 3) * 5;
+      // haishang-1.png 500×300 缩放 .5 → 250×150；躯干偏左，右移 35 让碰撞中心对准身体
+      drawBossSprite(ctx, Sprites.captain, this.x + 35, this.y + bob, 0.5, 0.5, this.tilt, this.flash);
+    }
+  }
+
+  /* ================ 火遮眼（火焰山限定） ================
+   * 固定屏幕右侧小幅上下移动；固定循环 火焰斩 → 火龙冲锋：
+   *  火焰斩：举刀蓄力 → 1 道红橙色弧形火焰斩（红黄色长拖尾，斩击宽度填充半屏）；
+   *  冲锋：低身蓄力 → 快速冲刺挥刀，冲过玩家后离场、从右侧重新出现。
+   * 低血量（狂暴）：攻击节奏加快，火焰斩变为 3 道窄斩。美术：huoyanshan-1.png（500×300，已朝左） */
+  class FireBlind extends Boss {
+    constructor(g) {
+      super(g, 26, 52);
+      this.bossName = '火遮眼';
+      this.title = '熔岩刀客';
+      this.x = CFG.W + 140;
+      this.y = 205;
+      this.homeX = CFG.W - 150;
+      this.homeY = 205;
+      this.act = 'slash';       // slash ↔ charge 固定循环（首招火焰斩）
+      this.sub = '';
+      this.subT = 0;
+      this.chargeV = null;      // 冲锋速度向量
+      this.chargePts = [];      // 火龙冲锋长段火焰拖尾点
+      this.aimX = 0; this.aimY = 0;
+      this.face = -1;
+      this.tilt = 0;
+      this.contactBase = 26;
+      this.emberT = 0;
+      this.deathCols = ['#ff3b10', '#ff8a2a', '#ffd23b', '#5a1a08'];
+      this.xpValue = 260;
+    }
+
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const p = g.player;
+      this._px = p.x; this._py = p.y;
+
+      if (this.state === 'enter') {
+        this.x += (this.homeX - this.x) * Math.min(1, dt * 2.2);
+        this.y += (this.homeY - this.y) * Math.min(1, dt * 2.2);
+        this.tilt += (0 - this.tilt) * Math.min(1, dt * 5);
+        if (Math.abs(this.x - this.homeX) < 14) {
+          this.state = 'fight'; this.stateT = 0;
+          this.startSlash();
+        }
+        this.embers(dt, g);
+        return;
+      }
+      if (this.state !== 'fight') return;
+
+      if (this.act === 'slash') this.updateSlash(dt, g);
+      else this.updateCharge(dt, g);
+      // 冲锋火焰拖尾老化（冲锋结束后仍渐隐半秒）
+      if (this.chargePts && this.chargePts.length) {
+        for (const q of this.chargePts) q.age += dt;
+        this.chargePts = this.chargePts.filter(q => q.age < 0.5);
+      }
+      this.embers(dt, g);
+    }
+
+    startSlash() {
+      this.act = 'slash'; this.sub = 'wind'; this.subT = 0;
+      // 本轮斩击 3-4 次、间隔 2s；其中随机一次为连发 3 道（每道间隔 0.22s）
+      this.slashTotal = 3 + Math.floor(Math.random() * 2);
+      this.tripleSlash = Math.floor(Math.random() * this.slashTotal);
+      this.slashCount = 0;
+      this.tripleStage = 0;
+    }
+    startCharge() {
+      this.act = 'charge'; this.sub = 'wind'; this.subT = 0; this.chargeV = null;
+      this.chargePts = [];   // 火龙冲锋长段火焰拖尾
+    }
+    get slashWindTime() { return this.enraged ? 0.5 : 0.78; }
+    get slashGapTime() { return this.enraged ? 1.4 : 2; }
+    get chargeWindTime() { return this.enraged ? 0.42 : 0.62; }
+
+    /* —— 火焰斩：蓄力 → 3-4 道斩击（间隔 2s，其中一次三连发）→ 冲锋 —— */
+    updateSlash(dt, g) {
+      const p = g.player;
+      this.subT += dt;
+      this.x += (this.homeX - this.x) * Math.min(1, dt * 4);
+      this.y += (this.homeY + Math.sin(this.t * 1.8) * 18 - this.y) * Math.min(1, dt * 4);
+      this.tilt += (0 - this.tilt) * Math.min(1, dt * 6);
+      if (this.sub === 'wind') {
+        if (this.subT > this.slashWindTime) {
+          this.fireSlashWave(g, p);
+          this.slashCount = 1; this.tripleStage = 0;
+          this.sub = 'gap'; this.subT = 0;
+        }
+      } else {
+        const idx = this.slashCount - 1;  // 刚挥出的是第几斩
+        // 指定斩次的三连发：主斩之后 0.22s / 0.44s 各追加一道
+        if (idx === this.tripleSlash && this.tripleStage < 2 &&
+            this.subT > 0.22 * (this.tripleStage + 1)) {
+          this.fireSlashWave(g, p);
+          this.tripleStage++;
+        }
+        if (this.subT > this.slashGapTime) {
+          if (this.slashCount >= this.slashTotal) { this.startCharge(); return; }
+          this.fireSlashWave(g, p);
+          this.slashCount++; this.tripleStage = 0;
+          this.subT = 0;
+        }
+      }
+    }
+
+    fireSlashWave(g, p) {
+      const mx = this.x - 82, my = this.y - 18;
+      const base = Math.atan2(p.y - my, p.x - mx);
+      if (this.enraged) {
+        // 狂暴：3 道窄斩（弧幅收窄 + 扇出加大，三道之间留出躲避缝）
+        for (let i = -1; i <= 1; i++) {
+          const a = base + i * 0.28;
+          g.bullets.push(new Bullet(mx, my, Math.cos(a) * 330, Math.sin(a) * 330, {
+            kind: 'fireSlash', r: 40, dmg: Math.round(13 * g.atkScale), life: 4,
+            boxW: 104, boxH: 128, boxOff: 100, slashR: 120, slashSpan: 0.5
+          }));
+        }
+      } else {
+        g.bullets.push(new Bullet(mx, my, Math.cos(base) * 300, Math.sin(base) * 300, {
+          kind: 'fireSlash', r: 44, dmg: Math.round(15 * g.atkScale), life: 4,
+          boxW: 150, boxH: 300, boxOff: 112, slashR: 150, slashSpan: 1.02
+        }));
+      }
+      SFX.sweep(); g.shake(5);
+      burst(g, mx, my, 16, ['#ff3b10', '#ff8a2a', '#ffd23b', '#fff0b0'], 240, 6, 0.45);
+    }
+
+    /* —— 火龙冲锋：低身蓄力锁定 → 直线高速冲刺挥刀 → 冲出屏幕 → 右侧复返 —— */
+    updateCharge(dt, g) {
+      const p = g.player;
+      this.subT += dt;
+      if (this.sub === 'wind') {
+        this.x += (this.homeX - this.x) * Math.min(1, dt * 4);
+        this.aimX = p.x; this.aimY = p.y;
+        this.tilt += (0 - this.tilt) * Math.min(1, dt * 6);
+        if (this.subT > this.chargeWindTime) {
+          const a = Math.atan2(this.aimY - this.y, this.aimX - this.x);
+          const sp = this.enraged ? 780 : 620;
+          this.chargeV = { x: Math.cos(a) * sp, y: Math.sin(a) * sp };
+          this.sub = 'fly'; this.subT = 0;
+          this.contactDmg = 32;
+          SFX.dash(); g.shake(6);
+          SFX.bossCharge();
+        }
+      } else if (this.sub === 'fly') {
+        const v = this.chargeV;
+        this.x += v.x * dt; this.y += v.y * dt;
+        this.tilt = Math.atan2(v.y, v.x) + Math.PI;
+        // 长段火焰拖尾：在身后记录轨迹点（约 0.77s、随冲锋速 620 可达近一屏长）
+        const sp = Math.hypot(v.x, v.y) || 1;
+        this.chargePts.push({ x: this.x - v.x / sp * 36, y: this.y - v.y / sp * 36, age: 0 });
+        if (this.chargePts.length > 46) this.chargePts.shift();
+        for (let i = 0; i < 5; i++) {
+          g.particles.push(new Particle(this.x + rand(-30, 30), this.y + rand(-24, 30),
+            rand(-120, 80), rand(-80, 80), rand(0.25, 0.55), rand(3, 7),
+            ['#ff3b10', '#ff7b1e', '#ffb13b'][randi(0, 2)]));
+        }
+        if (this.x < -160 || this.x > CFG.W + 220 || this.y < -150 || this.y > CFG.H + 130) {
+          this.sub = 'back'; this.subT = 0;
+          this.x = CFG.W + 150; this.y = rand(90, 270);
+          this.contactDmg = this.contactBase;
+          this.tilt = 0;
+          burst(g, CFG.W + 30, this.y, 18, ['#ff3b10', '#ff8a2a', '#ffd23b'], 220, 5, 0.5);
+        }
+      } else if (this.sub === 'back') {
+        this.x += (this.homeX - this.x) * Math.min(1, dt * 2.6);
+        this.y += (this.homeY - this.y) * Math.min(1, dt * 2.6);
+        this.tilt += (0 - this.tilt) * Math.min(1, dt * 5);
+        if (Math.abs(this.x - this.homeX) < 14) this.startSlash();
+      }
+    }
+
+    /** 熔岩余烬环境粒子 */
+    embers(dt, g) {
+      this.emberT -= dt;
+      if (this.emberT > 0) return;
+      this.emberT = 0.1;
+      g.particles.push(new Particle(
+        this.x + rand(-40, 50), this.y + rand(-30, 40),
+        rand(-30, 20), rand(-70, -20), rand(0.4, 0.8), rand(2, 5),
+        Math.random() < 0.6 ? '#ff7b1e' : '#ffd23b'));
+    }
+
+    render(ctx) {
+      // 火焰斩蓄力：刀位红橙弧形火光涨大 + 细预警线
+      if (this.act === 'slash' && this.sub === 'wind') {
+        const mx = this.x - 76, my = this.y - 14;
+        const k = clamp(this.subT / this.slashWindTime, 0, 1);
+        const rr = 20 + 34 * k;
+        const glow = ctx.createRadialGradient(mx, my, 0, mx, my, rr);
+        glow.addColorStop(0, `rgba(255,210,80,${0.55 + 0.3 * k})`);
+        glow.addColorStop(0.5, 'rgba(255,90,20,0.45)');
+        glow.addColorStop(1, 'rgba(255,60,10,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(mx, my, rr, 0, TAU); ctx.fill();
+        if (this._px !== undefined) {
+          ctx.save();
+          ctx.strokeStyle = `rgba(255,90,40,${0.2 + 0.25 * k})`;
+          ctx.lineWidth = 2; ctx.setLineDash([12, 12]);
+          ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(this._px, this._py); ctx.stroke();
+          ctx.restore();
+        }
+      }
+      // 冲锋蓄力：低身红色锁定线 + 锁定圈
+      if (this.act === 'charge' && this.sub === 'wind' && this._px !== undefined) {
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,50,30,${0.45 + 0.3 * Math.sin(this.t * 14)})`;
+        ctx.lineWidth = 3.5; ctx.setLineDash([16, 10]);
+        ctx.lineDashOffset = -this.t * 70;
+        ctx.beginPath(); ctx.moveTo(this.x - 40, this.y); ctx.lineTo(this._px, this._py); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = `rgba(255,80,50,${0.55 + 0.3 * Math.sin(this.t * 11)})`;
+        ctx.beginPath(); ctx.arc(this._px, this._py, 24 + Math.sin(this.t * 9) * 5, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      const bob = Math.sin(this.t * 3.2) * 5;
+      const crouch = (this.act === 'charge' && this.sub === 'wind') ? 7 : 0;
+      // 火龙冲锋长段火焰拖尾：五层粗火流（外焰→橙→黄→白芯），头部与身体同宽、向尾端渐细渐隐
+      const cp = this.chargePts;
+      if (cp && cp.length > 1) {
+        const baseA = ctx.globalAlpha;
+        ctx.save();
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        const layers = [
+          { w: 48, col: 'rgba(255,60,16,0.22)' },
+          { w: 31, col: '#d8320c' },
+          { w: 17, col: '#ff7a1c' },
+          { w: 8, col: '#ffc24b' },
+          { w: 3.5, col: '#fff3c8' }
+        ];
+        for (let i = 1; i < cp.length; i++) {
+          const f0 = clamp(1 - cp[i - 1].age / 0.5, 0, 1);
+          const f1 = clamp(1 - cp[i].age / 0.5, 0, 1);
+          const fa = Math.min(f0, f1);
+          const fw = 0.3 + 0.7 * f1 * (1 + 0.12 * Math.sin(this.t * 25 + i * 1.7));
+          for (const L of layers) {
+            ctx.globalAlpha = baseA * fa * 0.92;
+            ctx.strokeStyle = L.col;
+            ctx.lineWidth = L.w * fw;
+            ctx.beginPath();
+            ctx.moveTo(cp[i - 1].x, cp[i - 1].y);
+            ctx.lineTo(cp[i].x, cp[i].y);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+        ctx.globalAlpha = baseA;
+      }
+      // huoyanshan-1.png 500×300 缩放 .5 → 250×150；躯干中心略偏左，右移 18 对齐
+      drawBossSprite(ctx, Sprites.fireBlind, this.x + 18, this.y + bob + crouch, 0.5, 0.5, this.tilt, this.flash);
+    }
+  }
+
+  /* ================ 紫手（紫色荒地限定，第4关之后） ================
+   * 固定屏幕右侧小幅上下移动，偶尔瞬移；行为 a → b 循环：
+   *  a：随机 ①3 发紫红扇形弹（红拖尾）②1 发高速直线狐火弹（紫焰拖尾）③投掷自转弧线巨型卡牌；
+   *  b：4 张巨牌在四角浮现，短暂预警后依次向玩家发射紫红扇形弹。
+   * 低血量（狂暴）：攻击节奏加快，角牌增至 6 张（左 3 右 3）。美术：huangyuan-1.png（500×300，已朝左） */
+  class PurpleHand extends Boss {
+    constructor(g) {
+      super(g, 20, 48);
+      this.bossName = '紫手';
+      this.title = '幻狐卡师';
+      this.x = CFG.W + 140;
+      this.y = 190;
+      this.homeX = CFG.W - 160;
+      this.homeY = 190;
+      this.mode = 'a';          // a（随机攻击） ↔ b（角牌齐射）
+      this.sub = 'wind';
+      this.subT = 0;
+      this.ringCards = [];      // b 阶段角牌 {x,y,fired,flash,sp}
+      this.bT = 0;
+      this.teleT = 2.2;         // 瞬移计时
+      this.teleFlash = 0;       // 瞬移后的残像闪烁
+      this.face = -1;
+      this.deathCols = ['#7a2bff', '#c06bff', '#ff5ad0', '#fff'];
+      this.xpValue = 270;
+    }
+
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.teleFlash = Math.max(0, this.teleFlash - dt);
+      this.commonMove(dt);
+
+      if (this.state === 'enter') {
+        this.x += (this.homeX - this.x) * Math.min(1, dt * 2.2);
+        this.y += (this.homeY - this.y) * Math.min(1, dt * 2.2);
+        if (Math.abs(this.x - this.homeX) < 14) {
+          this.state = 'fight'; this.stateT = 0;
+          this.beginA();
+        }
+        return;
+      }
+      if (this.state !== 'fight') return;
+
+      // 右侧小幅上下移动（b 阶段角牌齐射时保持悬停）
+      this.x += (this.homeX - this.x) * Math.min(1, dt * 3);
+      this.y += (this.homeY + Math.sin(this.t * 1.9) * 16 - this.y) * Math.min(1, dt * 3);
+
+      if (this.mode === 'a') this.updateA(dt, g);
+      else this.updateB(dt, g);
+    }
+
+    get aWindTime() { return this.enraged ? 0.38 : 0.55; }
+    get aWaitTime() { return this.enraged ? 0.62 : 1.0; }
+    get bWarnTime() { return this.enraged ? 0.85 : 1.15; }
+    get bStagger() { return this.enraged ? 0.26 : 0.34; }
+
+    beginA() { this.mode = 'a'; this.sub = 'wind'; this.subT = 0; }
+
+    updateA(dt, g) {
+      const p = g.player;
+      this.subT += dt;
+      if (this.sub === 'wind') {
+        if (this.subT > this.aWindTime) {
+          this.doAttack(g, p);
+          this.sub = 'wait'; this.subT = 0;
+        }
+      } else {
+        // 等待期间偶尔瞬移
+        this.teleT -= dt;
+        if (this.teleT <= 0) {
+          this.teleT = 2.2 + Math.random() * 1.4;
+          if (Math.random() < 0.65) this.teleport(g);
+        }
+        if (this.subT > this.aWaitTime) this.startB(g);
+      }
+    }
+
+    /** a 阶段：三选一随机攻击 */
+    doAttack(g, p) {
+      const mx = this.x - 70, my = this.y - 8;
+      const pick = randi(0, 2);
+      if (pick === 0) {
+        // ① 3 发紫红扇形弹（红色拖尾）
+        const base = Math.atan2(p.y - my, p.x - mx);
+        for (let i = -1; i <= 1; i++) {
+          const a = base + i * 0.17;
+          g.bullets.push(new Bullet(mx, my, Math.cos(a) * 265, Math.sin(a) * 265, {
+            kind: 'purpleFan', r: 9, dmg: Math.round(11 * g.atkScale), life: 6,
+            trailCols: ['#6a0a20', '#ff2a3a', '#ff7a6a', '#ffd0c0']
+          }));
+        }
+        SFX.enemyShoot();
+      } else if (pick === 1) {
+        // ② 1 发高速直线狐火弹（紫色火焰拖尾）
+        const a = Math.atan2(p.y - my, p.x - mx);
+        g.bullets.push(new Bullet(mx, my, Math.cos(a) * 570, Math.sin(a) * 570, {
+          kind: 'foxFire', r: 9, dmg: Math.round(14 * g.atkScale), life: 3.2,
+          trailCols: ['#4a0a8a', '#9a3cff', '#c98aff', '#e9d0ff']
+        }));
+        SFX.enemyShoot();
+      } else {
+        // ③ 投掷巨大卡牌：自转 + 正弦弧线打向玩家
+        const a = Math.atan2(p.y - my, p.x - mx);
+        g.bullets.push(new Bullet(mx, my, Math.cos(a) * 300, Math.sin(a) * 300, {
+          kind: 'pCard', r: 28, dmg: Math.round(16 * g.atkScale), life: 6,
+          spinRate: 5, sine: { amp: 0.5, freq: 2.4, phase: rand(0, TAU) }
+        }));
+        SFX.enemyShoot();
+      }
+      burst(g, mx, my, 8, ['#7a2bff', '#c06bff', '#ff5ad0'], 160, 4, 0.35);
+    }
+
+    /** 瞬移到右侧另一高度（紫色魔光爆散） */
+    teleport(g) {
+      burst(g, this.x, this.y, 18, ['#7a2bff', '#c06bff', '#ff5ad0', '#fff'], 240, 6, 0.5);
+      this.x = this.homeX + rand(-70, 50);
+      this.y = rand(110, CFG.GROUND_Y - 110);
+      this.teleFlash = 0.25;
+      burst(g, this.x, this.y, 18, ['#7a2bff', '#c06bff', '#ff5ad0', '#fff'], 240, 6, 0.5);
+      if (SFX.craneTele) SFX.craneTele();
+    }
+
+    /** b 阶段：四角（狂暴 6 张：左 3 右 3）巨牌浮现 */
+    startB(g) {
+      this.mode = 'b'; this.bT = 0;
+      let pos;
+      if (this.enraged) {
+        const ys = [110, CFG.H / 2 - 15, CFG.GROUND_Y - 110];
+        const L = ys.map(y => ({ x: 100, y }));
+        const R = ys.map(y => ({ x: CFG.W - 100, y }));
+        pos = [L[0], R[0], L[1], R[1], L[2], R[2]];   // 左右交替依次发射
+      } else {
+        pos = [
+          { x: 120, y: 120 }, { x: CFG.W - 120, y: 120 },
+          { x: 120, y: CFG.GROUND_Y - 120 }, { x: CFG.W - 120, y: CFG.GROUND_Y - 120 }
+        ];
+      }
+      this.ringCards = pos.map((q, i) => ({ x: q.x, y: q.y, fired: false, flash: 0, sp: rand(0, TAU) + i }));
+      g.toast(this.enraged ? '紫手张开了六牌阵！' : '紫手张开了卡牌阵！', 1.5, 'lt');
+      SFX.phaseRise();
+    }
+
+    updateB(dt, g) {
+      const p = g.player;
+      this.bT += dt;
+      const n = this.ringCards.length;
+      this.ringCards.forEach((c, i) => {
+        c.flash = Math.max(0, c.flash - dt);
+        // 预警结束后各牌依次开火
+        if (!c.fired && this.bT > this.bWarnTime + i * this.bStagger) {
+          c.fired = true; c.flash = 0.2;
+          this.fireCardFan(g, p, c);
+        }
+      });
+      if (this.bT > this.bWarnTime + n * this.bStagger + 0.5) {
+        // 阵散：紫光爆点后回到 a
+        this.ringCards.forEach(c =>
+          burst(g, c.x, c.y, 8, ['#7a2bff', '#c06bff', '#ff5ad0'], 180, 4, 0.4));
+        this.ringCards = [];
+        this.beginA();
+      }
+    }
+
+    /** 角牌向当前玩家位置发射 3 发紫红扇形弹（红色拖尾） */
+    fireCardFan(g, p, c) {
+      const base = Math.atan2(p.y - c.y, p.x - c.x);
+      for (let i = -1; i <= 1; i++) {
+        const a = base + i * 0.21;
+        g.bullets.push(new Bullet(c.x, c.y, Math.cos(a) * 255, Math.sin(a) * 255, {
+          kind: 'purpleFan', r: 9, dmg: Math.round(11 * g.atkScale), life: 6,
+          trailCols: ['#6a0a20', '#ff2a3a', '#ff7a6a', '#ffd0c0']
+        }));
+      }
+      SFX.enemyShoot();
+    }
+
+    render(ctx) {
+      // 角牌阵（画在 Boss 本体之下层）
+      this.ringCards.forEach((c, i) => {
+        const warning = !c.fired;
+        const w = 30, h = 44;
+        ctx.save();
+        ctx.translate(c.x, c.y);
+        const floatY = Math.sin(this.t * 2.4 + c.sp) * 5;
+        ctx.translate(0, floatY);
+        if (warning) {
+          // 预警：红粉色脉动虚牌 + 感叹号
+          const k = 0.5 + 0.5 * Math.sin(this.t * 13 + c.sp);
+          ctx.globalAlpha = 0.45 + 0.4 * k;
+          ctx.rotate(Math.sin(this.t * 3 + c.sp) * 0.08);
+          ctx.shadowColor = 'rgba(255,60,140,0.9)'; ctx.shadowBlur = 18;
+          ctx.fillStyle = '#3a0f33';
+          roundCard(ctx, -w, -h, w * 2, h * 2, 8); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = `rgba(255,${Math.round(60 + 120 * k)},${Math.round(120 + 80 * k)},0.95)`;
+          ctx.stroke();
+          // 中心感叹号
+          ctx.fillStyle = `rgba(255,${Math.round(90 + 120 * k)},120,0.95)`;
+          ctx.fillRect(-2.5, -14, 5, 20);
+          ctx.beginPath(); ctx.arc(0, 15, 3, 0, TAU); ctx.fill();
+        } else {
+          // 就绪/已开火：实体紫牌（开火瞬间白闪）
+          ctx.shadowColor = 'rgba(200,80,255,0.9)'; ctx.shadowBlur = 14;
+          ctx.fillStyle = c.flash > 0 ? '#4a2a6a' : '#2a1245';
+          roundCard(ctx, -w, -h, w * 2, h * 2, 8); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.lineWidth = 2.5; ctx.strokeStyle = '#c04dff'; ctx.stroke();
+          ctx.fillStyle = c.flash > 0 ? '#fff' : '#ff4fc0';
+          ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(9, 0); ctx.lineTo(0, 13); ctx.lineTo(-9, 0);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      });
+      const bob = Math.sin(this.t * 2.6) * 4;
+      // huangyuan-1.png 500×300 缩放 .46 → 230×138；狐身偏左，右移 34 对齐碰撞中心
+      drawBossSprite(ctx, Sprites.purpleHand, this.x + 34, this.y + bob, 0.46, 0.46, 0, this.flash);
+      // 瞬移残像：紫白光环
+      if (this.teleFlash > 0) {
+        const a = this.teleFlash / 0.25;
+        ctx.save();
+        ctx.globalAlpha = a * 0.8;
+        ctx.strokeStyle = '#d08aff';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(this.x + 34, this.y, 40 + (1 - a) * 46, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  /** 紫手角牌圆角矩形路径（bosses.js 局部助手） */
+  function roundCard(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage, Sphinx, NiuMo, BoneDragonKing, MadHyena, RaccoonRover, SandWalker, CaptainGeorge, FireBlind, PurpleHand };
   /**
    * Boss 池：所有 Boss 等权（weight 相同），每一轮都可能出现。
    * 本局已出场过的 Boss 后续抽取权重持续减半（game.js bossSeen 加权抽取）；
@@ -6409,6 +7123,12 @@
     // 浣熊漫游者：霓虹喵都永久限定（map），进入霓虹喵都普通池即可反复出场
     { cls: RaccoonRover, weight: 3, map: 'cyber', music: 'boss-2' },
     // 沙之行者：沙漠永久限定（map），进入沙漠普通池即可反复出场
-    { cls: SandWalker, weight: 3, map: 'desert', music: 'boss-1' }
+    { cls: SandWalker, weight: 3, map: 'desert', music: 'boss-1' },
+    // 乔治船长：大海永久限定（map），炮击→俯冲循环，低血狂暴炮击5发/俯冲加速
+    { cls: CaptainGeorge, weight: 3, map: 'ocean', music: 'boss-1' },
+    // 火遮眼：火焰山永久限定（map），火焰斩→火龙冲锋循环，狂暴3道窄斩
+    { cls: FireBlind, weight: 3, map: 'volcano', music: 'boss-1' },
+    // 紫手：紫色荒地永久限定（map），第4关之后（minOrd 5）；a随机攻击↔b角牌阵，狂暴6牌
+    { cls: PurpleHand, weight: 3, map: 'wasteland', minOrd: 5, music: 'boss-2' }
   ];
 })();
