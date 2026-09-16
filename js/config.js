@@ -664,12 +664,29 @@
     maps: [
       { id: 'grassland', name: '飞喵草原', icon: '🌿' },
       { id: 'desert',    name: '沙漠',       icon: '🏜️', obs: ['cactusT', 'cactusM', 'cactusL'] },
-      { id: 'snow',      name: '雪地',       icon: '❄️', obs: ['iceT', 'iceM', 'iceL'] },
+      { id: 'snow',      name: '雪地',       icon: '❄️', obs: ['iceT', 'iceM', 'iceL'], obsTop: ['icicleT', 'icicleM', 'icicleL'], gap: [2.3, 3.6], haz: { type: 'blizzard', n: [3, 4] } },
       { id: 'volcano',   name: '火焰山',     icon: '🌋', obs: ['vrockT', 'vrockM', 'vrockL'], crater: true },
       { id: 'wasteland', name: '紫色荒地',   icon: '🌆', obs: ['treeT', 'treeM', 'treeL'] },
       { id: 'cyber',     name: '霓虹喵都',   icon: '🏙️', obs: ['poleT', 'boothL', 'buildM'], scrollMul: 2 },
       { id: 'ocean',     name: '大海',       icon: '🌊', obs: ['reefT', 'reefM', 'coralL'], sea: true },
       { id: 'colosseum', name: '罗马角斗场', icon: '⚔️', obs: ['spikeT', 'spikeM', 'spikeL'], arena: true },
+      // —— 新版图：障碍物上下交错（obs 地面 / obsTop 顶部悬挂），Boss 与怪物潮期间障碍降密度、机关停用 ——
+      // 1 丛林：墨绿潮湿密林，粗干/横枝/藤蔓/巨叶；无机关
+      { id: 'jungle',    name: '丛林',       icon: '🌴', obs: ['jTrunkT', 'jTrunkM', 'jLeafL'], obsTop: ['jVineT', 'jVineM', 'jVineL'], gap: [1.9, 3.0] },
+      // 2 海底：深蓝通透水下；纵向下行水流（每轮 2-3 次，可逆向游动对抗）
+      { id: 'seabed',    name: '海底',       icon: '🐠', obs: ['sbReefT', 'sbReefM', 'sbCoralL'], obsTop: ['sbKelpT', 'sbKelpM', 'sbKelpL'], gap: [2.3, 3.6], haz: { type: 'current', n: [2, 3] } },
+      // 4 城堡：夕阳金城，规整石墙塔楼；无机关
+      { id: 'castle',    name: '城堡',       icon: '🏰', obs: ['cwT', 'cwM', 'cwL'], obsTop: ['cwTopT', 'cwTopM', 'cwTopL'], gap: [1.5, 2.5] },
+      // 5 天空：阴沉雷云，浮石断柱；斜向落雷（每轮 2-3 次，途径者损失一半当前生命，可躲避）
+      { id: 'sky',       name: '天空',       icon: '🌩️', obs: ['flT', 'flM', 'flL'], obsTop: ['flTopT', 'flTopM', 'flTopL'], gap: [2.4, 3.8], haz: { type: 'lightning', n: [2, 3] } },
+      // 6 仙人洞：纯白几何洞天；移动方石沿固定路线环行（每轮 2-3 次）
+      { id: 'cave',      name: '仙人洞',     icon: '🤍', obs: ['cbT', 'cbM', 'cbL'], obsTop: ['cbTopT', 'cbTopM', 'cbTopL'], gap: [2.0, 3.1], haz: { type: 'caveblock', n: [2, 3] } },
+      // 7 群山：青灰苍茫，尖岩/悬崖/迎客松；无机关
+      { id: 'mountains', name: '群山',       icon: '⛰️', obs: ['mtT', 'mtM', 'mtL'], obsTop: ['mtTopT', 'mtTopM', 'mtTopL'], gap: [3.0, 4.8] },
+      // 8 魔窟：黑蓝深紫洞窟，钟乳石/石笋/妖火；无机关
+      { id: 'demoncave', name: '魔窟',       icon: '🔮', obs: ['dcT', 'dcM', 'dcL'], obsTop: ['dcTopT', 'dcTopM', 'dcTopL'], gap: [2.4, 3.7] },
+      // 9 矩阵：黑底荧光绿数据空间；移动数据墙实体/虚拟交替（每轮 1-2 次，实体接触损失 80% 当前生命）
+      { id: 'matrix',    name: '矩阵',       icon: '💾', obs: ['mxT', 'mxM', 'mxL'], obsTop: ['mxTopT', 'mxTopM', 'mxTopL'], gap: [1.9, 3.0], haz: { type: 'datawall', n: [1, 2] } },
       // 月痕沙海：特殊关卡（不参与随机抽取，仅可从「发现秘境」面板进入，通关后入口消失）；夜晚玫红沙漠、缺角月亮漏沙、金字塔与骸骨
       { id: 'moondesert', name: '月痕沙海', icon: '🌙', obs: ['cactusT', 'cactusM', 'cactusL'], stage: true, desert: true }
     ],
@@ -709,7 +726,16 @@
       // 罗马角斗场专属规则
       arenaBossTimeMul: 0.5,  // Boss 出现间隔减半
       arenaGroundWeight: 3,   // 地面类小怪（弓箭手/炮师）刷出权重 ×3
-      arenaTideTime: 60       // 怪物潮时长（普通地图 30s 的 2 倍），每过 1 轮触发一次
+      arenaTideTime: 60,      // 怪物潮时长（普通地图 30s 的 2 倍），每过 1 轮触发一次
+      // —— 新地图机关（Boss/怪物潮期间不触发，已出现的移动机关立即撤除）——
+      haz: {
+        current:   { warn: 1.2, dur: 3.4, w: 130, fy: 205 },                 // 海底纵向下行水流
+        blizzard:  { warn: 1.0, dur: 4.4, vx: 300, fx: -125, fy: 185 },      // 雪地斜向暴风雪（右上→左下）
+        lightning: { warn: 1.3, strike: 0.32, band: 38, ratio: 0.5 },        // 天空斜向落雷：一半当前生命
+        caveblock: { loop: 6.5 },                                            // 仙人洞方石环行周期
+        datawall:  { warn: 1.0, vx: 64, w: 66, gap: 152, phase: 2, ratio: 0.8 } // 矩阵数据墙实体/虚拟各 2s
+      },
+      bossRockGap: [4.5, 8.0]   // Boss/怪物潮期间障碍刷出间隔（大幅降低密度）
     }
   };
 

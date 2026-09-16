@@ -6,6 +6,7 @@
 
   const { Player, Enemy, Gem, Bullet, Particle, Rock, GrassDragon, burst, rand, randi, clamp } = window.FT;
   const { setShooter, clearShooter } = window.FT;
+  const Hazards = window.FT.Hazards;
   const TAU = Math.PI * 2;
 
   /* ============================================================
@@ -362,11 +363,16 @@
         if (this.isTide) return 'bgm-guaiwuchao';
         switch (this.mapId) {
           case 'volcano':
-          case 'wasteland': return 'bgm-yinan';
-          case 'cyber': return 'bgm-saibopengke';
+          case 'wasteland':
+          case 'seabed':
+          case 'sky':
+          case 'demoncave': return 'bgm-yinan';
+          case 'cyber':
+          case 'cave':
+          case 'matrix': return 'bgm-saibopengke';
           case 'colosseum': return 'bgm-jiaodouchang';
           case 'moondesert': return 'bgm-anheishamo';
-          // grassland / desert / ocean 及兜底：明亮风格
+          // grassland / desert / ocean / jungle / snow / castle / mountains 及兜底：明亮风格
           default: return 'bgm-mingliang';
         }
       }
@@ -391,6 +397,8 @@
       this.arcs = [];          // 闪电链电弧视觉
       this.fxRings = [];       // 冲击波环（障碍碎裂爆炸等）{ x,y,r,vr,t,life,col }
       this.rocks = [];
+      this.envForce = { x: 0, y: 0 };   // 地图机关环境推力（水流/暴风雪）
+      this.hz = null;                    // 当前地图机关调度状态（Hazards 模块）
       this.toasts = [];
       this.toastQueue = [];   // 待显示的 toast 队列（避免多条同时出现）
       this.activeToast = null; // 当前正在显示的 toast
@@ -468,7 +476,12 @@
 
     /** 地图 → 龙系主题（草龙仅草原；沙虫/黑龙/红龙/骨蛇/机器蜈蚣/深海蓝龙各属其图；角斗场钢铁林立沿用机器蜈蚣） */
     static get MAP_THEME() {
-      return { grassland: 'grass', desert: 'sand', snow: 'black', volcano: 'red', wasteland: 'bone', cyber: 'mech', ocean: 'sea', colosseum: 'mech' };
+      return {
+        grassland: 'grass', desert: 'sand', snow: 'black', volcano: 'red', wasteland: 'bone',
+        cyber: 'mech', ocean: 'sea', colosseum: 'mech',
+        jungle: 'jungle', seabed: 'seabed', castle: 'castle', sky: 'sky',
+        cave: 'cave', mountains: 'mountains', demoncave: 'demoncave', matrix: 'matrix'
+      };
     }
 
     /** 地图选择按钮文案：多元宇宙（随机） / 具体地图名 */
@@ -530,6 +543,8 @@
       this.sea = map.sea
         ? { t: 0, surgeT: CFG.map.seaSurgeInterval, surging: false, surgeT2: 0, rise: 0, amp: CFG.map.seaAmp }
         : null;
+      // 新地图特殊机关：排定本轮触发时刻（无机关地图返回 null）
+      if (Hazards) Hazards.startRound(this);
     }
 
     /** 场上是否存在地面类敌人：地面小怪（弓箭手/炮师）或地面移动型 Boss（蛙哥/野鸡王）。
@@ -1703,6 +1718,7 @@
       this.wayPicksThisRound = 0;   // 新一轮重置弹道成长计数
       this.elemPicksThisRound = 0;  // 新一轮重置元素弹道成长计数
       this.grassDragonThisRound = false;   // 新一轮重置草龙出场标记
+      if (Hazards) Hazards.startRound(this);   // 新一轮重排特殊机关触发时刻
       // 飞行弹幕敌人：每轮 30% 概率解锁各档次中 1 只未解锁的
       this.rollFlyerUnlocks();
       this.score += 500;
@@ -2073,19 +2089,32 @@
     }
 
     /* ---------------- 山石障碍 ---------------- */
-    /** 场上山石上限：1-3 轮 1-2 个，之后每 3 轮 +1 */
+    /** 场上障碍上限：单侧地图沿用旧值；上下双侧新地图基础 5，随轮次缓增 */
     rockMaxCount() {
+      if (this.map && this.map.obsTop) return Math.min(9, 5 + Math.floor((this.round - 1) / 4));
       return 2 + Math.floor((this.round - 1) / 3);
     }
     rockTick(dt) {
       this.rockT -= dt;
       if (this.rockT > 0) return;
       if (this.rocks.length >= this.rockMaxCount()) { this.rockT = 1.5; return; }
-      // 造型：草原沿用原 5 种山石权重；其余地图从本地图障碍表（高/中/低）随机
+      // Boss / 怪物潮：障碍出现概率降到较低水准（长间隔 + 50% 落空），特殊机关由 Hazards 模块停用
+      const lowDensity = !!(this.bossActive || this.isTide);
+      if (lowDensity) {
+        this.rockT = rand(CFG.map.bossRockGap[0], CFG.map.bossRockGap[1]);
+        if (Math.random() < 0.5) return;
+      }
+      // 造型：草原沿用原 5 种山石权重；其余地图从本地图障碍表（高/中/低）随机；
+      // 新地图障碍上下交错：obs 地面生长 / obsTop 顶部悬挂，各 50%
       let rock;
       if (this.map && this.map.obs) {
-        const shapeId = this.map.obs[Math.floor(Math.random() * this.map.obs.length)];
-        rock = new Rock(0, shapeId);
+        if (this.map.obsTop && Math.random() < 0.5) {
+          const shapeId = this.map.obsTop[Math.floor(Math.random() * this.map.obsTop.length)];
+          rock = new Rock(0, shapeId, true);
+        } else {
+          const shapeId = this.map.obs[Math.floor(Math.random() * this.map.obs.length)];
+          rock = new Rock(0, shapeId);
+        }
       } else {
         const roll = Math.random();
         const kind = roll < 0.26 ? 2 : roll < 0.44 ? 4 : roll < 0.60 ? 1 : roll < 0.78 ? 3 : 0;
@@ -2111,7 +2140,8 @@
         return;
       }
       this.rocks.push(rock);
-      this.rockT = rand(2.0, 3.5);
+      // 刷出间隔：新地图按各自密度配置（gap），旧地图固定 2.0-3.5s
+      this.rockT = this.map && this.map.gap ? rand(this.map.gap[0], this.map.gap[1]) : rand(2.0, 3.5);
     }
 
     /* ---------------- 地图机制（火山口 / 大海） ---------------- */
@@ -2321,6 +2351,7 @@
       this.spawnTick(dt);
       this.rockTick(dt);
       this.mapTick(dt);
+      if (Hazards) Hazards.tick(this, dt);   // 新地图机关（水流/暴风雪/落雷/方石/数据墙）
 
       // 实体更新（敌人/Boss 更新期间绑定 shooter 上下文，其发射的子弹归因到自己——用于死亡死法判定）
       this.player.update(dt, this);
@@ -3417,6 +3448,292 @@
         cloud: cloud('#ffe8c8', '#e8d0a8')
       };
 
+      /* —— 丛林：深绿墨绿潮湿密林，天空占比低，层叠树冠 —— */
+      this.bg.jungle = {
+        sky: sky([[0, '#16301c'], [0.5, '#244d2a'], [1, '#3a6e38']], x => {
+          // 少量漏下的光柱
+          x.fillStyle = 'rgba(220,255,180,0.10)';
+          for (let i = 0; i < 5; i++) {
+            const rx = 120 + i * 190;
+            x.beginPath(); x.moveTo(rx, 0); x.lineTo(rx + 40, 0); x.lineTo(rx + 120, 320); x.lineTo(rx + 60, 320); x.closePath(); x.fill();
+          }
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          c.fillStyle = '#1b3a20';
+          for (let i = 0; i < 7; i++) { const cx = i * 74 + 20, r = 56 + (i % 3) * 12; c.beginPath(); c.ellipse(cx, 120, r, r * 0.8, 0, 0, TAU); c.fill(); }
+          c.fillStyle = '#143018';
+          for (let i = 0; i < 6; i++) { const cx = i * 90 + 50, r = 44; c.beginPath(); c.ellipse(cx, 150, r, r * 0.7, 0, 0, TAU); c.fill(); }
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          // 密集树木 + 灌木 + 巨型蘑菇
+          c.fillStyle = '#3a2a18';
+          for (let i = 0; i < 8; i++) c.fillRect(i * 62 + 18, 40, 10, 80);
+          c.fillStyle = '#2f6e39';
+          for (let i = 0; i < 8; i++) { c.beginPath(); c.ellipse(i * 62 + 23, 42, 34, 26, 0, 0, TAU); c.fill(); }
+          c.fillStyle = '#5cb868';
+          for (let i = 0; i < 26; i++) c.fillRect(rand(0, w), rand(70, 112), 10, 6);
+          c.fillStyle = '#8a5a3a';
+          for (let i = 0; i < 4; i++) { const mx = rand(30, w - 30); c.fillRect(mx - 4, 84, 8, 18); c.fillStyle = '#c85a8a'; c.fillRect(mx - 12, 74, 24, 12); c.fillStyle = '#8a5a3a'; }
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#2c3a1e'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#3f5e2c'; c.fillRect(0, 0, w, 14);
+          c.fillStyle = '#5c8a3e';
+          for (let i = 0; i < 90; i++) c.fillRect(rand(0, w), rand(0, 12), 5, 3);
+          c.fillStyle = '#243218';
+          for (let i = 0; i < 60; i++) c.fillRect(rand(0, w), rand(18, h - 6), 7, 4);
+        }),
+        cloud: cloud('#9fc890', '#6fa068')
+      };
+
+      /* —— 海底：深蓝青蓝通透、水下滤镜、气泡与光柱 —— */
+      this.bg.seabed = {
+        sky: sky([[0, '#08223e'], [0.55, '#0e4a78'], [1, '#1f7aa8']], x => {
+          x.fillStyle = 'rgba(180,240,255,0.10)';
+          for (let i = 0; i < 6; i++) {
+            const rx = 60 + i * 160;
+            x.beginPath(); x.moveTo(rx, 0); x.lineTo(rx + 30, 0); x.lineTo(rx + 110, 340); x.lineTo(rx + 50, 340); x.closePath(); x.fill();
+          }
+          x.fillStyle = 'rgba(220,245,255,0.5)';
+          for (let i = 0; i < 40; i++) { const r = Math.random() < 0.8 ? 2 : 3; x.beginPath(); x.arc(rand(0, CFG.W), rand(30, 300), r, 0, TAU); x.fill(); }
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          bumps(c, w, h, [[0, 170], [90, 120], [180, 150], [280, 100], [370, 140], [480, 118]], '#15506e');
+          c.fillStyle = 'rgba(120,200,230,0.5)';
+          for (let i = 0; i < 6; i++) { c.beginPath(); c.ellipse(rand(20, w - 20), rand(60, 130), rand(8, 16), rand(14, 26), 0, 0, TAU); c.fill(); }
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          bumps(c, w, h, [[0, 95], [110, 55], [230, 90], [350, 50], [480, 80]], '#1d607e');
+          // 沉船剪影 + 珊瑚礁
+          c.fillStyle = '#3a3040';
+          c.fillRect(70, 66, 70, 22); c.fillRect(120, 52, 10, 16);
+          c.fillStyle = '#e07a5a';
+          for (let i = 0; i < 5; i++) { const sx = 300 + i * 30; c.fillRect(sx, 70 - (i % 2) * 14, 5, 40); }
+          c.fillStyle = '#5fb8a8';
+          for (let i = 0; i < 18; i++) c.fillRect(rand(0, w), rand(70, 110), 4, 10);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#2a4a5a'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#3f6a78'; c.fillRect(0, 0, w, 10);
+          c.fillStyle = '#c8b48a';
+          for (let i = 0; i < 50; i++) c.fillRect(rand(0, w), rand(10, h - 6), 8, 3);
+          c.fillStyle = '#1d3848';
+          for (let i = 0; i < 40; i++) c.fillRect(rand(0, w), rand(20, h - 8), 10, 5);
+        }),
+        cloud: cloud('#bfe0f0', '#8fc0d8')
+      };
+
+      /* —— 城堡：夕阳金橙、暖金城石、高耸塔楼 —— */
+      this.bg.castle = {
+        sky: sky([[0, '#7a2e52'], [0.5, '#d86a3a'], [1, '#ffc06e']], x => {
+          disk(x, 720, 120, 6, '#ffd98a', '#fff0c8');
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          bumps(c, w, h, [[0, 165], [120, 120], [250, 150], [380, 110], [480, 140]], '#8a5a6e');
+          // 高耸塔楼剪影
+          c.fillStyle = '#9a6a4a';
+          [[60, 170, 34, 110], [300, 170, 40, 130], [410, 170, 28, 90]].forEach(([px, py, bw, bh]) => {
+            c.fillRect(px - bw / 2, py - bh, bw, bh);
+            c.beginPath(); c.moveTo(px - bw / 2 - 4, py - bh); c.lineTo(px, py - bh - 20); c.lineTo(px + bw / 2 + 4, py - bh); c.closePath(); c.fill();
+          });
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          // 城墙 + 花园 + 喷泉
+          c.fillStyle = '#c99a5e';
+          c.fillRect(0, 56, w, 44);
+          c.fillStyle = '#a87f4e';
+          for (let x = 0; x < w; x += 30) c.fillRect(x, 48, 16, 10);
+          c.fillStyle = '#5c8a3e';
+          for (let i = 0; i < 10; i++) c.fillRect(rand(0, w), rand(88, 108), 16, 8);
+          c.fillStyle = '#9fd0e8';
+          c.fillRect(220, 78, 30, 14); c.fillRect(231, 64, 8, 16);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#b08858'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#d8b078'; c.fillRect(0, 0, w, 12);
+          c.fillStyle = '#8a6a45';
+          for (let y = 16; y < h; y += 20) for (let x = ((y / 20) % 2) * 20; x < w; x += 40) c.fillRect(x, y, 38, 2);
+        }),
+        cloud: cloud('#ffe0b8', '#e8b888')
+      };
+
+      /* —— 天空：阴沉深蓝灰、雷云闪电、云海 —— */
+      this.bg.sky = {
+        sky: sky([[0, '#1a2038'], [0.55, '#333c58'], [1, '#56608a']], x => {
+          // 远处闪电
+          x.strokeStyle = 'rgba(255,247,180,0.55)'; x.lineWidth = 2;
+          x.beginPath();
+          let lx = 520, ly = 0;
+          x.moveTo(lx, ly);
+          for (let i = 0; i < 6; i++) { lx += (i % 2 ? 14 : -10); ly += 34; x.lineTo(lx, ly); }
+          x.stroke();
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          c.fillStyle = '#2c3250';
+          for (let i = 0; i < 6; i++) { c.beginPath(); c.ellipse(i * 90 + 30, 120 + (i % 2) * 20, 64, 30, 0, 0, TAU); c.fill(); }
+          c.fillStyle = '#3d4668';
+          for (let i = 0; i < 5; i++) { c.beginPath(); c.ellipse(i * 110 + 80, 80, 50, 24, 0, 0, TAU); c.fill(); }
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          // 浮空岛 + 碎石 + 断裂建筑
+          c.fillStyle = '#5a6178';
+          [[60, 70, 70], [250, 60, 56], [400, 76, 80]].forEach(([px, py, pw]) => {
+            c.beginPath(); c.ellipse(px, py, pw / 2, 16, 0, 0, TAU); c.fill();
+            c.beginPath(); c.moveTo(px - pw / 2, py); c.lineTo(px + pw / 2, py); c.lineTo(px, py + 44); c.closePath(); c.fill();
+          });
+          c.fillStyle = '#7a8298';
+          c.fillRect(250, 24, 8, 36);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#aab4d4'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#c8d0e8'; c.fillRect(0, 0, w, 16);
+          c.fillStyle = '#e8eeff';
+          for (let i = 0; i < 40; i++) c.fillRect(rand(0, w), rand(0, 30), 22, 6);
+          c.fillStyle = '#8a92b0';
+          for (let i = 0; i < 30; i++) c.fillRect(rand(0, w), rand(24, h - 8), 26, 5);
+        }),
+        cloud: cloud('#8a92b8', '#5a6280')
+      };
+
+      /* —— 仙人洞：纯白浅灰、冷青描边、层叠方石壁与白雾 —— */
+      this.bg.cave = {
+        sky: sky([[0, '#e8eef2'], [0.6, '#f4f8fa'], [1, '#ffffff']], x => {
+          x.strokeStyle = 'rgba(127,180,190,0.25)'; x.lineWidth = 2;
+          for (let i = 0; i < 6; i++) { x.strokeRect(80 + i * 180, 60 + (i % 2) * 50, 60, 60); }
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          c.fillStyle = '#d4dee4';
+          for (let i = 0; i < 7; i++) { const s = 70 + (i % 3) * 24; c.fillRect(i * 72 - 10, 150 - s, s, s); }
+          c.fillStyle = '#c2d0d8';
+          for (let i = 0; i < 5; i++) c.fillRect(i * 100 + 20, 90 + (i % 2) * 20, 46, 46);
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          // 方石柱 + 悬浮石板
+          c.fillStyle = '#e4ecf0';
+          for (let i = 0; i < 5; i++) c.fillRect(i * 100 + 30, 30 + (i % 2) * 14, 26, 90);
+          c.strokeStyle = '#9fc8d0'; c.lineWidth = 2;
+          for (let i = 0; i < 5; i++) c.strokeRect(i * 100 + 30, 30 + (i % 2) * 14, 26, 90);
+          c.fillStyle = '#eef4f7';
+          for (let i = 0; i < 4; i++) c.fillRect(rand(0, w), rand(30, 70), 50, 12);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#dce4e9'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#f2f6fa'; c.fillRect(0, 0, w, 12);
+          c.strokeStyle = '#c2d0d8';
+          for (let x = 0; x < w; x += 40) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); }
+        }),
+        cloud: cloud('#ffffff', '#d8e4ea')
+      };
+
+      /* —— 群山：青灰岩灰冷峻、层叠群山云海 —— */
+      this.bg.mountains = {
+        sky: sky([[0, '#8fa0ac'], [0.6, '#b4c2c8'], [1, '#d8e2e4']], x => {
+          x.fillStyle = 'rgba(255,255,255,0.18)';
+          x.beginPath(); x.ellipse(700, 90, 40, 16, 0, 0, TAU); x.fill();
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          const peaks = [[0, 190], [50, 90], [110, 150], [170, 60], [240, 130], [310, 70], [380, 140], [450, 90], [480, 120]];
+          c.fillStyle = '#94a2a4';
+          c.beginPath(); c.moveTo(0, h); peaks.forEach(p => c.lineTo(p[0], p[1])); c.lineTo(w, h); c.closePath(); c.fill();
+          c.fillStyle = '#aebcc0';
+          peaks.filter(p => p[1] < 110).forEach(p => { c.beginPath(); c.moveTo(p[0] - 24, p[1] + 26); c.lineTo(p[0], p[1]); c.lineTo(p[0] + 24, p[1] + 26); c.closePath(); c.fill(); });
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          const peaks = [[0, 110], [80, 40], [170, 95], [260, 35], [350, 90], [430, 45], [480, 80]];
+          c.fillStyle = '#66726a';
+          c.beginPath(); c.moveTo(0, h); peaks.forEach(p => c.lineTo(p[0], p[1])); c.lineTo(w, h); c.closePath(); c.fill();
+          // 迎客松
+          peaks.filter(p => p[1] > 60).forEach(p => {
+            c.fillStyle = '#3c4a3a';
+            c.fillRect(p[0] - 3, p[1] - 20, 5, 20);
+            c.fillRect(p[0] - 16, p[1] - 20, 14, 4);
+          });
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#5a6258'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#768272'; c.fillRect(0, 0, w, 12);
+          c.fillStyle = '#8a948a';
+          for (let i = 0; i < 60; i++) c.fillRect(rand(0, w), rand(0, 12), 8, 3);
+          c.fillStyle = '#4a524c';
+          for (let i = 0; i < 50; i++) c.fillRect(rand(0, w), rand(16, h - 6), 10, 5);
+        }),
+        cloud: cloud('#e8eee8', '#c8d4cc')
+      };
+
+      /* —— 魔窟：黑蓝深紫、巨大钟乳石群、蓝紫妖火 —— */
+      this.bg.demoncave = {
+        sky: sky([[0, '#080512'], [0.55, '#150e2c'], [1, '#241648']], x => {
+          // 妖火微光
+          [[140, 200, '#7a4cd8'], [620, 150, '#ff8a3c'], [860, 230, '#3a7ad8']].forEach(([cx, cy, col]) => {
+            const g = x.createRadialGradient(cx, cy, 2, cx, cy, 70);
+            g.addColorStop(0, col + 'aa'); g.addColorStop(1, 'rgba(0,0,0,0)');
+            x.fillStyle = g; x.beginPath(); x.arc(cx, cy, 70, 0, TAU); x.fill();
+          });
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          // 巨大钟乳石群（自顶部垂下）
+          c.fillStyle = '#1a1230';
+          for (let i = 0; i < 8; i++) { const cx = i * 64 + 20, ch = 60 + (i % 4) * 26; c.beginPath(); c.moveTo(cx - 22, 0); c.lineTo(cx + 22, 0); c.lineTo(cx, ch); c.closePath(); c.fill(); }
+          c.fillStyle = '#241a40';
+          for (let i = 0; i < 6; i++) { const cx = i * 84 + 40, ch = 40 + (i % 3) * 20; c.beginPath(); c.moveTo(cx - 16, 0); c.lineTo(cx + 16, 0); c.lineTo(cx, ch); c.closePath(); c.fill(); }
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          // 岩壁 + 岩柱 + 妖火 + 发光植物
+          c.fillStyle = '#2c1e4c';
+          bumps(c, w, h, [[0, 96], [100, 56], [210, 92], [320, 52], [430, 88], [480, 70]], '#2c1e4c');
+          c.fillStyle = '#3c2a60';
+          for (let i = 0; i < 4; i++) c.fillRect(i * 120 + 40, 40, 20, 70);
+          c.fillStyle = '#ff8a3c';
+          for (let i = 0; i < 6; i++) { c.beginPath(); c.arc(rand(20, w - 20), rand(70, 106), 3, 0, TAU); c.fill(); }
+          c.fillStyle = '#7a4cd8';
+          for (let i = 0; i < 8; i++) c.fillRect(rand(0, w), rand(76, 110), 3, 8);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#120c22'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#1e1438'; c.fillRect(0, 0, w, 12);
+          c.fillStyle = '#2c1e4c';
+          for (let i = 0; i < 50; i++) c.fillRect(rand(0, w), rand(12, h - 6), 9, 4);
+          c.fillStyle = '#7a4cd8';
+          for (let i = 0; i < 14; i++) c.fillRect(rand(0, w), rand(0, 10), 2, 4);
+        }),
+        cloud: cloud('#3c2a60', '#241640')
+      };
+
+      /* —— 矩阵：黑底荧光绿、无限数据空间、网格与信息流 —— */
+      this.bg.matrix = {
+        sky: sky([[0, '#020806'], [0.6, '#06140e'], [1, '#0a2018']], x => {
+          // 透视网格
+          x.strokeStyle = 'rgba(53,255,158,0.18)'; x.lineWidth = 1;
+          for (let gx = 0; gx <= CFG.W; gx += 80) { x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, CFG.H); x.stroke(); }
+          // 数据雨
+          x.fillStyle = 'rgba(53,255,158,0.6)'; x.font = '12px monospace';
+          for (let i = 0; i < 70; i++) x.fillText(Math.random() < 0.5 ? '1' : '0', rand(0, CFG.W), rand(0, 300));
+        }),
+        far: strip(480, 200, (c, w, h) => {
+          // 巨大数据库柱 + 防火墙
+          c.strokeStyle = 'rgba(53,255,158,0.35)'; c.lineWidth = 2;
+          for (let i = 0; i < 5; i++) { const bx = i * 100 + 20, bh = 90 + (i % 3) * 30; c.strokeRect(bx, 180 - bh, 56, bh); }
+          c.fillStyle = 'rgba(180,106,255,0.25)';
+          for (let i = 0; i < 4; i++) c.fillRect(i * 130 + 60, 0, 8, h);
+        }),
+        mid: strip(480, 120, (c, w, h) => {
+          // 漂浮数据块 + 发光代码线
+          c.strokeStyle = '#35ff9e'; c.lineWidth = 2;
+          for (let i = 0; i < 7; i++) { const s = 20 + (i % 3) * 12; const bx = i * 70 + 10, by = 40 + (i % 2) * 26; c.strokeRect(bx, by, s, s); }
+          c.fillStyle = 'rgba(53,224,255,0.6)';
+          for (let i = 0; i < 12; i++) c.fillRect(rand(0, w), rand(80, 110), rand(14, 40), 2);
+        }),
+        ground: strip(480, 100, (c, w, h) => {
+          c.fillStyle = '#04100b'; c.fillRect(0, 0, w, h);
+          c.strokeStyle = 'rgba(53,255,158,0.30)';
+          for (let gx = 0; gx <= w; gx += 24) { c.beginPath(); c.moveTo(gx, 0); c.lineTo(gx, h); c.stroke(); }
+          for (let gy = 0; gy <= h; gy += 20) { c.beginPath(); c.moveTo(0, gy); c.lineTo(w, gy); c.stroke(); }
+          c.fillStyle = '#35ff9e';
+          for (let i = 0; i < 30; i++) c.fillRect(rand(0, w), rand(0, 14), 6, 2);
+        }),
+        cloud: cloud('#1a6a48', '#0c3026')
+      };
+
       /* —— 月痕沙海：夜晚玫红沙漠、缺角巨月漏沙、金字塔、河流、骸骨、炊烟火光 —— */
       this.bg.moondesert = {
         sky: sky([[0, '#3a1a3e'], [0.4, '#7a2e5e'], [0.75, '#c04a6e'], [1, '#e88a6a']], x => {
@@ -3677,6 +3994,8 @@
         // 敌人 / Boss
         this.enemies.forEach(e => e.render(ctx));
         this.bosses.forEach(b => b.render(ctx));
+        // 新地图机关（水流/暴风雪/落雷/移动方石/数据墙）
+        if (Hazards) Hazards.render(this, ctx);
         // 声波禁锢视觉：Boss / 龙类覆盖冰蓝色罩（普通敌人自带冻结渲染）
         if (this.soundwaveT > 0) {
           ctx.save();

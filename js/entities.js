@@ -3248,7 +3248,10 @@
         this.downSpin = 0;
         this.vx = mx * spd; this.vy = my * spd;
       }
-      this.x += this.vx * dt; this.y += this.vy * dt;
+      // 环境推力（海底水流 / 雪地暴风雪：弱于满速，可逆向操作对抗）
+      const ef = g.envForce || null;
+      this.x += (this.vx + (ef ? ef.x : 0)) * dt;
+      this.y += (this.vy + (ef ? ef.y : 0)) * dt;
       this.radius = CFG.player.radius;   // 碰撞体固定：生命强化只放大视觉体型，不放大受击判定
       this.x = clamp(this.x, 40, CFG.W - 60);
       // 危险地面高度：大海为波动海平面（g.groundYAt），其余地图为固定地面
@@ -5492,7 +5495,68 @@
     // 罗马角斗场·地刺（高/中/低）：铁刺条底座 + 一排向上尖刺
     spikeT: { w: 152, h: 132, trap: true, trapInset: 0.34, shape: 'spike', v: 0, debris: ['#7d8794', '#a7b3c2', '#5a5f66', '#fff', '#ff7b2e'] },
     spikeM: { w: 118, h: 96,  trap: true, trapInset: 0.34, shape: 'spike', v: 1, debris: ['#7d8794', '#a7b3c2', '#5a5f66', '#fff'] },
-    spikeL: { w: 92,  h: 62,  trap: true, trapInset: 0.34, shape: 'spike', v: 2, debris: ['#7d8794', '#a7b3c2', '#5a5f66'] }
+    spikeL: { w: 92,  h: 62,  trap: true, trapInset: 0.34, shape: 'spike', v: 2, debris: ['#7d8794', '#a7b3c2', '#5a5f66'] },
+
+    // —— 丛林：粗树干（地）/ 悬挂藤蔓（顶）——
+    jTrunkT: { w: 120, h: 108, shape: 'jtrunk', v: 0, debris: ['#5a4128', '#3a2a18', '#2f6e39', '#1e4d24', '#9bc84b'] },
+    jTrunkM: { w: 92,  h: 84,  shape: 'jtrunk', v: 1, debris: ['#5a4128', '#3a2a18', '#2f6e39', '#5cb868'] },
+    jLeafL:  { w: 96,  h: 60,  shape: 'jtrunk', v: 2, debris: ['#2f6e39', '#1e4d24', '#5cb868', '#9bc84b'] },
+    jVineT:  { w: 96,  h: 108, trap: true, trapInset: 0.42, shape: 'jvine', v: 0, debris: ['#2f6e39', '#1e4d24', '#5cb868', '#9bc84b'] },
+    jVineM:  { w: 76,  h: 84,  trap: true, trapInset: 0.42, shape: 'jvine', v: 1, debris: ['#2f6e39', '#1e4d24', '#5cb868'] },
+    jVineL:  { w: 58,  h: 60,  trap: true, trapInset: 0.42, shape: 'jvine', v: 2, debris: ['#2f6e39', '#5cb868', '#9bc84b'] },
+    // —— 海底：尖锐礁岩+珊瑚（地）/ 悬挂海藻（顶）——
+    sbReefT: { w: 132, h: 108, trap: true, trapInset: 0.34, shape: 'sbreef', v: 0, debris: ['#1f5a6e', '#2f7d8c', '#5fb8a8', '#ff8a6e'] },
+    sbReefM: { w: 104, h: 84,  trap: true, trapInset: 0.34, shape: 'sbreef', v: 1, debris: ['#1f5a6e', '#2f7d8c', '#5fb8a8'] },
+    sbCoralL:{ w: 92,  h: 60,  shape: 'sbreef', v: 2, debris: ['#ff8a6e', '#d65e52', '#ffc48a', '#5fb8a8'] },
+    sbKelpT: { w: 92,  h: 108, trap: true, trapInset: 0.45, shape: 'sbkelp', v: 0, debris: ['#2f8f6e', '#1f6e58', '#7fd8b0', '#bfe8d8'] },
+    sbKelpM: { w: 72,  h: 84,  trap: true, trapInset: 0.45, shape: 'sbkelp', v: 1, debris: ['#2f8f6e', '#1f6e58', '#7fd8b0'] },
+    sbKelpL: { w: 54,  h: 60,  trap: true, trapInset: 0.45, shape: 'sbkelp', v: 2, debris: ['#2f8f6e', '#7fd8b0'] },
+    // —— 雪地：顶部悬挂冰锥（地面沿用 iceT/M/L）——
+    icicleT: { w: 132, h: 108, trap: true, trapInset: 0.40, shape: 'icicle', v: 0, debris: ['#eaf7ff', '#b9dcf2', '#9fcde8', '#fff', '#8fd0ff'] },
+    icicleM: { w: 104, h: 84,  trap: true, trapInset: 0.40, shape: 'icicle', v: 1, debris: ['#eaf7ff', '#b9dcf2', '#9fcde8', '#fff'] },
+    icicleL: { w: 80,  h: 60,  trap: true, trapInset: 0.40, shape: 'icicle', v: 2, debris: ['#eaf7ff', '#b9dcf2', '#9fcde8'] },
+    // —— 城堡：规整石墙/塔楼/石柱 ——
+    cwT:    { w: 104, h: 108, shape: 'cwall', v: 0, debris: ['#8a6a45', '#c99a5e', '#e8c084', '#7a5a3a', '#d86a3a'] },
+    cwM:    { w: 124, h: 84,  shape: 'cwall', v: 1, debris: ['#8a6a45', '#c99a5e', '#e8c084', '#7a5a3a'] },
+    cwL:    { w: 72,  h: 60,  shape: 'cwall', v: 2, debris: ['#8a6a45', '#c99a5e', '#e8c084'] },
+    cwTopT: { w: 104, h: 108, shape: 'cwall', v: 0, debris: ['#8a6a45', '#c99a5e', '#e8c084', '#7a5a3a', '#d86a3a'] },
+    cwTopM: { w: 124, h: 84,  shape: 'cwall', v: 1, debris: ['#8a6a45', '#c99a5e', '#e8c084'] },
+    cwTopL: { w: 72,  h: 60,  shape: 'cwall', v: 2, debris: ['#8a6a45', '#c99a5e', '#e8c084'] },
+    // —— 天空：漂浮巨石/断柱（上下对称，同一造型翻转）——
+    flT:    { w: 116, h: 108, shape: 'floatr', v: 0, debris: ['#4a5066', '#6b7390', '#9aa2c0', '#8a90a8'] },
+    flM:    { w: 92,  h: 84,  shape: 'floatr', v: 1, debris: ['#4a5066', '#6b7390', '#9aa2c0'] },
+    flL:    { w: 70,  h: 60,  shape: 'floatr', v: 2, debris: ['#4a5066', '#6b7390', '#9aa2c0'] },
+    flTopT: { w: 116, h: 108, shape: 'floatr', v: 0, debris: ['#4a5066', '#6b7390', '#9aa2c0'] },
+    flTopM: { w: 92,  h: 84,  shape: 'floatr', v: 1, debris: ['#4a5066', '#6b7390', '#9aa2c0'] },
+    flTopL: { w: 70,  h: 60,  shape: 'floatr', v: 2, debris: ['#4a5066', '#6b7390', '#9aa2c0'] },
+    // —— 仙人洞：白色几何方石/方柱/悬浮石板 ——
+    cbT:    { w: 76,  h: 108, shape: 'cblock', v: 0, debris: ['#c8d2dc', '#f2f6fa', '#ffffff', '#7fc8d8'] },
+    cbM:    { w: 58,  h: 84,  shape: 'cblock', v: 1, debris: ['#c8d2dc', '#f2f6fa', '#ffffff', '#7fc8d8'] },
+    cbL:    { w: 104, h: 60,  shape: 'cblock', v: 2, debris: ['#c8d2dc', '#f2f6fa', '#7fc8d8'] },
+    cbTopT: { w: 76,  h: 108, shape: 'cblock', v: 0, debris: ['#c8d2dc', '#f2f6fa', '#ffffff', '#7fc8d8'] },
+    cbTopM: { w: 58,  h: 84,  shape: 'cblock', v: 1, debris: ['#c8d2dc', '#f2f6fa', '#7fc8d8'] },
+    cbTopL: { w: 104, h: 60,  shape: 'cblock', v: 2, debris: ['#c8d2dc', '#f2f6fa', '#7fc8d8'] },
+    // —— 群山：尖锐山岩/悬崖/迎客松 ——
+    mtT:    { w: 132, h: 108, trap: true, trapInset: 0.36, shape: 'mpeak', v: 0, debris: ['#5a6268', '#7a8478', '#9aa392', '#3c4a3a', '#c8d4d0'] },
+    mtM:    { w: 104, h: 84,  trap: true, trapInset: 0.36, shape: 'mpeak', v: 1, debris: ['#5a6268', '#7a8478', '#9aa392'] },
+    mtL:    { w: 80,  h: 60,  trap: true, trapInset: 0.36, shape: 'mpeak', v: 2, debris: ['#5a6268', '#7a8478', '#3c4a3a'] },
+    mtTopT: { w: 132, h: 108, trap: true, trapInset: 0.36, shape: 'mpeak', v: 0, debris: ['#5a6268', '#7a8478', '#9aa392'] },
+    mtTopM: { w: 104, h: 84,  trap: true, trapInset: 0.36, shape: 'mpeak', v: 1, debris: ['#5a6268', '#7a8478', '#9aa392'] },
+    mtTopL: { w: 80,  h: 60,  trap: true, trapInset: 0.36, shape: 'mpeak', v: 2, debris: ['#5a6268', '#7a8478'] },
+    // —— 魔窟：钟乳石/石笋/岩柱（上下翻转通用）——
+    dcT:    { w: 120, h: 108, trap: true, trapInset: 0.40, shape: 'dstal', v: 0, debris: ['#1a1428', '#2c2240', '#4a3868', '#7a4cd8', '#ff8a3c'] },
+    dcM:    { w: 96,  h: 84,  trap: true, trapInset: 0.40, shape: 'dstal', v: 1, debris: ['#1a1428', '#2c2240', '#7a4cd8'] },
+    dcL:    { w: 72,  h: 60,  trap: true, trapInset: 0.40, shape: 'dstal', v: 2, debris: ['#1a1428', '#2c2240', '#ff8a3c'] },
+    dcTopT: { w: 120, h: 108, trap: true, trapInset: 0.40, shape: 'dstal', v: 0, debris: ['#1a1428', '#2c2240', '#4a3868', '#7a4cd8'] },
+    dcTopM: { w: 96,  h: 84,  trap: true, trapInset: 0.40, shape: 'dstal', v: 1, debris: ['#1a1428', '#2c2240', '#7a4cd8'] },
+    dcTopL: { w: 72,  h: 60,  trap: true, trapInset: 0.40, shape: 'dstal', v: 2, debris: ['#1a1428', '#2c2240'] },
+    // —— 矩阵：数据方块/线框（上下对称）——
+    mxT:    { w: 88,  h: 108, shape: 'datab', v: 0, debris: ['#0a0f14', '#123026', '#35ff9e', '#35e0ff', '#b46aff'] },
+    mxM:    { w: 70,  h: 84,  shape: 'datab', v: 1, debris: ['#0a0f14', '#123026', '#35ff9e', '#35e0ff'] },
+    mxL:    { w: 108, h: 60,  shape: 'datab', v: 2, debris: ['#0a0f14', '#123026', '#35ff9e'] },
+    mxTopT: { w: 88,  h: 108, shape: 'datab', v: 0, debris: ['#0a0f14', '#123026', '#35ff9e'] },
+    mxTopM: { w: 70,  h: 84,  shape: 'datab', v: 1, debris: ['#0a0f14', '#123026', '#35ff9e'] },
+    mxTopL: { w: 108, h: 60,  shape: 'datab', v: 2, debris: ['#0a0f14', '#123026', '#35ff9e'] }
   };
 
   /** 像素块填充（坐标自动取整） */
@@ -5502,16 +5566,18 @@
   }
 
   class Rock {
-    /** shapeId：OBS 表中的障碍造型 id（草原为 grass0..grass4） */
-    constructor(x, shapeId) {
+    /** shapeId：OBS 表中的障碍造型 id（草原为 grass0..grass4）；fromTop=true 为顶部悬挂障碍（垂直翻转渲染，碰撞盒不变） */
+    constructor(x, shapeId, fromTop) {
       this.shapeId = shapeId;
       this.kind = shapeId;
       this.def = OBS[shapeId] || OBS.grass0;
       this.w = this.def.w;
       this.h = this.def.h;
       this.trap = !!this.def.trap;
+      this.fromTop = !!fromTop;
       this.x = x;                         // 中心 x
-      this.baseY = CFG.GROUND_Y;
+      // 地面障碍 baseY=地面；顶部障碍 baseY=悬挂高度下沿（占据 [TOP_Y, TOP_Y+h]，碰撞盒与地面障碍同构）
+      this.baseY = fromTop ? CFG.TOP_Y + this.def.h : CFG.GROUND_Y;
       this.dead = false;
       this.warned = false;
       this.flashT = 0;       // 剩余闪白时长（秒）
@@ -5581,9 +5647,10 @@
         burst(g, p.x, p.y, 18, ['#ff7b2e', '#ffd23b', '#fff5d0', '#fff'], 380, 6, 0.5, 200);
         // 障碍碎裂爆炸（大块碎石 + 火星 + 冲击环）
         this.destroy(g, true);
-        // 击退：弹向远离障碍一侧并抬升
+        // 击退：弹向远离障碍一侧；地面障碍向上弹，顶部悬挂障碍向下弹
         p.x += (p.x < this.x ? -1 : 1) * 40;
-        p.y = Math.max(CFG.TOP_Y, p.y - 56);
+        if (this.fromTop) p.y = Math.min(CFG.GROUND_Y, p.y + 56);
+        else p.y = Math.max(CFG.TOP_Y, p.y - 56);
       }
       // 小怪撞障碍：坠毁死亡（地面单位 / Boss 不受影响）
       for (const e of g.enemies) {
@@ -5609,6 +5676,9 @@
     }
     render(ctx) {
       const draw = (c) => {
+        c.save();
+        // 顶部悬挂障碍：以障碍水平中线为轴垂直翻转（宽基在顶、尖端朝下）
+        if (this.fromTop) { c.translate(0, 2 * this.baseY - this.h); c.scale(1, -1); }
         switch (this.def.shape) {
           case 'cactus': drawCactus(c, this); break;
           case 'ice': drawIce(c, this); break;
@@ -5620,8 +5690,20 @@
           case 'reef': drawReef(c, this); break;
           case 'coral': drawCoral(c, this); break;
           case 'spike': drawSpike(c, this); break;
+          case 'jtrunk': drawJungleTrunk(c, this); break;
+          case 'jvine': drawJungleVine(c, this); break;
+          case 'sbreef': drawSeabedReef(c, this); break;
+          case 'sbkelp': drawSeabedKelp(c, this); break;
+          case 'icicle': drawIce(c, this); break;
+          case 'cwall': drawCastleWall(c, this); break;
+          case 'floatr': drawFloatRock(c, this); break;
+          case 'cblock': drawCaveBlock(c, this); break;
+          case 'mpeak': drawMountainRock(c, this); break;
+          case 'dstal': drawDemonStal(c, this); break;
+          case 'datab': drawDataBlock(c, this); break;
           default: this.renderRock(c);
         }
+        c.restore();
       };
       if (this.flashT > 0) {
         // 闪白：先将障碍绘制到离屏画布，再生成白色剪影叠加（仅染色障碍本体像素）
@@ -6002,6 +6084,228 @@
           obsPx(ctx, cx + hw - s, yy, Math.min(s, hw * 2), s, '#a7b3c2');   // 右棱高光
         }
       }
+    }
+  }
+
+  /* —— 新地图障碍造型：全部从 base 向上生长；顶部悬挂障碍由 Rock 垂直翻转后呈现 —— */
+
+  /** 叶簇（by=叶簇底部中心；p[深/中/亮/点缀]） */
+  function leafBlob(ctx, cx, by, bw, bh, p) {
+    const u = 7, rows = Math.max(2, Math.ceil(bh / u));
+    for (let i = 0; i < rows; i++) {
+      const t = (i + 0.5) / rows;
+      const ww = bw * (0.30 + 0.70 * Math.sin(t * Math.PI));
+      const col = t > 0.66 ? p[2] : (i % 2 ? p[1] : p[0]);
+      obsPx(ctx, cx - ww / 2, by - (i + 1) * u, ww, u, col);
+    }
+    for (let k = 0; k < 3; k++) obsPx(ctx, cx - bw * 0.2 + k * bw * 0.18, by - bh * (0.55 + k * 0.13), 6, 3, p[3] || p[2]);
+  }
+  /** 实心三角（尖顶在 cx,top，底边宽 bw 位于 base） */
+  function obsTri(ctx, cx, top, base, bw, col, edge) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(cx, top); ctx.lineTo(cx + bw / 2, base); ctx.lineTo(cx - bw / 2, base);
+    ctx.closePath(); ctx.fill();
+    if (edge) { ctx.strokeStyle = edge; ctx.lineWidth = 2; ctx.stroke(); }
+  }
+
+  /** 丛林·粗树干 + 横向树枝 + 巨型叶片（v2 矮株为巨型叶簇） */
+  function drawJungleTrunk(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    if (v === 2) { leafBlob(ctx, x0 + w / 2, base, w * 0.96, h, ['#1e4d24', '#2f6e39', '#5cb868', '#9bc84b']); return; }
+    const tw = v === 0 ? 36 : 28, cx = x0 + w / 2;
+    obsPx(ctx, cx - tw / 2, base - h * 0.52, tw, h * 0.52, '#3a2a18');
+    obsPx(ctx, cx - tw / 2, base - h * 0.52, tw * 0.34, h * 0.52, '#5a4128');
+    for (let yy = base - h * 0.42; yy < base - 6; yy += 15) obsPx(ctx, cx - tw / 2 + 3, yy, tw - 6, 3, '#2a1c10');
+    obsPx(ctx, cx - tw / 2 - 24, base - h * 0.60, 24, 7, '#4a3320');
+    obsPx(ctx, cx + tw / 2, base - h * 0.74, 22, 7, '#4a3320');
+    leafBlob(ctx, cx - 24, base - h * 0.58, w * 0.52, h * 0.40, ['#1e4d24', '#2f6e39', '#4ea058', '#9bc84b']);
+    leafBlob(ctx, cx + 22, base - h * 0.70, w * 0.46, h * 0.36, ['#163d1c', '#2f6e39', '#5cb868', '#b8d85c']);
+    leafBlob(ctx, cx, base - h * 0.46, w * 0.62, h * 0.46, ['#1e4d24', '#357a40', '#5cb868', '#9bc84b']);
+  }
+  /** 丛林·悬挂藤蔓（翻转后自顶垂下）：波状藤条 + 对生小叶 + 尖端叶簇 */
+  function drawJungleVine(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    const n = v === 0 ? 4 : v === 1 ? 3 : 2;
+    for (let i = 0; i < n; i++) {
+      const sx = x0 + w * (i + 0.5) / n;
+      const seg = 12;
+      for (let j = 0; j < seg; j++) {
+        const yy = base - j * (h / seg);
+        const dx = Math.sin(j * 0.7 + i * 1.7) * (6 + v * 2);
+        obsPx(ctx, sx + dx - 3, yy - h / seg, 6, h / seg + 1, j % 2 ? '#1e4d24' : '#2f6e39');
+        if (j % 3 === 1) {
+          obsPx(ctx, sx + dx + 3, yy - 4, 9, 4, '#4ea058');
+          obsPx(ctx, sx + dx - 12, yy - 8, 9, 4, '#5cb868');
+        }
+      }
+      leafBlob(ctx, sx + Math.sin(seg * 0.7 + i * 1.7) * 8, base - h + 4, w * 0.34, h * 0.22,
+        ['#1e4d24', '#357a40', '#7cc476', '#b8d85c']);
+    }
+  }
+  /** 海底·尖锐礁岩 + 珊瑚（v2 以珊瑚为主） */
+  function drawSeabedReef(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    if (v !== 2) {
+      obsTri(ctx, x0 + w * 0.32, base - h, base, w * 0.5, '#2f7d8c', '#1f5a6e');
+      obsTri(ctx, x0 + w * 0.68, base - h * 0.72, base, w * 0.4, '#3d94a4', '#1f5a6e');
+      obsPx(ctx, x0 + w * 0.30, base - h + 8, 8, h * 0.4, '#7fc6d0');   // 岩面高光
+    }
+    // 珊瑚：分叉枝（橙红）
+    const cx = v === 2 ? x0 + w * 0.5 : x0 + w * 0.72;
+    const ch = h * (v === 2 ? 0.92 : 0.6);
+    obsPx(ctx, cx - 4, base - ch, 8, ch, '#d65e52');
+    obsPx(ctx, cx - 12, base - ch * 0.8, 8, ch * 0.34, '#ff8a6e');
+    obsPx(ctx, cx + 4, base - ch * 0.9, 8, ch * 0.42, '#ff8a6e');
+    obsPx(ctx, cx - 16, base - ch * 0.86, 7, 12, '#ffc48a');
+    obsPx(ctx, cx + 9, base - ch * 0.98, 7, 12, '#ffc48a');
+    // 沙地底座
+    obsPx(ctx, x0, base - 6, w, 6, '#c8b48a');
+  }
+  /** 海底·悬挂海藻（翻转后自顶垂下）：波状长叶随流 */
+  function drawSeabedKelp(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    const n = v === 0 ? 4 : v === 1 ? 3 : 2;
+    for (let i = 0; i < n; i++) {
+      const sx = x0 + w * (i + 0.5) / n;
+      const seg = 10;
+      for (let j = 0; j < seg; j++) {
+        const yy = base - j * (h / seg);
+        const dx = Math.sin(j * 0.8 + i) * 10;
+        const c = j % 2 ? '#1f6e58' : '#2f8f6e';
+        obsPx(ctx, sx + dx - 4, yy - h / seg, 11, h / seg + 1, c);
+        obsPx(ctx, sx + dx - 4, yy - h / seg, 3, h / seg, '#7fd8b0');
+      }
+      obsPx(ctx, sx + Math.sin(seg * 0.8 + i) * 10 - 3, base - h, 6, 10, '#bfe8d8');
+    }
+  }
+  /** 城堡·石墙/塔楼/旗柱（规整石块 + 城垛） */
+  function drawCastleWall(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    if (v === 2) { // 矮：雕像柱墩 + 旗杆
+      obsPx(ctx, x0 + w * 0.36, base - h * 0.86, w * 0.28, h * 0.86, '#c99a5e');
+      obsPx(ctx, x0 + w * 0.30, base - h * 0.86, w * 0.4, 8, '#e8c084');
+      obsPx(ctx, x0 + w * 0.46, base - h, 5, h * 0.2, '#5a4632');
+      obsPx(ctx, x0 + w * 0.51, base - h * 0.96, 18, 11, '#d86a3a');
+      return;
+    }
+    const bodyH = v === 0 ? h * 0.82 : h * 0.7;
+    obsPx(ctx, x0, base - bodyH, w, bodyH, '#c99a5e');
+    // 石块横缝 + 竖缝错列
+    for (let yy = base - bodyH + 12; yy < base - 4; yy += 15) {
+      obsPx(ctx, x0, yy, w, 2, '#8a6a45');
+      const off = (Math.floor(yy / 15) % 2) ? 14 : 0;
+      for (let xx = x0 + 8 + off; xx < x0 + w - 8; xx += 26) obsPx(ctx, xx, yy - 12, 2, 12, '#a87f4e');
+    }
+    obsPx(ctx, x0, base - bodyH, w, 4, '#e8c084');       // 顶沿受光
+    obsPx(ctx, x0, base - 6, w, 6, '#7a5a3a');           // 底部阴影
+    // 城垛
+    const mer = v === 0 ? 4 : 5, mw = w / mer;
+    for (let i = 0; i < mer; i++) obsPx(ctx, x0 + i * mw + mw * 0.18, base - h, mw * 0.64, h - bodyH + 2, '#c99a5e');
+    if (v === 0) { // 塔楼：箭窗
+      obsPx(ctx, x0 + w / 2 - 5, base - h * 0.52, 10, 22, '#5a4632');
+      obsPx(ctx, x0 + w / 2 - 5, base - h * 0.52, 3, 22, '#8a6a45');
+    }
+  }
+  /** 天空·漂浮巨石 / 断裂石柱（不规则，带悬浮碎块） */
+  function drawFloatRock(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    if (v === 2) { // 断柱
+      obsPx(ctx, x0 + w * 0.34, base - h, w * 0.32, h, '#8a90a8');
+      obsPx(ctx, x0 + w * 0.34, base - h, w * 0.1, h, '#aab2cc');
+      obsPx(ctx, x0 + w * 0.30, base - h, w * 0.4, 8, '#6b7390');
+      return;
+    }
+    // 不规则巨石：分层锯齿剖面
+    const rows = Math.ceil(h / 9);
+    for (let i = 0; i < rows; i++) {
+      const t = (i + 0.5) / rows;
+      const ww = w * (0.42 + 0.5 * Math.sin(t * Math.PI * 0.92));
+      const cx = x0 + w / 2 + Math.sin(i * 2.3 + v) * 5;
+      obsPx(ctx, cx - ww / 2, base - (i + 1) * 9, ww, 9, i % 2 ? '#5a6178' : '#6b7390');
+      if (i > rows * 0.5) obsPx(ctx, cx - ww / 2 + 3, base - (i + 1) * 9 + 2, ww * 0.28, 3, '#8a90a8');
+    }
+    obsPx(ctx, x0 + w * 0.2, base - 4, w * 0.6, 4, '#454b60');
+    // 悬浮小碎石
+    obsPx(ctx, x0 - 6, base - h - 12, 12, 9, '#8a90a8');
+    obsPx(ctx, x0 + w - 4, base - h - 20, 9, 7, '#9aa2c0');
+  }
+  /** 仙人洞·白色几何方石/方柱/悬浮石板（冷青描边） */
+  function drawCaveBlock(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    obsPx(ctx, x0 + 3, base - h + 3, w - 6, h - 6, '#f2f6fa');
+    obsPx(ctx, x0 + 3, base - h + 3, w - 6, 6, '#ffffff');           // 顶光
+    obsPx(ctx, x0 + 3, base - 9, w - 6, 6, '#c8d2dc');               // 底影
+    obsPx(ctx, x0 + 3, base - h + 3, 6, h - 6, '#dde6ee');           // 左侧
+    // 青灰几何描边
+    ctx.strokeStyle = '#7fc8d8'; ctx.lineWidth = 2;
+    ctx.strokeRect(x0 + 3, base - h + 3, w - 6, h - 6);
+    // 中心几何纹（菱形/方框）
+    const cx = x0 + w / 2, cy = base - h / 2;
+    ctx.strokeStyle = 'rgba(127,200,216,0.85)';
+    ctx.beginPath();
+    const rr = Math.min(w, h) * 0.22;
+    ctx.moveTo(cx, cy - rr); ctx.lineTo(cx + rr, cy); ctx.lineTo(cx, cy + rr); ctx.lineTo(cx - rr, cy);
+    ctx.closePath(); ctx.stroke();
+    if (v === 2) { obsPx(ctx, x0 - 8, base - h - 2, 16, 5, '#dfe8f0'); obsPx(ctx, x0 + w - 8, base - 10, 14, 5, '#dfe8f0'); }
+  }
+  /** 群山·尖锐山岩（雪冠）/ 矮株迎客松 */
+  function drawMountainRock(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    if (v === 2) { // 迎客松：岩座 + 平冠松
+      obsPx(ctx, x0 + w * 0.3, base - 14, w * 0.4, 14, '#5a6268');
+      const cx = x0 + w / 2;
+      obsPx(ctx, cx - 4, base - h * 0.7, 8, h * 0.7, '#3c3226');
+      obsPx(ctx, cx - 4, base - h * 0.55, 22, 5, '#3c3226');
+      obsPx(ctx, cx - 20, base - h * 0.52, 18, 5, '#3c3226');
+      leafBlob(ctx, cx - 14, base - h * 0.5, w * 0.5, h * 0.3, ['#2c3a2c', '#3c4a3a', '#56684f', '#7d8f6e']);
+      leafBlob(ctx, cx + 12, base - h * 0.66, w * 0.42, h * 0.26, ['#2c3a2c', '#3c4a3a', '#56684f']);
+      return;
+    }
+    obsTri(ctx, x0 + w * 0.5, base - h, base, w * 0.92, '#7a8478', '#5a6268');
+    obsTri(ctx, x0 + w * 0.74, base - h * 0.66, base, w * 0.5, '#8e9888', '#5a6268');
+    // 雪冠
+    ctx.fillStyle = '#c8d4d0';
+    ctx.beginPath();
+    ctx.moveTo(x0 + w * 0.5, base - h);
+    ctx.lineTo(x0 + w * 0.5 - w * 0.12, base - h + h * 0.22);
+    ctx.lineTo(x0 + w * 0.5 - w * 0.02, base - h + h * 0.14);
+    ctx.lineTo(x0 + w * 0.5 + w * 0.06, base - h + h * 0.26);
+    ctx.closePath(); ctx.fill();
+    obsPx(ctx, x0 + w * 0.32, base - h * 0.55, 6, h * 0.3, '#98a296');
+  }
+  /** 魔窟·石笋/钟乳（翻转通用）：暗紫尖锥 + 妖火脉络 */
+  function drawDemonStal(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY, v = r.def.v;
+    const n = v === 0 ? 3 : v === 1 ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      const f = (i + 0.5) / n;
+      const cx = x0 + w * f;
+      const ch = h * (i === 0 ? 1 : 0.66) * (0.9 + 0.1 * Math.sin(i + v));
+      const bw = w / n * 0.86;
+      obsTri(ctx, cx, base - ch, base, bw, i % 2 ? '#2c2240' : '#34294c', '#1a1428');
+      // 发光脉络
+      obsPx(ctx, cx - 2, base - ch * 0.8, 3, ch * 0.55, i % 2 ? '#7a4cd8' : '#ff8a3c');
+      obsPx(ctx, cx - 4, base - ch + 2, 8, 5, i % 2 ? '#b48aff' : '#ffc06e');
+    }
+    obsPx(ctx, x0, base - 5, w, 5, '#120e1e');
+  }
+  /** 矩阵·数据方块/线框：黑底 + 荧光绿边框 + 扫描码线 */
+  function drawDataBlock(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY;
+    obsPx(ctx, x0 + 2, base - h + 2, w - 4, h - 4, '#0c1612');
+    obsPx(ctx, x0 + 6, base - h + 6, w - 12, h - 12, '#123026');
+    ctx.strokeStyle = '#35ff9e'; ctx.lineWidth = 2;
+    ctx.strokeRect(x0 + 2.5, base - h + 2.5, w - 5, h - 5);
+    // 角标
+    ctx.fillStyle = '#35e0ff';
+    [[x0 + 2, base - h + 2], [x0 + w - 8, base - h + 2], [x0 + 2, base - 10]].forEach(p => ctx.fillRect(p[0], p[1], 6, 6));
+    // 扫描码线
+    for (let yy = base - h + 10; yy < base - 8; yy += 8) {
+      const code = Math.floor(r.x / 8) + yy;
+      obsPx(ctx, x0 + 8, yy, w - 16, 2, code % 3 ? 'rgba(53,255,158,0.55)' : 'rgba(180,106,255,0.7)');
+      const lw = 6 + ((code * 7) % Math.floor(w * 0.5));
+      obsPx(ctx, x0 + 8, yy + 3, lw, 3, 'rgba(53,255,158,0.85)');
     }
   }
 
@@ -6851,6 +7155,96 @@
       hit: ['#ffffff', '#d8f2ff', '#7fc6ef'],
       death: ['#1f6fb8', '#2fb8a8', '#9fd9f5', '#d8f2ff', '#ffffff'],
       noSpine: false, seg: dragonSegSea, head: dragonHeadSea
+    },
+    // —— 新地图主题龙（复用既有节/头渲染器，仅换配色与名号）——
+    jungle: {
+      id: 'jungle', name: '藤蔓龙', warn: '藤蔓龙 拨叶而出！', spike: 'spike', spinRate: 9,
+      edge: '#14401c', body: '#2f7a3a', belly: '#a8dca0', fin: '#1f5e26', finHi: '#7cc476',
+      scale: '#25602c', horn: '#d8efb0', whisker: '#9bc84b', snout: '#3c9248',
+      mound: ['#244014', '#3a2a18', '#2f6e39'],
+      dust: ['#2f6e39', '#5cb868', '#3a2a18'],
+      fx: ['#2f6e39', '#5cb868', '#9bc84b', '#d8f5c8'],
+      hit: ['#ffffff', '#bfe8b0', '#7cc476'],
+      death: ['#2f7a3a', '#5cb868', '#9bc84b', '#d8f5c8', '#ffffff'],
+      noSpine: false, seg: dragonSegGrass, head: dragonHeadGrass
+    },
+    seabed: {
+      id: 'seabed', name: '珊瑚海龙', warn: '珊瑚海龙 穿水而来！', spike: 'seaspike', spinRate: 9,
+      edge: '#5a2a66', body: '#9a4da8', belly: '#e8b8f0', fin: '#2fb8a8', finHi: '#7fe8d8',
+      scale: '#7d3e8c', horn: '#ff9ed8', whisker: 'rgba(200,240,255,0.85)', snout: '#b25cc0',
+      mound: ['#10304a', '#1f5a6e', '#ff8a6e'],
+      dust: ['#2f7d8c', '#ff8a6e', '#bfe8f0'],
+      fx: ['#9a4da8', '#ff8a6e', '#7fe8d8', '#e8b8f0'],
+      hit: ['#ffffff', '#f0c8ff', '#7fe8d8'],
+      death: ['#9a4da8', '#ff9ed8', '#7fe8d8', '#e8b8f0', '#ffffff'],
+      noSpine: false, seg: dragonSegSea, head: dragonHeadSea
+    },
+    castle: {
+      id: 'castle', name: '石像飞龙', warn: '石像飞龙 破穹降临！', spike: 'boneshard', spinRate: 12,
+      edge: '#6a4e30', body: '#b08a58', belly: '#e8d4a8', fin: '#8a6a45', finHi: '#e8c084',
+      scale: '#8a6a45', horn: '#e8c084', whisker: '#d86a3a', snout: '#c99a5e',
+      mound: ['#6a4e30', '#8a6a45', '#c99a5e'],
+      dust: ['#8a6a45', '#c99a5e', '#e8c084'],
+      fx: ['#8a6a45', '#c99a5e', '#e8c084', '#ffd98a'],
+      hit: ['#ffffff', '#ffe8c0', '#e8c084'],
+      death: ['#b08a58', '#e8c084', '#d86a3a', '#fff0d0', '#ffffff'],
+      noSpine: true, seg: dragonSegBone, head: dragonHeadBone
+    },
+    sky: {
+      id: 'sky', name: '雷云龙', warn: '雷云龙 驾霆而至！', spike: 'blackscale', spinRate: 15,
+      edge: '#1c2540', body: '#3a4a86', belly: '#b8c8f0', fin: '#6a5acd', finHi: '#c8b8ff',
+      scale: '#2c3a6e', horn: '#fff08a', whisker: '#fff7b0', snout: '#4a5aa8',
+      mound: ['#2a3050', '#3a4a86', '#6a7cc0'],
+      dust: ['#4a5aa8', '#8fa0d8', '#d8e0f8'],
+      fx: ['#fff08a', '#c8b8ff', '#8fa0d8', '#ffffff'],
+      hit: ['#ffffff', '#fff7b0', '#c8b8ff'],
+      death: ['#3a4a86', '#6a5acd', '#fff08a', '#d8e0f8', '#ffffff'],
+      noSpine: false, seg: dragonSegGrass, head: dragonHeadGrass
+    },
+    cave: {
+      id: 'cave', name: '白玉蟠龙', warn: '白玉蟠龙 凝光现身！', spike: 'gear', spinRate: 11,
+      edge: '#7a8a96', body: '#e8f0f4', belly: '#ffffff', fin: '#9fd8d8', finHi: '#c8f0ee',
+      scale: '#b8ccd2', horn: '#7fc8d8', whisker: 'rgba(127,200,216,0.9)', snout: '#d8e6ea',
+      mound: ['#c8d2dc', '#e8f0f4', '#ffffff'],
+      dust: ['#e8f0f4', '#ffffff', '#7fc8d8'],
+      fx: ['#ffffff', '#7fc8d8', '#9fd8d8', '#d8f4f2'],
+      hit: ['#ffffff', '#d8f4f2', '#7fc8d8'],
+      death: ['#e8f0f4', '#7fc8d8', '#ffffff', '#d8f4f2', '#c8d2dc'],
+      noSpine: true, seg: dragonSegBone, head: dragonHeadBone
+    },
+    mountains: {
+      id: 'mountains', name: '苍岩龙', warn: '苍岩龙 崩岩现身！', spike: 'blackscale', spinRate: 9,
+      edge: '#3a4244', body: '#66726a', belly: '#b4c0b2', fin: '#54625c', finHi: '#8a988c',
+      scale: '#4c5850', horn: '#c8d4d0', whisker: null, snout: '#76827a',
+      mound: ['#4a5048', '#5a6258', '#7a8478'],
+      dust: ['#5a6258', '#8a9488', '#c8d4d0'],
+      fx: ['#5a6258', '#9aa392', '#c8d4d0', '#e8eee8'],
+      hit: ['#ffffff', '#d8e0d6', '#9aa392'],
+      death: ['#66726a', '#9aa392', '#c8d4d0', '#e8eee8', '#ffffff'],
+      noSpine: false, seg: dragonSegBlack, head: dragonHeadBlack
+    },
+    demoncave: {
+      id: 'demoncave', name: '魔窟妖龙', warn: '魔窟妖龙 妖火乍现！', spike: 'lavafang', spinRate: 13,
+      edge: '#140a26', body: '#3c1e62', belly: '#8a5ac0', fin: '#7a2cd8', finHi: '#b46aff',
+      scale: '#2c1650', horn: '#ff8a3c', whisker: '#b46aff', snout: '#5a2e8c',
+      mound: ['#0c0618', '#1a1030', '#7a4cd8'],
+      dust: ['#2c1650', '#7a4cd8', '#ff8a3c'],
+      fx: ['#7a4cd8', '#b46aff', '#ff8a3c', '#3c1e62'],
+      hit: ['#ffffff', '#d8b8ff', '#ffb06e'],
+      death: ['#3c1e62', '#7a4cd8', '#ff8a3c', '#d8b8ff', '#ffffff'],
+      noSpine: false, seg: dragonSegRed, head: dragonHeadRed
+    },
+    matrix: {
+      id: 'matrix', name: '数据神龙', warn: '数据神龙 入侵战场！', spike: 'gear', spinRate: 14,
+      edge: '#04160e', body: '#0c3026', belly: '#1e6a48', fin: '#35ff9e', finHi: '#a8ffd8',
+      scale: '#12483a', horn: '#35e0ff', whisker: '#35ff9e', snout: '#1a8a5c',
+      core: '#35ff9e',
+      mound: ['#04100c', '#0c3026', '#35ff9e'],
+      dust: ['#0c3026', '#35ff9e', '#35e0ff'],
+      fx: ['#0c3026', '#35ff9e', '#35e0ff', '#b46aff'],
+      hit: ['#ffffff', '#a8ffd8', '#35ff9e'],
+      death: ['#0c3026', '#35ff9e', '#35e0ff', '#a8ffd8', '#ffffff'],
+      noSpine: false, seg: dragonSegMech, head: dragonHeadMech
     }
   };
 
