@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const { Player, Enemy, Gem, Bullet, Particle, Rock, GrassDragon, burst, rand, randi, clamp } = window.FT;
+  const { Player, Enemy, Gem, Bullet, Particle, Rock, Breakable, GrassDragon, burst, rand, randi, clamp } = window.FT;
   const { setShooter, clearShooter } = window.FT;
   const Hazards = window.FT.Hazards;
   const TAU = Math.PI * 2;
@@ -397,6 +397,8 @@
       this.arcs = [];          // 闪电链电弧视觉
       this.fxRings = [];       // 冲击波环（障碍碎裂爆炸等）{ x,y,r,vr,t,life,col }
       this.rocks = [];
+      this.breakables = [];   // 破碎障碍物（子弹打满次数爆炸）
+      this.breakQueue = [];   // 本轮破碎障碍出场时刻表
       this.envForce = { x: 0, y: 0 };   // 地图机关环境推力（水流/暴风雪）
       this.hz = null;                    // 当前地图机关调度状态（Hazards 模块）
       this.toasts = [];
@@ -549,6 +551,9 @@
         : null;
       // 新地图特殊机关：排定本轮触发时刻（无机关地图返回 null）
       if (Hazards) Hazards.startRound(this);
+      // 破碎障碍物：清空残留并排定本轮出场时刻
+      this.breakables.length = 0;
+      this.startBreakRound();
     }
 
     /** 场上是否存在地面类敌人：地面小怪（弓箭手/炮师）或地面移动型 Boss（蛙哥/野鸡王）。
@@ -1726,6 +1731,7 @@
       this.elemPicksThisRound = 0;  // 新一轮重置元素弹道成长计数
       this.grassDragonThisRound = false;   // 新一轮重置草龙出场标记
       if (Hazards) Hazards.startRound(this);   // 新一轮重排特殊机关触发时刻
+      this.startBreakRound();                   // 新一轮重排破碎障碍物出场时刻
       // 飞行弹幕敌人：每轮 30% 概率解锁各档次中 1 只未解锁的
       this.rollFlyerUnlocks();
       this.score += 500;
@@ -2151,6 +2157,40 @@
       this.rockT = this.map && this.map.gap ? rand(this.map.gap[0], this.map.gap[1]) : rand(2.0, 3.5);
     }
 
+    /* ---------------- 破碎障碍物（子弹打满次数爆炸） ---------------- */
+    /** 每轮开始：按地图 brk 配置排定出场时刻（p<1 时按概率决定本轮是否出现） */
+    startBreakRound() {
+      this.breakQueue = [];
+      const specs = this.map && this.map.brk;
+      if (!specs) return;
+      for (const spec of specs) {
+        let n = randi(spec.n[0], spec.n[1]);
+        if (spec.p !== undefined && spec.p < 1 && Math.random() > spec.p) n = 0;
+        for (let i = 0; i < n; i++) {
+          // 均匀散布在约 8-44s 的刷怪窗口（每类独立），加随机抖动
+          const t = 8 + 36 / Math.max(1, n) * (i + rand(0.15, 0.95)) + rand(-2, 2);
+          this.breakQueue.push({ t: Math.max(6, t), spec });
+        }
+      }
+      this.breakQueue.sort((a, b) => a.t - b.t);
+    }
+    /** 出场时刻到点：Boss / 怪物潮期间仅保留 15% 低概率，其余顺延落空 */
+    breakTick(dt) {
+      if (!this.breakQueue.length) return;
+      this.breakQueue[0].t -= dt;
+      if (this.breakQueue[0].t > 0) return;
+      const ev = this.breakQueue.shift();
+      if ((this.bossActive || this.isTide) && Math.random() > 0.15) return;
+      this.spawnBreakable(ev.spec);
+    }
+    spawnBreakable(spec) {
+      const b = new Breakable(0, spec.id, { style: spec.styles ? randi(0, spec.styles - 1) : 0 });
+      const rightmost = this.breakables.reduce((m, q) => Math.max(m, q.x), -9999);
+      b.x = Math.max(CFG.W + b.w / 2 + 220, rightmost + b.w / 2 + rand(320, 620));
+      if (b.float) b.cy = rand(195, 285);   // 漂浮在屏幕中部
+      this.breakables.push(b);
+    }
+
     /* ---------------- 地图机制（火山口 / 大海） ---------------- */
     /** 危险地面高度：大海为波动海平面，天空为起伏云面，其余地图为固定地面 */
     groundYAt(x) {
@@ -2394,6 +2434,7 @@
 
       this.spawnTick(dt);
       this.rockTick(dt);
+      this.breakTick(dt);
       this.mapTick(dt);
       if (Hazards) Hazards.tick(this, dt);   // 新地图机关（水流/暴风雪/落雷/方石/数据墙）
 
@@ -2423,6 +2464,7 @@
         b.update(dt, this);
       });
       this.rocks.forEach(r => r.update(dt, this));
+      this.breakables.forEach(r => r.update(dt, this));
       this.arcs.forEach(a => a.t += dt);
       this.fxRings.forEach(ring => { ring.t += dt; ring.r += ring.vr * dt; });
 
@@ -2482,6 +2524,7 @@
       this.lightnings = this.lightnings.filter(l => !l.dead);
       this.beams = this.beams.filter(b => !b.dead);
       this.rocks = this.rocks.filter(r => !r.dead);
+      this.breakables = this.breakables.filter(r => !r.dead);
       this.arcs = this.arcs.filter(a => a.t < a.life);
       this.fxRings = this.fxRings.filter(ring => ring.t < ring.life);
       if (this.bosses.length === 0) {
@@ -2668,6 +2711,20 @@
             else burst(this, b.x, b.y, 5, ['#fff', '#caa06a'], 150, 3, 0.25);
             SFX.melee();
           } else b.dead = true;
+          break;
+        }
+      }
+      // 我方子弹 vs 破碎障碍物：累计命中次数，打满爆炸
+      for (const b of this.bullets) {
+        if (!b.friendly || b.dead) continue;
+        for (const k of this.breakables) {
+          if (k.dead) continue;
+          if (!k.contains(b.x, b.y, b.r)) continue;
+          if (b.rockBreak) { k.destroy(this, true); break; }   // 激光串一击摧毁
+          k.struck(this, b);
+          // 穿透 / 长条激光 / 边缘反弹弹不被吞（命中次数由 k.hitCd 限速）；普通子弹命中即消失
+          const beam = b.pierce > 0 || b.len > 0 || b.boxW > 0 || b.edgeBounce;
+          if (!beam) b.dead = true;
           break;
         }
       }
@@ -4434,6 +4491,8 @@
       if (this.state !== 'menu') {
         // 山石障碍（地面层）
         this.rocks.forEach(r => r.render(ctx));
+        // 破碎障碍物（塔楼/残骸/魔方/巨峰/枯木）
+        this.breakables.forEach(r => r.render(ctx));
         // 宝石
         this.gems.forEach(g2 => g2.render(ctx));
         // 闪电预警层

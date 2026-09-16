@@ -5581,6 +5581,31 @@
     mxTopL: { w: 108, h: 66,  shape: 'datab', v: 2, debris: ['#0a0f14', '#123026', '#35ff9e'] }
   };
 
+  /* ============================================================
+   * 破碎障碍物（Breakable）：玩家子弹累计命中 hp 次炸毁；接触玩家造成伤害
+   * 高度按需求取屏幕宽度的百分比（960 * ratio）；地面型锚定 GROUND_Y，漂浮型在屏幕中部上下浮动
+   * ============================================================ */
+  const BREAK = {
+    // 城堡：中世纪军事塔楼（高=屏宽40%）
+    bkTower: { w: 96,  h: Math.round(CFG.W * 0.40), hp: 20, shape: 'bktower',
+      debris: ['#a89a7e', '#8a7d64', '#c8bca2', '#5e5546', '#3a342c'] },
+    // 天空：巨大建筑残骸（高=屏宽50%，漂浮）
+    bkWreck: { w: 128, h: Math.round(CFG.W * 0.50), hp: 20, shape: 'bkwreck', float: true,
+      debris: ['#4a5468', '#333c4e', '#7fe3ff', '#9aa6bd', '#20262f'] },
+    // 仙人洞：持续转动的白色魔方（高=屏宽40%，漂浮）
+    bkCube: { w: Math.round(CFG.W * 0.40), h: Math.round(CFG.W * 0.40), hp: 25, shape: 'bkcube', float: true,
+      debris: ['#f4f8fc', '#cdd9e6', '#8fe8ff', '#9fb4c8', '#ffffff'] },
+    // 群山：巨大尖锐山峰（高=屏宽70%，接地）
+    bkPeak: { w: 176, h: Math.round(CFG.W * 0.70), hp: 25, shape: 'bkpeak',
+      debris: ['#6d7880', '#525c63', '#8b98a0', '#cdd8de', '#3f484e'] },
+    // 群山：低矮宽阔山峰（较宽，高=屏宽50%，接地）
+    bkMesa: { w: 300, h: Math.round(CFG.W * 0.50), hp: 20, shape: 'bkmesa',
+      debris: ['#727d82', '#565f64', '#93a0a4', '#aab6ba', '#464e53'] },
+    // 魔窟：幽蓝荧光枯木（较宽，高=屏宽80%，接地，3 种样式随机）
+    bkWood: { w: 150, h: Math.round(CFG.W * 0.80), hp: 30, shape: 'bkwood', styles: 3,
+      debris: ['#15122a', '#0c0a1c', '#2c2350', '#54e0ff', '#7af0ff', '#3a9cff'] }
+  };
+
   /** 像素块填充（坐标自动取整） */
   function obsPx(ctx, x, y, w, h, col) {
     ctx.fillStyle = col;
@@ -5808,7 +5833,564 @@
     }
   }
 
-  /* —— 各地图障碍造型（像素风，统一 8px 块；原点：r.x 中心 / r.baseY 地面） —— */
+  /* ============================================================
+   * 破碎障碍物 Breakable
+   *  - 我方子弹每命中 1 次扣 1 血（激光/穿透弹由 hitCd 限速），hp 归零爆炸
+   *  - 接触玩家造成伤害并击退；小怪撞毁；敌方可破坏弹（rockBreak）一发炸毁
+   *  - 地面型锚定地面随卷轴左移；漂浮型在屏幕中部上下浮动
+   * ============================================================ */
+  class Breakable {
+    constructor(x, id, opts) {
+      opts = opts || {};
+      this.id = id;
+      this.def = BREAK[id];
+      this.w = this.def.w;
+      this.h = this.def.h;
+      this.maxHp = this.def.hp;
+      this.hp = this.def.hp;
+      this.x = x;
+      this.float = !!this.def.float;
+      this.baseY = this.float ? 0 : CFG.GROUND_Y;
+      this.cy = this.float ? (opts.cy || 250) : 0;
+      this.bobPh = rand(0, TAU);
+      this.style = opts.style !== undefined ? opts.style
+        : (this.def.styles ? randi(0, this.def.styles - 1) : 0);
+      this.angle = rand(0, TAU);
+      this.angV = id === 'bkCube' ? 0.62 : 0;
+      this.hitCd = 0;
+      this.flashT = 0;
+      this.fadeT = 0.5;
+      this.t = 0;
+      this.dead = false;
+    }
+    get left() { return this.x - this.w / 2; }
+    get top() { return this.float ? this.cy - this.h / 2 : this.baseY - this.h; }
+    /** 当前纵向中心（漂浮型含上下浮动） */
+    ccyNow() { return this.float ? this.cy + Math.sin(this.t * 1.1 + this.bobPh) * 20 : this.baseY - this.h / 2; }
+    get debris() { return this.def.debris; }
+
+    /** 点是否在障碍本体内（pad 为外扩） */
+    contains(px, py, pad) {
+      pad = pad || 0;
+      const cx = this.x, cy = this.ccyNow();
+      if (this.id === 'bkCube') {
+        // 反向旋转到魔方本地坐标系：方形判定随转动
+        const dx = px - cx, dy = py - cy;
+        const c = Math.cos(-this.angle), sn = Math.sin(-this.angle);
+        const lx = dx * c - dy * sn, ly = dx * sn + dy * c;
+        const s = this.w * 0.40 + pad;
+        return Math.abs(lx) < s && Math.abs(ly) < s;
+      }
+      const top = cy - this.h / 2, bot = cy + this.h / 2;
+      if (py < top - pad || py > bot + pad) return false;
+      const t = clamp((bot - py) / this.h, 0, 1);   // 0=底 1=顶
+      let half;
+      if (this.id === 'bkPeak') half = this.w / 2 * (0.10 + 0.90 * t);
+      else if (this.id === 'bkMesa') half = this.w / 2 * (0.62 + 0.38 * t);
+      else if (this.id === 'bkWood') half = this.w / 2 * (0.42 + 0.20 * t);
+      else half = this.w / 2;
+      return Math.abs(px - cx) < half + pad;
+    }
+
+    /** 我方子弹命中：累计次数（hitCd 防穿透/激光一帧多次） */
+    struck(g, b) {
+      if (this.hitCd > 0) return;
+      this.hitCd = 0.07;
+      this.hp = Math.max(0, this.hp - 1);
+      this.flashT = 0.12;
+      const cols = this.debris;
+      burst(g, b ? b.x : this.x, b ? b.y : this.ccyNow(), 6,
+        [cols[0], cols[2] || cols[1], '#fff'], 150, 4, 0.35, 110);
+      if (this.hp % 5 === 0) SFX.melee();
+      if (this.hp <= 0) this.destroy(g, true);
+    }
+
+    update(dt, g) {
+      this.t += dt;
+      this.fadeT = Math.max(0, this.fadeT - dt);
+      this.hitCd = Math.max(0, this.hitCd - dt);
+      this.flashT = Math.max(0, this.flashT - dt);
+      if (this.angV) this.angle += dt * this.angV;
+      this.x -= 62 * dt * (g.map.scrollMul || 1);
+      if (this.x < -this.w / 2 - 140) this.dead = true;
+      // 魔窟枯木：散发幽蓝余烬
+      if (this.id === 'bkWood' && Math.random() < dt * 5) {
+        g.particles.push(new Particle(this.x + rand(-this.w * 0.25, this.w * 0.25),
+          this.baseY - rand(60, this.h * 0.9), rand(-16, 16), rand(-46, -18),
+          rand(0.6, 1.2), rand(2, 4), Math.random() < 0.5 ? '#54e0ff' : '#7af0ff'));
+      }
+      const p = g.player;
+      // 与飞虎碰撞：受伤击退（障碍物不因此损毁）
+      if (p.hp > 0 && p.invT <= 0 && this.contains(p.x, p.y, p.radius * 0.6)) {
+        p.hurt(Math.round(p.maxHp * 0.15), g, { k: 'env', key: 'breakrock' });
+        p.x += (p.x < this.x ? -1 : 1) * 34;
+        if (this.float) p.y += (p.y < this.ccyNow() ? -1 : 1) * 44;
+        else p.y = Math.max(CFG.TOP_Y, p.y - 48);
+        burst(g, p.x, p.y, 12, ['#ff7b2e', '#ffd23b', '#fff'], 260, 5, 0.45, 160);
+      }
+      // 小怪撞毁（地面单位 / Boss 不受影响）
+      for (const e of g.enemies) {
+        if (e.dead || e.groundUnit) continue;
+        if (this.contains(e.x, e.y, e.radius * 0.7)) {
+          burst(g, e.x, e.y, 16, this.debris.slice(0, 3).concat(e.deathColors()), 240, 5, 0.55, 220);
+          SFX.explode(false);
+          g.shake(5);
+          e.die(g);
+        }
+      }
+      // 敌方可破坏弹（炮弹/导弹）：一发炸毁
+      for (const b of g.bullets) {
+        if (b.friendly || b.dead || !b.rockBreak) continue;
+        if (this.contains(b.x, b.y, b.r + 4)) { b.dead = true; this.destroy(g); break; }
+      }
+    }
+
+    destroy(g, big) {
+      if (this.dead) return;
+      this.dead = true;
+      const cx = this.x, cy = this.ccyNow();
+      const cols = this.debris;
+      const n = big ? 30 : 22;
+      for (let i = 0; i < n; i++) {
+        const a = rand(-Math.PI * 0.95, -Math.PI * 0.05);
+        const sp = rand(150, big ? 500 : 360);
+        g.particles.push(new Particle(
+          cx + rand(-this.w * 0.3, this.w * 0.3), cy + rand(-this.h * 0.35, this.h * 0.35),
+          Math.cos(a) * sp, Math.sin(a) * sp - rand(60, 170),
+          rand(0.8, 1.5), rand(8, 20),
+          cols[randi(0, Math.min(cols.length - 1, 3))], 820));
+      }
+      burst(g, cx, cy, big ? 34 : 24, cols.concat('#fff'), big ? 460 : 340, 7, 0.8, 260);
+      burst(g, cx, cy, big ? 26 : 18, ['#ffd23b', '#ff7b2e', '#fff5d0', '#fff'], big ? 420 : 300, 6, 0.5, 200);
+      if (g.fxRings) {
+        g.fxRings.push({ x: cx, y: cy, r: 16, vr: big ? 620 : 480, t: 0, life: 0.5, col: '#ffd9b0' });
+        g.fxRings.push({ x: cx, y: cy, r: 8, vr: big ? 880 : 640, t: 0, life: 0.38, col: '#ffffff' });
+      }
+      g.shake(big ? 12 : 8);
+      g.flashT = Math.max(g.flashT, big ? 0.16 : 0.1);
+      g.flashColor = '#ffe9c8';
+      SFX.explode(!!big);
+    }
+
+    render(ctx) {
+      ctx.save();
+      ctx.globalAlpha = this.fadeT > 0 ? 1 - this.fadeT / 0.5 : 1;
+      const r = this;
+      switch (this.def.shape) {
+        case 'bktower': drawBreakTower(ctx, r); break;
+        case 'bkwreck': drawBreakWreck(ctx, r); break;
+        case 'bkcube': drawBreakCube(ctx, r); break;
+        case 'bkpeak': drawBreakPeak(ctx, r); break;
+        case 'bkmesa': drawBreakMesa(ctx, r); break;
+        case 'bkwood': drawBreakWood(ctx, r); break;
+      }
+      // 裂纹/崩口：随掉血加深（4 个阶段）；转动魔方用白闪即可，不叠固定裂纹
+      if (this.id !== 'bkCube') drawBreakDamage(ctx, r);
+      // 受击白闪（包络盒剪影，短暂）
+      if (this.flashT > 0) {
+        ctx.globalAlpha = 0.55 * Math.min(1, this.flashT / 0.12);
+        ctx.fillStyle = '#ffffff';
+        if (this.id === 'bkCube') {
+          ctx.save();
+          ctx.translate(this.x, this.ccyNow());
+          ctx.rotate(this.angle);
+          const s = this.w * 0.40;
+          ctx.fillRect(-s, -s, s * 2, s * 2);
+          ctx.restore();
+        } else {
+          ctx.fillRect(this.left, this.top, this.w, this.h);
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  /** 破碎障碍通用损伤层：裂纹折线 + 崩口暗块（随剩余血量出现） */
+  function drawBreakDamage(ctx, r) {
+    const stage = Math.floor((1 - r.hp / r.maxHp) * 4);   // 0..3
+    if (stage <= 0) return;
+    const cy = r.ccyNow();
+    ctx.save();
+    ctx.strokeStyle = 'rgba(20,18,24,0.62)';
+    ctx.fillStyle = 'rgba(20,18,24,0.5)';
+    ctx.lineWidth = 3; ctx.lineCap = 'round';
+    const seedN = r.id.length + r.style * 7;
+    for (let i = 0; i < stage * 2; i++) {
+      const f = ((i * 37 + seedN * 13) % 100) / 100;
+      const sx = r.left + r.w * (0.18 + ((i * 53 + seedN * 7) % 100) / 100 * 0.64);
+      const sy = cy - r.h * 0.42 + r.h * f * 0.84;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + ((i % 2) ? 14 : -14), sy + 16);
+      ctx.lineTo(sx + ((i % 2) ? -6 : 8), sy + 32);
+      ctx.stroke();
+      if (i < stage) {
+        ctx.beginPath();
+        ctx.moveTo(sx - 7, sy); ctx.lineTo(sx + 7, sy); ctx.lineTo(sx, sy + 10);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  /** 城堡·中世纪军事塔楼：石砌塔身 + 城垛箭楼 + 旗杆 */
+  function drawBreakTower(ctx, r) {
+    const x0 = r.left, w = r.w, h = r.h, base = r.baseY;
+    // 底部加宽基座
+    ctx.fillStyle = '#6b6252';
+    ctx.fillRect(x0 - 10, base - 30, w + 20, 30);
+    ctx.fillStyle = '#857a66';
+    ctx.fillRect(x0 - 10, base - 30, w + 20, 6);
+    // 塔身（微收分）
+    const top = base - h + 44;
+    const grad = ctx.createLinearGradient(x0, 0, x0 + w, 0);
+    grad.addColorStop(0, '#bdb196'); grad.addColorStop(0.45, '#a89a7e');
+    grad.addColorStop(1, '#7c7260');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x0 + 8, top);
+    ctx.lineTo(x0 + w - 8, top);
+    ctx.lineTo(x0 + w, base - 30);
+    ctx.lineTo(x0, base - 30);
+    ctx.closePath(); ctx.fill();
+    // 石块缝线
+    ctx.strokeStyle = 'rgba(60,52,40,0.45)'; ctx.lineWidth = 2;
+    for (let y = top + 18; y < base - 36; y += 26) {
+      ctx.beginPath(); ctx.moveTo(x0 + 4, y); ctx.lineTo(x0 + w - 4, y); ctx.stroke();
+      const off = (Math.floor((y - top) / 26) % 2) ? 14 : 0;
+      for (let x = x0 + 12 + off; x < x0 + w - 8; x += 30) {
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 26); ctx.stroke();
+      }
+    }
+    // 箭窗（狭长）
+    ctx.fillStyle = '#2e2820';
+    for (let i = 0; i < 5; i++) {
+      const wy = top + 40 + i * 58;
+      ctx.fillRect(x0 + w / 2 - 5, wy, 10, 22);
+      ctx.beginPath(); ctx.arc(x0 + w / 2, wy, 5, Math.PI, 0); ctx.fill();
+    }
+    // 底部拱门
+    ctx.fillStyle = '#241f18';
+    ctx.beginPath();
+    ctx.moveTo(x0 + w / 2 - 15, base - 30);
+    ctx.lineTo(x0 + w / 2 - 15, base - 58);
+    ctx.arc(x0 + w / 2, base - 58, 15, Math.PI, 0);
+    ctx.lineTo(x0 + w / 2 + 15, base - 30);
+    ctx.closePath(); ctx.fill();
+    // 顶部箭楼（外挑 + 城垛）
+    ctx.fillStyle = '#95886e';
+    ctx.fillRect(x0 - 8, top - 6, w + 16, 12);
+    ctx.fillStyle = '#a89a7e';
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(x0 - 8 + i * ((w + 16) / 5), top - 26, (w + 16) / 5 - 8, 22);
+    }
+    // 旗杆与旗
+    ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x0 + w / 2, top - 26); ctx.lineTo(x0 + w / 2, top - 58); ctx.stroke();
+    const wf = Math.sin(r.t * 6) * 4;
+    ctx.fillStyle = '#8e2f28';
+    ctx.beginPath();
+    ctx.moveTo(x0 + w / 2, top - 58);
+    ctx.lineTo(x0 + w / 2 + 26, top - 52 + wf);
+    ctx.lineTo(x0 + w / 2, top - 42);
+    ctx.closePath(); ctx.fill();
+  }
+
+  /** 天空·巨大建筑残骸：断裂斜倾的巨构残片，断柱/钢筋/冷光裂缝 */
+  function drawBreakWreck(ctx, r) {
+    const cy = r.ccyNow(), x0 = r.left, w = r.w, top = cy - r.h / 2;
+    ctx.save();
+    // 主体：倾斜碎裂巨板
+    const grad = ctx.createLinearGradient(x0, top, x0 + w, top + r.h);
+    grad.addColorStop(0, '#5a6478'); grad.addColorStop(0.55, '#3c4456'); grad.addColorStop(1, '#262d3d');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x0 + 18, top + r.h);
+    ctx.lineTo(x0 + 6, top + 96);
+    ctx.lineTo(x0 + 22, top + 40);
+    ctx.lineTo(x0 + 52, top + 12);
+    ctx.lineTo(x0 + 70, top + 30);
+    ctx.lineTo(x0 + w - 30, top + 6);
+    ctx.lineTo(x0 + w - 8, top + 34);
+    ctx.lineTo(x0 + w - 20, top + 84);
+    ctx.lineTo(x0 + w - 26, top + r.h);
+    ctx.closePath(); ctx.fill();
+    // 冷亮边
+    ctx.strokeStyle = 'rgba(150,190,230,0.55)'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x0 + 22, top + 40); ctx.lineTo(x0 + 52, top + 12);
+    ctx.lineTo(x0 + 70, top + 30); ctx.lineTo(x0 + w - 30, top + 6);
+    ctx.stroke();
+    // 板块分割线 / 冷光裂缝
+    ctx.strokeStyle = 'rgba(10,14,22,0.6)'; ctx.lineWidth = 2;
+    for (let i = 1; i < 6; i++) {
+      const y = top + 70 + i * (r.h - 110) / 6;
+      ctx.beginPath(); ctx.moveTo(x0 + 12, y); ctx.lineTo(x0 + w - 18, y + 10); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(127,227,255,0.75)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x0 + w * 0.32, top + 70);
+    ctx.lineTo(x0 + w * 0.44, top + 150);
+    ctx.lineTo(x0 + w * 0.36, top + 230);
+    ctx.lineTo(x0 + w * 0.52, top + 320);
+    ctx.stroke();
+    // 断柱（残鼓）
+    ctx.fillStyle = '#4c5668';
+    [[x0 - 14, top + 150], [x0 + w - 6, top + 300]].forEach(([px, py]) => {
+      ctx.fillRect(px, py, 26, 58);
+      ctx.fillStyle = 'rgba(160,180,205,0.6)';
+      ctx.beginPath(); ctx.ellipse(px + 13, py, 13, 5, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#4c5668';
+    });
+    // 顶部伸出的扭曲钢筋
+    ctx.strokeStyle = '#20262f'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    [[x0 + 30, top + 30, -16, -34], [x0 + w * 0.6, top + 14, 18, -30]].forEach(([px, py, dx, dy]) => {
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.quadraticCurveTo(px + dx * 0.4, py + dy, px + dx, py + dy - 8); ctx.stroke();
+      ctx.fillStyle = 'rgba(127,227,255,0.9)';
+      ctx.beginPath(); ctx.arc(px + dx, py + dy - 8, 3, 0, TAU); ctx.fill();
+    });
+    // 环绕碎块
+    ctx.fillStyle = '#343c4e';
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * TAU + r.bobPh;
+      const rr = r.w * 0.62 + (i % 2) * 26;
+      ctx.fillRect(r.x + Math.cos(a + r.t * 0.4) * rr - 7,
+        cy + Math.sin(a + r.t * 0.4) * rr * 1.4 - 7, 14, 14);
+    }
+    ctx.restore();
+  }
+
+  /** 仙人洞·持续转动的白色魔方：立体框面 + 青色辉光 */
+  function drawBreakCube(ctx, r) {
+    const cy = r.ccyNow(), s = r.w * 0.40;
+    ctx.save();
+    ctx.translate(r.x, cy);
+    ctx.rotate(r.angle);
+    ctx.shadowColor = 'rgba(110,220,255,0.85)';
+    ctx.shadowBlur = 34;
+    const g = ctx.createLinearGradient(-s, -s, s, s);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#eef4fa'); g.addColorStop(1, '#c3d2e0');
+    ctx.fillStyle = g;
+    ctx.fillRect(-s, -s, s * 2, s * 2);
+    ctx.shadowBlur = 0;
+    // 内层立体框面（透视立方）
+    const s2 = s * 0.58, off = s * 0.26;
+    ctx.fillStyle = 'rgba(150,200,225,0.35)';
+    ctx.fillRect(-s2 + off, -s2 - off, s2 * 2, s2 * 2);
+    ctx.strokeStyle = 'rgba(70,150,190,0.85)'; ctx.lineWidth = 3;
+    ctx.strokeRect(-s2 + off, -s2 - off, s2 * 2, s2 * 2);
+    ctx.strokeStyle = 'rgba(90,170,215,0.7)';
+    [[-s, -s], [s, -s], [-s, s], [s, s]].forEach(([a, b]) => {
+      ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(a * s2 / s + off, b * s2 / s - off); ctx.stroke();
+    });
+    // 外框
+    ctx.strokeStyle = '#7fdcff'; ctx.lineWidth = 5;
+    ctx.strokeRect(-s, -s, s * 2, s * 2);
+    // 边缘刻纹
+    ctx.strokeStyle = 'rgba(80,150,190,0.8)'; ctx.lineWidth = 2;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo(i * s * 0.34 - 8, -s); ctx.lineTo(i * s * 0.34, -s + 14); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(i * s * 0.34 - 8, s); ctx.lineTo(i * s * 0.34, s - 14); ctx.stroke();
+    }
+    // 中心符印
+    ctx.strokeStyle = 'rgba(60,140,185,0.8)'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.26, 0, TAU); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.36, 0); ctx.lineTo(s * 0.36, 0);
+    ctx.moveTo(0, -s * 0.36); ctx.lineTo(0, s * 0.36);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** 群山·巨大尖锐山峰：锯齿岩脊 + 亮面 + 残雪 */
+  function drawBreakPeak(ctx, r) {
+    const x0 = r.left, w = r.w, base = r.baseY, top = base - r.h, cx = r.x;
+    // 主体锯齿三角
+    const g = ctx.createLinearGradient(x0, 0, x0 + w, 0);
+    g.addColorStop(0, '#525c63'); g.addColorStop(0.55, '#6d7880'); g.addColorStop(1, '#464f56');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x0, base);
+    ctx.lineTo(x0 + w * 0.18, top + r.h * 0.78);
+    ctx.lineTo(x0 + w * 0.10, top + r.h * 0.58);
+    ctx.lineTo(x0 + w * 0.34, top + r.h * 0.34);
+    ctx.lineTo(x0 + w * 0.46, top + r.h * 0.16);
+    ctx.lineTo(cx, top);
+    ctx.lineTo(x0 + w * 0.62, top + r.h * 0.20);
+    ctx.lineTo(x0 + w * 0.80, top + r.h * 0.42);
+    ctx.lineTo(x0 + w * 0.88, top + r.h * 0.64);
+    ctx.lineTo(x0 + w, base);
+    ctx.closePath(); ctx.fill();
+    // 亮面切面
+    ctx.fillStyle = '#8b98a0';
+    ctx.beginPath();
+    ctx.moveTo(cx, top);
+    ctx.lineTo(x0 + w * 0.62, top + r.h * 0.20);
+    ctx.lineTo(x0 + w * 0.52, top + r.h * 0.52);
+    ctx.lineTo(x0 + w * 0.40, top + r.h * 0.46);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#aebcc2';
+    ctx.beginPath();
+    ctx.moveTo(cx, top);
+    ctx.lineTo(x0 + w * 0.46, top + r.h * 0.16);
+    ctx.lineTo(x0 + w * 0.34, top + r.h * 0.34);
+    ctx.lineTo(x0 + w * 0.44, top + r.h * 0.30);
+    ctx.closePath(); ctx.fill();
+    // 雪线
+    ctx.fillStyle = '#d8e2e8';
+    ctx.beginPath();
+    ctx.moveTo(cx, top);
+    ctx.lineTo(x0 + w * 0.40, top + r.h * 0.26);
+    ctx.lineTo(x0 + w * 0.47, top + r.h * 0.30);
+    ctx.lineTo(x0 + w * 0.54, top + r.h * 0.24);
+    ctx.lineTo(x0 + w * 0.62, top + r.h * 0.20);
+    ctx.lineTo(x0 + w * 0.55, top + r.h * 0.34);
+    ctx.lineTo(cx, top + r.h * 0.40);
+    ctx.closePath(); ctx.fill();
+    // 根部碎石裙
+    ctx.fillStyle = '#3f484e';
+    ctx.beginPath();
+    ctx.moveTo(x0 - 14, base);
+    for (let i = 0; i <= 6; i++) ctx.lineTo(x0 - 14 + i * (w + 28) / 6, base - (i % 2 ? 22 : 10));
+    ctx.lineTo(x0 + w + 14, base);
+    ctx.closePath(); ctx.fill();
+  }
+
+  /** 群山·低矮宽阔山峰：平顶山台 + 层理 + 侵蚀沟 */
+  function drawBreakMesa(ctx, r) {
+    const x0 = r.left, w = r.w, base = r.baseY, top = base - r.h, cx = r.x;
+    // 山台主体（顶部宽、底部略宽）
+    const g = ctx.createLinearGradient(0, top, 0, base);
+    g.addColorStop(0, '#8b989c'); g.addColorStop(0.5, '#68737a'); g.addColorStop(1, '#525c62');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x0 - 12, base);
+    ctx.lineTo(x0 + w * 0.16, top + 34);
+    ctx.lineTo(x0 + w * 0.12, top);
+    ctx.lineTo(x0 + w * 0.88, top);
+    ctx.lineTo(x0 + w * 0.84, top + 34);
+    ctx.lineTo(x0 + w + 12, base);
+    ctx.closePath(); ctx.fill();
+    // 顶部平台亮面
+    ctx.fillStyle = '#aab6ba';
+    ctx.fillRect(x0 + w * 0.12, top, w * 0.76, 10);
+    // 水平层理
+    ctx.strokeStyle = 'rgba(40,48,54,0.4)'; ctx.lineWidth = 3;
+    for (let i = 1; i < 8; i++) {
+      const y = top + 30 + i * (r.h - 60) / 8;
+      const t01 = (y - top) / r.h;
+      const ix = w * 0.16 * (1 - t01 * 0.5);
+      ctx.beginPath(); ctx.moveTo(x0 + ix, y); ctx.lineTo(x0 + w - ix, y + 4); ctx.stroke();
+    }
+    // 竖向侵蚀沟
+    ctx.strokeStyle = 'rgba(36,42,48,0.55)'; ctx.lineWidth = 4;
+    for (let i = 0; i < 5; i++) {
+      const gx = x0 + w * (0.24 + i * 0.13);
+      ctx.beginPath();
+      ctx.moveTo(gx, top + 26);
+      ctx.lineTo(gx + (i % 2 ? 10 : -10), top + r.h * 0.45);
+      ctx.lineTo(gx + (i % 2 ? -6 : 8), base - 20);
+      ctx.stroke();
+    }
+    // 亮侧棱
+    ctx.strokeStyle = 'rgba(190,202,206,0.5)'; ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(x0 + w * 0.12, top); ctx.lineTo(x0 + w * 0.16, top + 34); ctx.lineTo(x0 - 12, base);
+    ctx.stroke();
+    // 根部碎石裙
+    ctx.fillStyle = '#464e53';
+    ctx.beginPath();
+    ctx.moveTo(x0 - 22, base);
+    for (let i = 0; i <= 8; i++) ctx.lineTo(x0 - 22 + i * (w + 44) / 8, base - (i % 2 ? 18 : 8));
+    ctx.lineTo(x0 + w + 22, base);
+    ctx.closePath(); ctx.fill();
+  }
+
+  /** 魔窟·幽蓝荧光枯木（3 样式）：扭曲狰狞树干 + 枝爪 + 荧光纹 */
+  function drawBreakWood(ctx, r) {
+    const x0 = r.left, w = r.w, base = r.baseY, top = base - r.h, cx = r.x;
+    const s = r.style;
+    // 根部
+    ctx.fillStyle = '#0c0a1c';
+    ctx.beginPath();
+    ctx.moveTo(x0 - 6, base);
+    ctx.quadraticCurveTo(cx - 40, base - 6, cx - 26 - s * 6, base - 26);
+    ctx.quadraticCurveTo(cx, base - 40, cx + 26 + s * 6, base - 26);
+    ctx.quadraticCurveTo(cx + 40, base - 6, x0 + w + 6, base);
+    ctx.closePath(); ctx.fill();
+    // 主干（不同样式扭曲倾向）
+    const lean = [-1, 1, 0][s] * 22;
+    const g = ctx.createLinearGradient(x0, 0, x0 + w, 0);
+    g.addColorStop(0, '#241d44'); g.addColorStop(0.45, '#17122f'); g.addColorStop(1, '#0a0818');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(cx - 30, base);
+    ctx.bezierCurveTo(cx - 46 + lean, base - r.h * 0.33, cx - 14 - lean, base - r.h * 0.66, cx - 8 + lean, top + 40);
+    ctx.lineTo(cx + 6 + lean, top + 24);
+    ctx.bezierCurveTo(cx + 30 - lean, base - r.h * 0.60, cx + 52 + lean, base - r.h * 0.30, cx + 34, base);
+    ctx.closePath(); ctx.fill();
+    // 树节瘤
+    ctx.fillStyle = '#2c2350';
+    for (let i = 0; i < 5; i++) {
+      const ky = base - 80 - i * r.h * 0.16;
+      const kx = cx + Math.sin(i * 2.1 + s * 2.4) * 18 + lean * (i / 5);
+      ctx.beginPath(); ctx.ellipse(kx, ky, 13, 9, 0.3, 0, TAU); ctx.fill();
+    }
+    // 狰狞枝爪
+    ctx.strokeStyle = '#15102c'; ctx.lineCap = 'round';
+    const branch = (bx, by, len, ang, wd) => {
+      ctx.lineWidth = wd;
+      const ex = bx + Math.cos(ang) * len, ey = by + Math.sin(ang) * len;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.quadraticCurveTo(bx + Math.cos(ang - 0.4) * len * 0.6, by + Math.sin(ang - 0.4) * len * 0.6, ex, ey);
+      ctx.stroke();
+      // 末端分叉
+      ctx.lineWidth = Math.max(3, wd * 0.45);
+      ctx.beginPath(); ctx.moveTo(ex, ey);
+      ctx.lineTo(ex + Math.cos(ang - 0.5) * len * 0.3, ey + Math.sin(ang - 0.5) * len * 0.3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ex, ey);
+      ctx.lineTo(ex + Math.cos(ang + 0.4) * len * 0.26, ey + Math.sin(ang + 0.4) * len * 0.26); ctx.stroke();
+    };
+    // 三种枝形布局
+    const rows = [0.25, 0.42, 0.58, 0.72, 0.84];
+    rows.forEach((f0, i) => {
+      const by = base - r.h * f0;
+      const bx = cx + lean * (1 - f0) * 0.5;
+      const side = s === 2 ? (i % 2 ? 1 : -1) : (i % 2 ? 1 : -1);
+      const bias = s === 0 ? 0 : s === 1 ? -0.35 : 0.25;
+      const ang = side * (Math.PI * 0.18 + bias) + (s === 1 && side < 0 ? -0.25 : 0);
+      branch(bx + side * 12, by, r.w * (0.55 + (i % 3) * 0.12), ang, 13 - i);
+    });
+    // 顶端分叉（样式2双叉）
+    if (s === 2) {
+      branch(cx + lean, top + 40, r.w * 0.7, -Math.PI * 0.32, 9);
+      branch(cx + lean, top + 40, r.w * 0.7, -Math.PI * 0.68, 9);
+    } else {
+      branch(cx + lean, top + 34, r.w * 0.6, -Math.PI / 2 + lean * 0.004, 9);
+    }
+    // 荧光描边与裂纹
+    ctx.strokeStyle = 'rgba(84,224,255,0.85)'; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 14, base - 30);
+    ctx.bezierCurveTo(cx - 24 + lean, base - r.h * 0.33, cx - 8 - lean, base - r.h * 0.66, cx - 2 + lean, top + 60);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(58,156,255,0.7)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const gy = base - r.h * (0.3 + i * 0.16);
+      ctx.beginPath();
+      ctx.moveTo(cx - 6 + lean * 0.3, gy);
+      ctx.lineTo(cx + 14 - lean * 0.2, gy - 26);
+      ctx.lineTo(cx + 2, gy - 48);
+      ctx.stroke();
+    }
+    // 荧光点
+    ctx.fillStyle = '#9ff4ff';
+    for (let i = 0; i < 5; i++) {
+      const py = base - r.h * (0.2 + i * 0.17);
+      ctx.beginPath(); ctx.arc(cx + Math.sin(i * 2.7 + s) * 12 + lean * 0.4, py, 2.5, 0, TAU); ctx.fill();
+    }
+  }
 
   /** 沙漠·仙人掌：主干 + 双臂 L 形，高株顶花，矮株圆胖无臂 */
   function drawCactus(ctx, r) {
@@ -8397,7 +8979,7 @@
     }
   }
 
-  window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, GrassDragon, BoneDragonMini, DRAGON_THEMES, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, dist,
+  window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, Breakable, GrassDragon, BoneDragonMini, DRAGON_THEMES, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, dist,
     /* 击杀者归因：敌人/Boss 更新期间发射的弹丸/闪电/光束自动绑定来源 */
     setShooter(e) { curShooter = e; },
     clearShooter() { curShooter = null; }

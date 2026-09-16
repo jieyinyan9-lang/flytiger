@@ -675,16 +675,25 @@
       { id: 'jungle',    name: '丛林',       icon: '🌴', obs: ['jTrunkXL', 'jTrunkT', 'jTrunkM', 'jLeafL'], obsTop: ['jVineXL', 'jVineT', 'jVineM', 'jVineL'], gap: [1.9, 3.0] },
       // 2 海底：深蓝通透水下；纵向下行水流（每轮 2-3 次，可逆向游动对抗）
       { id: 'seabed',    name: '海底',       icon: '🐠', obs: ['sbReefXL', 'sbReefT', 'sbReefM', 'sbCoralL'], obsTop: ['sbKelpXL', 'sbKelpT', 'sbKelpM', 'sbKelpL'], gap: [2.3, 3.6], haz: { type: 'current', n: [2, 3] } },
-      // 4 城堡：夕阳金城，规整石墙塔楼/尖锥巨塔；无机关
-      { id: 'castle',    name: '城堡',       icon: '🏰', obs: ['cwXL', 'cwT', 'cwM', 'cwL'], obsTop: ['cwTopXL', 'cwTopT', 'cwTopM', 'cwTopL'], gap: [1.5, 2.5] },
+      // 4 城堡：夕阳金城，规整石墙塔楼/尖锥巨塔；破碎障碍=军事塔楼（每轮 72% 概率 1 座，20 击爆）
+      { id: 'castle',    name: '城堡',       icon: '🏰', obs: ['cwXL', 'cwT', 'cwM', 'cwL'], obsTop: ['cwTopXL', 'cwTopT', 'cwTopM', 'cwTopL'], gap: [1.5, 2.5],
+        brk: [{ id: 'bkTower', n: [1, 1], p: 0.72 }] },
       // 5 天空：阴沉雷云，浮石断柱/巨型浮岛；地面为起伏云海（cloudSea，会上升）；斜向落雷（每轮 2-3 次，途径者损失一半当前生命，可躲避）
-      { id: 'sky',       name: '天空',       icon: '🌩️', obs: ['flXL', 'flT', 'flM', 'flL'], obsTop: ['flTopXL', 'flTopT', 'flTopM', 'flTopL'], gap: [2.4, 3.8], cloudSea: true, haz: { type: 'lightning', n: [2, 3] } },
+      // 破碎障碍=巨大建筑残骸（每轮 1-2 座，漂浮屏中，20 击爆）
+      { id: 'sky',       name: '天空',       icon: '🌩️', obs: ['flXL', 'flT', 'flM', 'flL'], obsTop: ['flTopXL', 'flTopT', 'flTopM', 'flTopL'], gap: [2.4, 3.8], cloudSea: true, haz: { type: 'lightning', n: [2, 3] },
+        brk: [{ id: 'bkWreck', n: [1, 2] }] },
       // 6 仙人洞：冷灰几何洞天；移动方石沿固定路线环行（每轮 2-3 次）
-      { id: 'cave',      name: '仙人洞',     icon: '🤍', obs: ['cbXL', 'cbT', 'cbM', 'cbL'], obsTop: ['cbTopXL', 'cbTopT', 'cbTopM', 'cbTopL'], gap: [2.0, 3.1], haz: { type: 'caveblock', n: [2, 3] } },
+      // 破碎障碍=持续转动白色魔方（每轮 2-3 座，漂浮屏中，25 击爆）
+      { id: 'cave',      name: '仙人洞',     icon: '🤍', obs: ['cbXL', 'cbT', 'cbM', 'cbL'], obsTop: ['cbTopXL', 'cbTopT', 'cbTopM', 'cbTopL'], gap: [2.0, 3.1], haz: { type: 'caveblock', n: [2, 3] },
+        brk: [{ id: 'bkCube', n: [2, 3] }] },
       // 7 群山：青灰苍茫，尖峰/双峰/平顶山台/石笋/迎客松；无地平线、无地面敌人、无斧王；无机关
-      { id: 'mountains', name: '群山',       icon: '⛰️', obs: ['mtPeak', 'mtTwin', 'mtPine', 'mtMesa', 'mtSpire'], obsTop: ['mtTopPeak', 'mtTopTwin', 'mtTopMesa', 'mtTopSpire'], gap: [3.0, 4.8] },
+      // 破碎障碍：巨大尖锐山峰（每轮 75% 概率 1 座，25 击爆）+ 低矮宽阔山峰（每轮 2-3 座，20 击爆）
+      { id: 'mountains', name: '群山',       icon: '⛰️', obs: ['mtPeak', 'mtTwin', 'mtPine', 'mtMesa', 'mtSpire'], obsTop: ['mtTopPeak', 'mtTopTwin', 'mtTopMesa', 'mtTopSpire'], gap: [3.0, 4.8],
+        brk: [{ id: 'bkPeak', n: [1, 1], p: 0.75 }, { id: 'bkMesa', n: [2, 3] }] },
       // 8 魔窟：黑蓝深紫洞窟，钟乳石/石笋/妖火；无机关
-      { id: 'demoncave', name: '魔窟',       icon: '🔮', obs: ['dcXL', 'dcT', 'dcM', 'dcL'], obsTop: ['dcTopXL', 'dcTopT', 'dcTopM', 'dcTopL'], gap: [2.4, 3.7] },
+      // 破碎障碍=幽蓝荧光枯木（3 样式随机，每轮 2-3 株，30 击爆）
+      { id: 'demoncave', name: '魔窟',       icon: '🔮', obs: ['dcXL', 'dcT', 'dcM', 'dcL'], obsTop: ['dcTopXL', 'dcTopT', 'dcTopM', 'dcTopL'], gap: [2.4, 3.7],
+        brk: [{ id: 'bkWood', n: [2, 3], styles: 3 }] },
       // 9 矩阵：黑底荧光绿数据空间；移动数据墙实体(红)/虚拟交替（每轮 1-2 次，实体接触损失 80% 当前生命）
       { id: 'matrix',    name: '矩阵',       icon: '💾', obs: ['mxXL', 'mxT', 'mxM', 'mxL'], obsTop: ['mxTopXL', 'mxTopT', 'mxTopM', 'mxTopL'], gap: [1.9, 3.0], haz: { type: 'datawall', n: [1, 2] } },
       // 月痕沙海：特殊关卡（不参与随机抽取，仅可从「发现秘境」面板进入，通关后入口消失）；夜晚玫红沙漠、缺角月亮漏沙、金字塔与骸骨
