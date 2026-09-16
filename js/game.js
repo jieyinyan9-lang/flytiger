@@ -237,18 +237,7 @@
       this.syncStandbyName();
       this.buildCharGrid();
 
-      // 测试模式：URL 参数 ?boss=BossMan 强制指定 Boss 反复出现；&p3=1 斧王出场即跳阶段3（仅测试用）
-      // 也可由本地测试面板设置 window.__TEST_BOSS__ / window.__TEST_P3__
-      try {
-        const qs = new URLSearchParams(location.search);
-        const p = window.__TEST_BOSS__ || qs.get('boss');
-        if (p && (window.BOSS_LIST || []).find(e => e.cls.name === p)) this.testBoss = p;
-        else this.testBoss = null;
-        this.testP3 = !!(window.__TEST_P3__ || qs.get('p3') === '1');
-      } catch (e) { this.testBoss = null; this.testP3 = false; }
-
       this.reset();
-      this.buildLocalTestPanel();   // 仅本机/ ?test=1 显示的浮动测试面板（线上不显示）
       this.last = performance.now();
       requestAnimationFrame(t => this.loop(t));
     }
@@ -294,9 +283,6 @@
         // 月痕沙海关卡：仅可从「发现秘境」面板进入（已移除主界面按 1 快捷键）
         // 奖励页：点击任意位置或按键退回主界面（4s 后可操作）
         if (this.rewardShown && this.rewardCanClose) { this.closeReward(); e.preventDefault(); return; }
-        // 测试模式快捷键：B 立即触发 Boss 预警（跳过倒计时），便于反复测试
-        if (e.code === 'KeyB' && this.testBoss && this.state === 'playing' &&
-            !this.bossActive && this.warnT <= 0) this.bossT = 0;
         if (this.state === 'levelup' && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3')) {
           const idx = e.code === 'Digit1' ? 0 : e.code === 'Digit2' ? 1 : 2;
           if (this.pendingOptions[idx]) this.pickUpgrade(idx);
@@ -474,18 +460,6 @@
 
       // 地图：每次进入游戏随机刷新一张（阻碍特性与草地一致）
       this.rollMap();
-      // 测试模式：Boss 专属地图锁定（牛魔/鬣狗→草原、浣熊→霓虹喵都、沙行者→沙漠）+ 首个 Boss 3 秒后出现，便于反复测试
-      const testMap = { NiuMo: 'grassland', MadHyena: 'grassland', RaccoonRover: 'cyber', SandWalker: 'desert',
-        CaptainGeorge: 'ocean', FireBlind: 'volcano', PurpleHand: 'wasteland' }[this.testBoss];
-      if (testMap) {
-        this.mapChoice = testMap;
-        // 重新 rollMap 按锁定图重建场景物件（大海 sea 海平面 / 火焰山 crater 火山口）；
-        // 手工置 null 会导致这些地图专属物件在测试时消失
-        this.rollMap();
-        this.bossT = 3;
-      } else if (this.testBoss) {
-        this.bossT = 3;   // 其他测试 Boss 同样 3 秒后登场（B 键可再立即召唤）
-      }
       // 罗马角斗场：Boss 出现间隔减半（首场）
       if (this.mapId === 'colosseum') {
         this.bossT = Math.max(1, Math.round(this.bossT * CFG.map.arenaBossTimeMul));
@@ -891,7 +865,6 @@
         const c = window.CHARS && window.CHARS.get(this.charId);
         if (c) this.toast(`${c.icon} ${c.name} 参战！`, 2.6);
       }
-      if (this.testBoss) this.toast(`🧪 测试模式：强制 ${this.testBoss} 反复出场（B 键立即召唤）`, 3.2);
     }
 
     /** 从「发现秘境」面板进入月痕沙海关卡 */
@@ -916,155 +889,6 @@
       this.syncMapBtns();
       if (window.Music) Music.play('bgm-zhujiemian');
       SFX.hit();
-    }
-
-    /**
-     * 本地测试面板：仅 localhost / 127.0.0.1 / file:// 或带 ?test=1 时注入（线上 GitHub Pages 不显示）。
-     * 提供：斧王阶段3 一键开局、战斗中 P0-P5 子状态跳转、Boss/玩家回满血。
-     */
-    buildLocalTestPanel() {
-      let isLocal = false;
-      try {
-        isLocal = ['localhost', '127.0.0.1', ''].includes(location.hostname) ||
-                  new URLSearchParams(location.search).has('test');
-      } catch (e) { isLocal = false; }
-      if (!isLocal) return;
-
-      const box = document.createElement('div');
-      box.id = 'local-test-panel';
-      box.style.cssText = [
-        'position:fixed', 'left:8px', 'bottom:8px', 'z-index:99999',
-        'background:rgba(20,16,28,0.85)', 'border:1px solid #ff3bd0', 'border-radius:8px',
-        'padding:7px 9px', 'color:#ffd9f4', 'font:12px/1.45 system-ui,sans-serif',
-        'box-shadow:0 2px 14px rgba(255,59,208,.28)', 'user-select:none', 'max-width:238px'
-      ].join(';');
-
-      const btn = (label, fn, bg) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = label;
-        b.style.cssText =
-          'margin:2px;padding:3px 7px;font-size:12px;border-radius:5px;cursor:pointer;' +
-          'border:1px solid #6a5470;color:#fff;background:' + (bg || '#2c2438');
-        b.addEventListener('click', fn);
-        return b;
-      };
-      const label = txt => {
-        const d = document.createElement('div');
-        d.textContent = txt;
-        d.style.cssText = 'margin:4px 0 1px;color:#c98fbe;font-size:11px;';
-        return d;
-      };
-
-      // 标题栏 + 关闭
-      const head = document.createElement('div');
-      head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-weight:bold;';
-      const t = document.createElement('span'); t.textContent = '🧪 本地测试';
-      const x = document.createElement('span');
-      x.textContent = '×';
-      x.style.cssText = 'cursor:pointer;padding:0 4px;color:#c98fbe;';
-      x.title = '隐藏（刷新页面恢复）';
-      x.addEventListener('click', () => { box.style.display = 'none'; });
-      head.appendChild(t); head.appendChild(x);
-      box.appendChild(head);
-
-      // 开局按钮
-      box.appendChild(label('开局'));
-      const r1 = document.createElement('div');
-      r1.appendChild(btn('🪓 斧王·P3直测', () => {
-        this.testBoss = 'BossMan'; this.testP3 = true;
-        window.__TEST_BOSS__ = 'BossMan'; window.__TEST_P3__ = true;
-        this.stageMode = false;
-        this.start();
-      }, '#5a1d4d'));
-      r1.appendChild(btn('🪓 斧王·完整战', () => {
-        this.testBoss = 'BossMan'; this.testP3 = false;
-        window.__TEST_BOSS__ = 'BossMan'; window.__TEST_P3__ = false;
-        this.stageMode = false;
-        this.start();
-      }));
-      r1.appendChild(btn('🕊️ 鹤仙·双阶段', () => {
-        this.testBoss = 'CraneSage';
-        window.__TEST_BOSS__ = 'CraneSage';
-        this.stageMode = false;
-        this.start();
-      }, '#1d6f7e'));
-      box.appendChild(r1);
-
-      // 战斗中：鹤仙快速测试按钮
-      box.appendChild(label('鹤仙测试（战斗中）'));
-      const craneSage = () => this.bosses.find(b => b.constructor.name === 'CraneSage');
-      const r4 = document.createElement('div');
-      r4.appendChild(btn('立即到P2', () => {
-        const b = craneSage();
-        if (!b) { this.toast('当前场上没有鹤仙', 1.3, 'lt'); return; }
-        if (b.phase === 2) { this.toast('已在第二阶段', 1.1, 'lt'); return; }
-        b.hp = Math.floor(b.maxHp * 0.5) + 1;
-        this.toast('鹤仙血量降至50%，即将转阶段', 1.4, 'lt');
-      }, '#1d6f7e'));
-      r4.appendChild(btn('鹤仙回满', () => {
-        const b = craneSage();
-        if (b) { b.hp = b.maxHp; this.toast('鹤仙已回满血', 1.1, 'lt'); }
-      }));
-      r4.appendChild(btn('清场上弹', () => {
-        this.bullets.forEach(bu => { if (!bu.friendly) bu.neutralize(); });
-        this.toast('敌方弹幕已清除', 1.0, 'lt');
-      }));
-      box.appendChild(r4);
-
-      // 新Boss召唤测试：自动锁定对应地图并开局（B 键战斗中可再立即召唤）
-      box.appendChild(label('新Boss召唤（自动锁图开局）'));
-      const r5 = document.createElement('div');
-      r5.appendChild(btn('🦁 鬣狗', () => this.testStartBoss('MadHyena', 'grassland'), '#6b4d1f'));
-      r5.appendChild(btn('🛹 浣熊', () => this.testStartBoss('RaccoonRover', 'cyber'), '#5a1d6f'));
-      r5.appendChild(btn('🐍 沙行者', () => this.testStartBoss('SandWalker', 'desert'), '#7a5a20'));
-      r5.appendChild(btn('⚓ 船长', () => this.testStartBoss('CaptainGeorge', 'ocean'), '#1f4d7a'));
-      r5.appendChild(btn('🔥 火遮眼', () => this.testStartBoss('FireBlind', 'volcano'), '#7a2a10'));
-      r5.appendChild(btn('🃏 紫手', () => this.testStartBoss('PurpleHand', 'wasteland'), '#4a1d6f'));
-      box.appendChild(r5);
-
-      // 战斗中：P0-P5 跳转
-      box.appendChild(label('斧王阶段3跳转（战斗中）'));
-      const bossMan = () => this.bosses.find(b => b.constructor.name === 'BossMan');
-      const jump = key => {
-        const b = bossMan();
-        if (!b) { this.toast('当前场上没有斧王', 1.3, 'lt'); return; }
-        if (typeof b.__testJumpP3 !== 'function') { this.toast('旧版斧王不支持跳转', 1.3, 'lt'); return; }
-        b.__testJumpP3(this, key);
-      };
-      const phases = [
-        ['P0', 'p0'], ['P1', 'p1'], ['P2', 'p2'],
-        ['P3', 'p3'], ['P4', 'p4'], ['P5', 'p5']
-      ];
-      const r2 = document.createElement('div');
-      for (const [lab, key] of phases) r2.appendChild(btn(lab, () => jump(key)));
-      box.appendChild(r2);
-
-      // 辅助
-      box.appendChild(label('辅助'));
-      const r3 = document.createElement('div');
-      r3.appendChild(btn('Boss回满', () => {
-        const b = bossMan();
-        if (b) { b.hp = b.maxHp; this.toast('Boss 已回满血', 1.1, 'lt'); }
-      }));
-      r3.appendChild(btn('玩家回满', () => {
-        this.player.hp = this.player.maxHp;
-        this.toast('玩家已回满血', 1.1, 'lt');
-      }));
-      box.appendChild(r3);
-
-      document.body.appendChild(box);
-    }
-
-    /** 本地测试：强制指定 Boss 出场并锁定地图开局（测试面板专用） */
-    testStartBoss(name, mapId) {
-      this.testBoss = name;
-      this.testP3 = false;
-      window.__TEST_BOSS__ = name;
-      window.__TEST_P3__ = false;
-      this.mapChoice = mapId;   // rollMap 尊重具体地图选择：本局及重开均锁定该图
-      this.stageMode = false;
-      this.start();
     }
 
     gameOver() {
@@ -1780,19 +1604,6 @@
       this.roundKills = 0;
     }
     triggerBossWarn() {
-      // 测试模式：跳过全部出场规则（地图/单次/序号/概率），强制指定 Boss 反复出现
-      if (this.testBoss) {
-        const entry = (window.BOSS_LIST || []).find(e => e.cls.name === this.testBoss);
-        if (entry) {
-          this.pendingBoss = entry.cls;
-          this.pendingBossMusic = entry.music || 'boss-1';
-          this.warnT = CFG.boss.warnTime;
-          this.el.warnSub.textContent = '强大的气息逼近了！';
-          this.el.warn.classList.remove('hidden');
-          SFX.bossWarn();
-          return;
-        }
-      }
       // 所有 Boss 等权，每一轮都可能出现；本局已出场过的 Boss 后续出场权重持续减半（bossSeen），
       // 直至所有非专属 Boss 全部轮过一遍后清空记录、概率恢复正常（spawnBoss 中重置）
       // 地图专属 Boss（狮身人面像/牛魔/骨龙王）：
@@ -1867,12 +1678,8 @@
       this.el.bossName.textContent = `${b.bossName}`;
       this.el.bossHud.classList.remove('hidden');
       this.resetBossBarFx();   // 新 Boss：血条满状态，清空斩击/灼烧残留
-      // 测试模式：斧王出场即跳过第一命，直接进入阶段3（火车入场）
-      const skipP3 = this.testP3 && cls.name === 'BossMan';
-      this.toast(skipP3 ? '🧪 测试：直接进入斧王阶段3' : `${b.bossName} 出现！`, 2, 'lt');
-      if (skipP3 && typeof b.startPhase3 === 'function') {
-        b.startPhase3(this);   // startPhase3 内部自带 bossRoar / toast / shake
-      } else if (b.musicTheme === 'boss-fuwang') {
+      this.toast(`${b.bossName} 出现！`, 2, 'lt');
+      if (b.musicTheme === 'boss-fuwang') {
         SFX.bossArmy();   // 大王登场：万军齐吼"好！好！好！" + 战鼓号角
       } else {
         SFX.bossRoar();   // 登场咆哮：低频砸地 + 不和谐音簇轰鸣
@@ -2504,7 +2311,7 @@
         this.roundT += dt;
         if (this.bossT <= 0) {
           this.triggerBossWarn();   // 硬上限 Tmax：强制召唤，防空转
-        } else if (!this.testBoss) {
+        } else {
           // 双条件：刷怪段 ≥ Tmin 且本轮击杀达 K → 提前召唤（清怪越快，Boss 来得越早）
           const sch = CFG.boss.roundSchedAt(this.round);
           if (this.roundT >= sch[0] && this.roundKills >= sch[2]) this.triggerBossWarn();

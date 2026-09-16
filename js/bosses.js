@@ -2022,48 +2022,6 @@
       SFX.warn();
     }
 
-    /* ── 【本地测试】直接跳到阶段3 某子状态：key = p0..p5（p0 重走火车入场）── */
-    __testJumpP3(g, key) {
-      if (key === 'p0') { this.startPhase3(g); return; }
-      if (this.life < 2) this.life = 2;
-      this.phase = 3;
-      this.lockHp = false;
-      this.phase3Invuln = 0;
-      // 保证有阶段3 血量（直接从阶段1/2 跳来时 maxHp 还是第一条命的）
-      const fightTime = CFG.boss.fightTime(g.bossSpawned + 1);
-      this.maxHp = Math.round(CFG.boss.refDpsAt(g.bossSpawned + 1) * fightTime * g.hpSoftMul(g.bossSpawned + 1));
-      this.hp = this.maxHp;
-      this.x = CFG.W * 0.72; this.y = CFG.H * 0.32; this.baseY = this.y;
-      this.p3 = this.p3 || { actT: 0, fireT: 0, cycle: 0, dashT: 0, targetX: 0, targetY: 0 };
-      if (key === 'p1') {
-        // 已停稳、横亘下半屏的完好火车（车头 + 4 车厢，5 部件齐全）
-        this.train = this.makeP3Train();
-        this.train.x = Math.max(8, CFG.W - this.train.w - 12);
-        this.train.stopped = true; this.train.exploded = true;
-        for (let i = 0; i < 5; i++) Object.assign(this.train.parts[i], this.trainPartRect(this.train, i));
-        this.state = 'p3axe'; this.stateT = 0;
-        Object.assign(this.p3, { phase: 'p1', fireT: 0.6 });
-      } else if (key === 'p2') {
-        this.train = null;
-        this.state = 'p3elec'; this.stateT = 0;
-        Object.assign(this.p3, { phase: 'p2', actT: 0.01, fireT: 1, cycle: 0, sub: null });
-      } else if (key === 'p3') {
-        this.train = null;
-        this.state = 'p3pot'; this.stateT = 0;
-        Object.assign(this.p3, { phase: 'p3', fireT: 0.5, cycle: 0, sub: null });
-        this.phase3Invuln = this.phase3InvulnMax;   // 先展示 5s 玫红无敌 + 虚影碎裂，再投壶
-      } else if (key === 'p4') {
-        this.train = null;
-        this.state = 'p3mix'; this.stateT = 0;
-        Object.assign(this.p3, { phase: 'p4', fireT: 0.8, cycle: 0, sub: 'axe' });
-      } else if (key === 'p5') {
-        this.train = null;
-        this.state = 'p3rage'; this.stateT = 0;
-        Object.assign(this.p3, { phase: 'p5', fireT: 0.5, cycle: 0, dashT: 0, sub: 'axe', dashDone: true });
-      }
-      g.toast('🧪 跳到阶段3 · ' + key.toUpperCase(), 1.4, 'lt');
-    }
-
     /* ── 阶段3 渲染：火车 + 蜥蜴脸飞空形态 + 无敌光环 ── */
     renderP3(ctx) {
       // 火车（P0 入场及 P1 停留期间渲染）
