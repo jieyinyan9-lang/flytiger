@@ -5865,6 +5865,8 @@
     }
     get left() { return this.x - this.w / 2; }
     get top() { return this.float ? this.cy - this.h / 2 : this.baseY - this.h; }
+    /** 是否已进入屏幕（未进场前不参与任何命中，防止被屏外弹幕提前打爆） */
+    get onScreen() { return this.x - this.w / 2 < CFG.W; }
     /** 当前纵向中心（漂浮型含上下浮动） */
     ccyNow() { return this.float ? this.cy + Math.sin(this.t * 1.1 + this.bobPh) * 20 : this.baseY - this.h / 2; }
     get debris() { return this.def.debris; }
@@ -5928,8 +5930,8 @@
         else p.y = Math.max(CFG.TOP_Y, p.y - 48);
         burst(g, p.x, p.y, 12, ['#ff7b2e', '#ffd23b', '#fff'], 260, 5, 0.45, 160);
       }
-      // 小怪撞毁（地面单位 / Boss 不受影响）
-      for (const e of g.enemies) {
+      // 小怪撞毁（地面单位 / Boss 不受影响）；未进场不触发
+      if (this.onScreen) for (const e of g.enemies) {
         if (e.dead || e.groundUnit) continue;
         if (this.contains(e.x, e.y, e.radius * 0.7)) {
           burst(g, e.x, e.y, 16, this.debris.slice(0, 3).concat(e.deathColors()), 240, 5, 0.55, 220);
@@ -5938,8 +5940,8 @@
           e.die(g);
         }
       }
-      // 敌方可破坏弹（炮弹/导弹）：一发炸毁
-      for (const b of g.bullets) {
+      // 敌方可破坏弹（炮弹/导弹）：一发炸毁；未进场不触发
+      if (this.onScreen) for (const b of g.bullets) {
         if (b.friendly || b.dead || !b.rockBreak) continue;
         if (this.contains(b.x, b.y, b.r + 4)) { b.dead = true; this.destroy(g); break; }
       }

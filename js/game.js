@@ -2718,7 +2718,7 @@
       for (const b of this.bullets) {
         if (!b.friendly || b.dead) continue;
         for (const k of this.breakables) {
-          if (k.dead) continue;
+          if (k.dead || !k.onScreen) continue;   // 未进场：弹幕穿过，不计数不吞弹
           if (!k.contains(b.x, b.y, b.r)) continue;
           if (b.rockBreak) { k.destroy(this, true); break; }   // 激光串一击摧毁
           k.struck(this, b);
