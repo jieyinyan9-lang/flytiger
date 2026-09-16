@@ -31,7 +31,8 @@
     Stranger: 'stranger', FrogKing: 'frogking', CraneSage: 'cranesage',
     Sphinx: 'sphinx', NiuMo: 'niumo', BoneDragonKing: 'bonedragonking',
     MadHyena: 'madhyena', RaccoonRover: 'raccoonrover', SandWalker: 'sandwalker',
-    CaptainGeorge: 'captaingeorge', FireBlind: 'fireblind', PurpleHand: 'purplehand'
+    CaptainGeorge: 'captaingeorge', FireBlind: 'fireblind', PurpleHand: 'purplehand',
+    SeaBully: 'seabully'
   };
 
   class Boss {
@@ -6547,6 +6548,246 @@
     }
   }
 
+  /* ================ 深海恶霸（深海限定） ================
+   * 屏幕右侧缓慢上下移动，攻击前明显蓄力，动作笨重迟缓。三种攻击：
+   *  追踪水鲨：张口喷半透明蓝灰水鲨，先弧线直游、再惯性追踪玩家，气泡拖尾，本体单次伤害；
+   *  炸弹投掷：铁壳炸弹抛物线（出手锁定玩家当前位置），落地深红黑爆炸 + 3 道深色环形冲击波；
+   *  巨型铁钩：铁钩水平高速飞到屏幕中部，做唯一一次出手已定的 90° 转向，绷直铁链有伤害。
+   * 66% 血触发一次「鲨鱼围猎」高潮（7s，只用水鲨+铁钩）；30% 血基类狂暴：只提速/频率/密度。
+   * 美术：haidi-1.png（500×300，已朝左） */
+  class SeaBully extends Boss {
+    constructor(g) {
+      super(g, 0, 52);                 // 本体无接触伤害，伤害全部来自三种弹丸
+      this.bossName = '深海恶霸';
+      this.title = '海底黑帮打手';
+      this.x = CFG.W + 140;
+      this.y = 220;
+      this.baseY = 220;
+      this.homeX = CFG.seaBully.homeX;
+      this.act = 'gap';                // gap → wind（蓄力）→ 出招 → hold → gap
+      this.actT = 0.7;
+      this.pending = '';               // 蓄力对应的攻击 shark/bomb/hook
+      this.hkDir = 1;                  // 铁钩转向（蓄力末随机定死）
+      this.tilt = 0;
+      this.bubT = 0;
+      this.climaxDone = false;         // 鲨鱼围猎只触发一次
+      this.climaxT = 0;
+      this.climaxSharkT = 0;
+      this.climaxHookT = 0;
+      this.deathCols = ['#6fa8c9', '#2b6ea8', '#45c8ff', '#fff'];
+      this.xpValue = 250;
+      this.hkAnchor = { x: this.x - 78, y: this.y - 4 };   // 铁链锚点（立绘手部，同一对象逐帧更新）
+    }
+
+    get windTime() { return this.enraged ? CFG.seaBully.windEnr : CFG.seaBully.wind; }
+
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      this.hkAnchor.x = this.x - 10; this.hkAnchor.y = this.y - 6;
+      const p = g.player;
+
+      if (this.state === 'enter') {
+        this.x += (this.homeX - this.x) * Math.min(1, dt * 1.7);
+        this.baseY += (clamp(p.y, 90, CFG.GROUND_Y - 90) - this.baseY) * Math.min(1, dt * 1.2);
+        this.y = this.baseY + Math.sin(this.t * 1.1) * 10;
+        this.tilt += (0 - this.tilt) * Math.min(1, dt * 4);
+        if (Math.abs(this.x - this.homeX) < 16) { this.state = 'fight'; this.stateT = 0; }
+        this.bubbles(dt, g);
+        return;
+      }
+      if (this.state !== 'fight') return;
+
+      // 高潮触发（一次）：hp ≤ 66%
+      if (!this.climaxDone && this.hp > 0 && this.hp <= this.maxHp * CFG.seaBully.climaxHp) {
+        this.climaxDone = true;
+        this.climaxT = CFG.seaBully.climaxDur;
+        this.climaxSharkT = 0.2;
+        this.climaxHookT = 1.2;
+        g.toast('鲨鱼围猎！', 1.8, 'lt');
+        SFX.bossEnrage(); g.shake(7);
+      }
+      if (this.climaxT > 0) { this.updateClimax(dt, g); this.bubbles(dt, g); return; }
+      this.updateFight(dt, g);
+      this.bubbles(dt, g);
+    }
+
+    /** 笨重迟缓的纵向跟随 + 缓慢上下浮动（fight 全程生效） */
+    driftVertical(dt, p, rate) {
+      this.baseY += (clamp(p.y, 80, CFG.GROUND_Y - 70) - this.baseY) * Math.min(1, dt * rate);
+      this.y = this.baseY + Math.sin(this.t * 1.1) * 12;
+    }
+
+    updateFight(dt, g) {
+      const p = g.player;
+      const P = CFG.seaBully;
+      this.driftVertical(dt, p, 1.5);
+      this.actT += dt;
+      if (this.act === 'gap') {
+        this.tilt += (0 - this.tilt) * Math.min(1, dt * 5);
+        if (this.actT >= 0) {
+          // 随机选招（避免与上一招完全相同）
+          const choices = ['shark', 'bomb', 'hook'];
+          let pick = choices[Math.floor(Math.random() * 3)];
+          if (pick === this.pending) pick = choices[Math.floor(Math.random() * 3)];
+          this.pending = pick;
+          this.act = 'wind'; this.actT = 0;
+        }
+      } else if (this.act === 'wind') {
+        // 明显蓄力：身体后仰（tilt 缓慢增大，笨重感）
+        const k = clamp(this.actT / this.windTime, 0, 1);
+        this.tilt += (0.2 * k - this.tilt) * Math.min(1, dt * 6);
+        if (this.actT >= this.windTime) {
+          if (this.pending === 'shark') this.fireShark(g, p);
+          else if (this.pending === 'bomb') this.fireBomb(g, p);
+          else this.fireHook(g);
+          this.act = 'hold'; this.actT = 0;
+        }
+      } else if (this.act === 'hold') {
+        this.tilt += (0 - this.tilt) * Math.min(1, dt * 6);
+        if (this.actT > 0.16) {
+          this.act = 'gap';
+          const lo = this.enraged ? P.gapEnrMin : P.gapMin;
+          const hi = this.enraged ? P.gapEnrMax : P.gapMax;
+          this.actT = -rand(lo, hi);
+        }
+      }
+    }
+
+    /** 高潮「鲨鱼围猎」：连续水鲨（不同高度弧入）+ 铁钩（不同方向切入），不投炸弹 */
+    updateClimax(dt, g) {
+      const P = CFG.seaBully;
+      const p = g.player;
+      this.driftVertical(dt, p, 1.5);
+      this.climaxT -= dt;
+      this.tilt += (0.06 + Math.sin(this.t * 6) * 0.03 - this.tilt) * Math.min(1, dt * 6);
+      this.climaxSharkT -= dt;
+      if (this.climaxSharkT <= 0) {
+        this.climaxSharkT = P.climaxSharkGap;
+        this.fireShark(g, p, P.climaxSharkN);
+      }
+      this.climaxHookT -= dt;
+      if (this.climaxHookT <= 0) {
+        this.climaxHookT = P.climaxHookGap;
+        this.fireHook(g);
+      }
+      if (this.climaxT <= 0) {
+        this.climaxT = 0;
+        this.act = 'gap'; this.actT = -0.4;
+      }
+    }
+
+    get mouthX() { return this.x - 74; }
+    get mouthY() { return this.y - 10; }
+
+    /** 攻击1 追踪水鲨：狂暴时一次 2～3 条 */
+    fireShark(g, p, forceN) {
+      const P = CFG.seaBully;
+      const n = forceN || (this.enraged ? (Math.random() < 0.5 ? 2 : P.sharkNEnr) : 1);
+      const mx = this.mouthX, my = this.mouthY;
+      for (let i = 0; i < n; i++) {
+        const base = Math.atan2(p.y - my, p.x - mx);
+        const a = base + rand(-0.4, 0.4) + (n > 1 ? (i - (n - 1) / 2) * 0.22 : 0);
+        const sp = this.enraged ? P.sharkSpdEnr : P.sharkSpd;
+        g.bullets.push(new Bullet(mx, my, Math.cos(a) * sp, Math.sin(a) * sp, {
+          kind: 'wshark', r: P.sharkR, dmg: Math.round(P.sharkDmg * g.atkScale),
+          life: P.sharkLife, enr: this.enraged
+        }));
+      }
+      SFX.sweep(); g.shake(4);
+      burst(g, mx, my, 12, ['#6fa8c9', '#bfe4ff', '#eaf8ff'], 200, 5, 0.4);
+    }
+
+    /** 攻击2 炸弹投掷：出手瞬间锁定玩家当前位置，抛物线反解（飞行不追踪） */
+    fireBomb(g, p) {
+      const P = CFG.seaBully;
+      const mx = this.mouthX, my = this.mouthY;
+      const tx = clamp(p.x, 50, CFG.W - 60);
+      const ty = clamp(p.y, 70, CFG.GROUND_Y - 18);
+      const T = P.bombT;
+      const vx = (tx - mx) / T;
+      const vy = (ty - my) / T - 0.5 * P.bombG * T;     // 前上方用力抛出
+      g.bullets.push(new Bullet(mx, my, vx, vy, {
+        kind: 'wbomb', r: P.bombR, dmg: Math.round(P.bombDmg * g.atkScale),
+        life: 9, grav: P.bombG, enr: this.enraged, tx, ty, noTouch: true
+      }));
+      SFX.dash(); g.shake(3);
+    }
+
+    /** 攻击3 巨型铁钩：转向方向出手时随机定死（向上/向下），不看玩家位置 */
+    fireHook(g) {
+      const P = CFG.seaBully;
+      const hx = this.x - 24, hy = this.y;
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      g.bullets.push(new Bullet(hx, hy, -P.hookSpd, 0, {
+        kind: 'whook', r: P.hookW / 2, dmg: Math.round(P.hookDmg * g.atkScale),
+        life: 12, enr: this.enraged, hkDir: dir,
+        hkSpd: this.enraged ? P.hookSpdEnr : P.hookSpd,
+        hkTurnT: this.enraged ? P.hookTurnTEnr : P.hookTurnT,
+        hkAnchor: this.hkAnchor, noTouch: true
+      }));
+      SFX.dash(); g.shake(6);
+    }
+
+    bubbles(dt, g) {
+      this.bubT -= dt;
+      if (this.bubT > 0) return;
+      this.bubT = 0.16;
+      g.particles.push(new Particle(
+        this.x - 70 + rand(-16, 24), this.y + rand(-18, 22),
+        rand(-52, -8), rand(-44, -10), rand(0.4, 0.8), rand(1.8, 4.4),
+        Math.random() < 0.6 ? 'rgba(120,200,255,0.85)' : '#bfeeff'));
+    }
+
+    render(ctx) {
+      const P = CFG.seaBully;
+      // 蓄力特效（按攻击类型）
+      if (this.act === 'wind') {
+        const k = clamp(this.actT / this.windTime, 0, 1);
+        const mx = this.mouthX, my = this.mouthY;
+        if (this.pending === 'shark') {
+          // 口部蓝色水光汇聚
+          const glow = ctx.createRadialGradient(mx, my, 0, mx, my, 18 + 26 * k);
+          glow.addColorStop(0, `rgba(150,220,255,${0.55 + 0.3 * k})`);
+          glow.addColorStop(1, 'rgba(80,160,255,0)');
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(mx, my, 18 + 26 * k, 0, TAU); ctx.fill();
+        } else if (this.pending === 'bomb') {
+          // 高举的炸弹暗红光
+          const hx = this.x - 30, hy = this.y - 64;
+          const glow = ctx.createRadialGradient(hx, hy, 0, hx, hy, 16 + 20 * k);
+          glow.addColorStop(0, `rgba(255,120,50,${0.45 + 0.3 * k})`);
+          glow.addColorStop(1, 'rgba(255,80,20,0)');
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(hx, hy, 16 + 20 * k, 0, TAU); ctx.fill();
+        } else {
+          // 铁钩后甩：屏幕中部 90° 弧线预瞄（灰黑淡弧 + 箭头）
+          const cx = P.hookMidX, cy = this.y;
+          ctx.save();
+          ctx.strokeStyle = `rgba(210,218,230,${0.25 + 0.35 * k})`;
+          ctx.lineWidth = 3; ctx.setLineDash([9, 9]);
+          ctx.lineDashOffset = -this.t * 40;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 30, -Math.PI / 2, 0);           // 向下转弧
+          ctx.arc(cx, cy, 46, Math.PI, Math.PI * 1.5);   // 向上转弧
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+      // 高潮：右侧蓝光脉冲
+      if (this.climaxT > 0) {
+        const a = 0.14 + 0.08 * Math.sin(this.t * 9);
+        ctx.fillStyle = `rgba(90,180,255,${a})`;
+        ctx.beginPath(); ctx.arc(this.x, this.y, 120, 0, TAU); ctx.fill();
+      }
+      const bob = Math.sin(this.t * 3) * 4;
+      // haidi-1.png 500×300 缩放 .5 → 250×150；躯干偏左，右移 35 让碰撞中心对准身体
+      drawBossSprite(ctx, Sprites.seaBully, this.x + 35, this.y + bob, 0.5, 0.5, this.tilt, this.flash);
+    }
+  }
+  window.SeaBully = SeaBully;
+
   /* ================ 火遮眼（火焰山限定） ================
    * 固定屏幕右侧小幅上下移动；固定循环 火焰斩 → 火龙冲锋：
    *  火焰斩：举刀蓄力 → 1 道红橙色弧形火焰斩（红黄色长拖尾，斩击宽度填充半屏）；
@@ -7087,6 +7328,8 @@
     // 火遮眼：火焰山永久限定（map），火焰斩→火龙冲锋循环，狂暴3道窄斩
     { cls: FireBlind, weight: 3, map: 'volcano', music: 'boss-1' },
     // 紫手：紫色荒地永久限定（map），第4关之后（minOrd 5）；a随机攻击↔b角牌阵，狂暴6牌
-    { cls: PurpleHand, weight: 3, map: 'wasteland', minOrd: 5, music: 'boss-2' }
+    { cls: PurpleHand, weight: 3, map: 'wasteland', minOrd: 5, music: 'boss-2' },
+    // 深海恶霸：深海永久限定（map）；追踪水鲨/炸弹3环冲击波/90°转向铁钩链，66%血鲨鱼围猎高潮
+    { cls: SeaBully, weight: 3, map: 'seabed', music: 'boss-1' }
   ];
 })();

@@ -1888,6 +1888,7 @@
     captain: buildNiu('haishang-1.png', 500, 300),      // 乔治船长：鱼尾海盗船长（大海限定）
     fireBlind: buildNiu('huoyanshan-1.png', 500, 300),  // 火遮眼：熔岩冲浪火魔（火焰山限定）
     purpleHand: buildNiu('huangyuan-1.png', 500, 300),  // 紫手：九尾狐紫焰卡师（紫色荒地限定）
+    seaBully: buildNiu('haidi-1.png', 500, 300),        // 深海恶霸：墨镜金链锤头鲨打手（海底限定）
     dogHead: buildGoutou(),
     pheasant: buildHuoji(),
     superboy: buildSuperboy(),

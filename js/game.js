@@ -92,7 +92,8 @@
       sandwalker: ['巨型沙之刺钉穿了身体', '全屏沙刺弹幕扎成了筛子', '召唤的双头飞蛇缠住绞杀了'],
       captaingeorge: ['大号橙红炮弹轰成了碎渣', '弧形俯冲撞碎了全身骨头', '俯冲过后的炮火追着炸成了焦炭'],
       fireblind: ['半屏宽火焰斩拦腰烧成了两截', '火龙冲刺挥刀劈成了两半', '三道窄火焰斩交错切成了碎片'],
-      purplehand: ['紫红扇形魔弹打成了筛子', '高速狐火弹贯穿了心脏', '自转巨牌弧线扫中后削掉了脑袋', '六牌阵齐射的魔光绞成了肉末']
+      purplehand: ['紫红扇形魔弹打成了筛子', '高速狐火弹贯穿了心脏', '自转巨牌弧线扫中后削掉了脑袋', '六牌阵齐射的魔光绞成了肉末'],
+      seabully: ['追踪水鲨弧线绕后撕成了碎块', '炸弹连环冲击波震碎了全身骨头', '巨型铁钩拦腰钩成了两截', '鲨鱼围猎中被逼入死角撕成了肉末']
     }
   };
   /** Boss 死法池 key → 显示名 */
@@ -103,7 +104,8 @@
     stranger: '怪客', frogking: '蛙哥', cranesage: '鹤仙',
     sphinx: '狮身人面像', niumo: '牛魔', bonedragonking: '巨型骨龙王',
     madhyena: '癫狂鬣狗', raccoonrover: '浣熊漫游者', sandwalker: '沙之行者',
-    captaingeorge: '乔治船长', fireblind: '火遮眼', purplehand: '紫手'
+    captaingeorge: '乔治船长', fireblind: '火遮眼', purplehand: '紫手',
+    seabully: '深海恶霸'
   };
   /** 死亡演出时序（秒）：黑气涌入 2.4s → 文本逐字 → 完全显示后停留 3s（总上限 10s）→ 黑色淡出 1.6s */
   const DEATH_FX = { BLACK_IN: 2.4, HOLD_AFTER: 3, AUTO_MAX: 10, FADE_OUT: 1.6 };
@@ -2775,6 +2777,8 @@
       // 敌方子弹 vs 玩家（Boss 死亡后已失效的弹幕不造成伤害）
       for (const b of this.bullets) {
         if (b.friendly || b.dead || b.neutralized) continue;
+        // 自管伤害的弹体（深海恶霸：飞行炸弹本体无伤害、铁钩自管钩头/绷直链伤害）跳过通用圆形判定
+        if (b.noTouch) continue;
         const rr = b.r + p.radius * 0.8;
         let hit = (b.x - p.x) ** 2 + (b.y - p.y) ** 2 < rr * rr;
         // 火焰斩：圆形之外追加沿飞行方向的旋转矩形大判定盒（半屏宽弧形斩）

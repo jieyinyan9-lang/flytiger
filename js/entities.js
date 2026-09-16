@@ -252,6 +252,37 @@
       this.eb = opts.eb || '';                 // 能量弹样式：leaf/eyeball/flame/spikeball/whiteorb/diamond/cone
       this.ebTrail = opts.ebTrail || 0;        // 拖尾强度：0 无（弱）/ 1 微弱（中）/ 2 清晰（强）
       this.ebPts = null;                       // 拖尾轨迹点（{x,y}[]）
+      /* —— 深海恶霸专属弹种（wshark 追踪水鲨 / wbomb 铁壳炸弹 / whook 巨型铁钩） —— */
+      this.noTouch = !!opts.noTouch;           // 跳过通用玩家圆形碰撞（炸弹/铁钩在 update 中自管伤害）
+      this.enr = !!opts.enr;                   // 狂暴强化（速度/转向/波次）
+      if (this.kind === 'wshark') {
+        this.swim = 0;                         // 游摆计时（鱼尾摆动）
+        this.cruiseT = CFG.seaBully.sharkCruise;   // 出嘴后弧线直游倒计时，归零进入惯性追踪
+        this.turnEase = 0;                     // 追踪转向速率渐强系数（明显弧线、不瞬转）
+        this._bubT = 0;
+        this.angle = Math.atan2(vy, vx);
+      }
+      if (this.kind === 'wbomb') {
+        this.exT = -1;                         // 爆炸阶段计时（<0=飞行中）
+        this.tx = opts.tx || 0;                // 出手时锁定的落点（飞行不追踪）
+        this.ty = opts.ty || 0;
+        this.coreHit = false;                  // 爆炸中心只结算一次
+        this.ringHit = [false, false, false];  // 三道冲击波各结算一次
+        this.smokeT = 0;
+        this.spin = rand(0, TAU);
+      }
+      if (this.kind === 'whook') {
+        this.hkDir = opts.hkDir || 1;          // 唯一一次转向：1=向下 -1=向上（出手时定死）
+        this.hkSpd = opts.hkSpd || CFG.seaBully.hookSpd;
+        this.hkTurnT = opts.hkTurnT || CFG.seaBully.hookTurnT;
+        this.hkAnchor = opts.hkAnchor || { x: 0, y: 0 };   // 铁链锚点（Boss 手部，逐帧跟随）
+        this.hkPhase = 'out';                  // out→turn→fly2→retract
+        this.hkT = 0;
+        this.hkStraight = false;               // 铁链是否已完全展开绷直（绷直才有伤害）
+        this.hkAngle = Math.PI;                // 钩头朝向（初始朝左）
+        this.hkPts = null;                     // 铁链逐节坐标
+        this.hkCd = 0;                         // 铁钩本体伤害节流
+      }
       /* —— 击杀者归因：显式 opts.src 优先，否则继承发射时刻的当前敌人/Boss —— */
       this.src = opts.src || shooterSrc();
     }
@@ -711,8 +742,206 @@
           }
         }
       }
+      /* ================= 深海恶霸弹种（运动控制，统一在通用位移前算出 vx/vy） ================= */
+      if (this.kind === 'whook' && !this.neutralized) {
+        const P = CFG.seaBully;
+        this.hkCd = Math.max(0, this.hkCd - dt);
+        const ox = this.x, oy = this.y;
+        if (this.hkPhase === 'out') {
+          // 第一段：水平高速直线飞向屏幕中部
+          this.vx = -this.hkSpd; this.vy = 0; this.hkAngle = Math.PI;
+          if (this.x <= P.hookMidX) { this.hkPhase = 'turn'; this.hkT = 0; SFX.sweep(); g.shake(4); }
+        } else if (this.hkPhase === 'turn') {
+          // 唯一一次 90° 圆弧转向：减速 → 钩头向上/下猛甩；出手方向已定死，不追踪玩家
+          this.hkT += dt;
+          const k = clamp(this.hkT / this.hkTurnT, 0, 1);
+          const e = k * k * (3 - 2 * k);                       // smoothstep
+          // 向下转 π→π/2；向上转 π→3π/2（若用 -π/2 会走 270° 长路径，钩头先下探再回上）
+          const tgt = this.hkDir > 0 ? Math.PI / 2 : 3 * Math.PI / 2;
+          let a = Math.PI + (tgt - Math.PI) * e;               // 唯一一次 90° 转向
+          const f = 1 - 0.45 * Math.sin(k * Math.PI);          // 转向中减速，甩直后重新加速
+          this.vx = Math.cos(a) * this.hkSpd * f;
+          this.vy = Math.sin(a) * this.hkSpd * f;
+          this.hkAngle = a;
+          // 转向圆弧沿屏内左缘完成：钩头不漂出屏幕，保证 90° 转后的垂直横扫全程可见
+          const EDGE = 78;
+          if (this.x + this.vx * dt < EDGE) this.vx = Math.max(0, (EDGE - this.x) / dt);
+          if (Math.random() < 0.5) {                           // 甩链灰白残影
+            g.particles.push(new Particle(this.x + rand(-16, 16), this.y + rand(-16, 16),
+              rand(-80, 80), rand(-80, 80), rand(0.18, 0.34), rand(2, 4.5),
+              Math.random() < 0.5 ? 'rgba(200,210,225,0.5)' : 'rgba(120,130,150,0.55)'));
+          }
+          if (k >= 1) { this.hkPhase = 'fly2'; this.hkT = 0; this.hkStraight = false; }
+        } else if (this.hkPhase === 'fly2') {
+          // 转向后继续高速飞出；链条甩动波浪传播完、重新绷直后链条恢复伤害
+          this.hkT += dt;
+          const a = this.hkDir > 0 ? Math.PI / 2 : -Math.PI / 2;
+          this.vx = 0; this.vy = Math.sin(a) * this.hkSpd; this.hkAngle = a;
+          if (this.hkT > (this.enr ? 0.18 : 0.27)) this.hkStraight = true;
+          if (this.y < -64 || this.y > CFG.H + 64 || this.hkT > 0.62) { this.hkPhase = 'retract'; this.hkT = 0; }
+        } else if (this.hkPhase === 'retract') {
+          // 飞出屏幕后快速收回（无伤害）：直接朝锚点回缩，速度折算给通用位移
+          const dx = this.hkAnchor.x - this.x, dy = this.hkAnchor.y - this.y;
+          const dd = Math.hypot(dx, dy) || 1;
+          const mv = Math.min(dd, 1050 * dt);
+          this.vx = dx / dd * mv / dt; this.vy = dy / dd * mv / dt;
+          if (dd < 30) this.dead = true;
+        }
+        this._ox = ox; this._oy = oy;
+      }
       this.x += this.vx * dt; this.y += this.vy * dt;
-      // 飞行弹幕小怪能量弹：记录拖尾轨迹点（中强微弱/高强清晰），含 S 形弹道实际轨迹
+      /* ============== 深海恶霸弹种（位移后：水鲨追踪 / 炸弹起爆 / 铁链模拟伤害） ============== */
+      if (this.kind === 'wshark' && !this.dead && !this.neutralized) {
+        const P = CFG.seaBully;
+        this.swim += dt;
+        this.cruiseT -= dt;
+        if (this.cruiseT <= 0) {
+          // 惯性追踪：朝玩家转向但有明显角速度限制，追踪初期转向速率渐强（天然弧线）
+          const p = g.player;
+          const ta = Math.atan2(p.y - this.y, p.x - this.x);
+          let cur = Math.atan2(this.vy, this.vx);
+          let d = ta - cur;
+          while (d > Math.PI) d -= TAU;
+          while (d < -Math.PI) d += TAU;
+          this.turnEase = Math.min(1, this.turnEase + dt / 0.7);
+          const maxTurn = (this.enr ? P.sharkTurnEnr : P.sharkTurn) * (0.3 + 0.7 * this.turnEase);
+          cur += clamp(d, -maxTurn * dt, maxTurn * dt);
+          const sp = this.enr ? P.sharkSpdEnr : P.sharkSpd;
+          this.vx = Math.cos(cur) * sp; this.vy = Math.sin(cur) * sp;
+          this.angle = cur;
+        }
+        // 连续细小气泡拖尾（仅视觉，气泡无伤害）
+        this._bubT -= dt;
+        if (this._bubT <= 0) {
+          this._bubT = 0.05;
+          const spd = Math.hypot(this.vx, this.vy) || 1;
+          const bx = -this.vx / spd, by = -this.vy / spd;
+          for (let i = 0; i < 2; i++) {
+            g.particles.push(new Particle(
+              this.x + bx * 24 + rand(-4, 4), this.y + by * 20 + rand(-5, 5),
+              bx * rand(20, 60) + rand(-24, 24), by * rand(20, 60) + rand(-30, 6),
+              rand(0.3, 0.7), rand(1.4, 3.2),
+              Math.random() < 0.5 ? 'rgba(150,210,255,0.75)' : 'rgba(214,240,255,0.85)'));
+          }
+        }
+        if (this.x < -70 || this.x > CFG.W + 70 || this.y < -70 || this.y > CFG.H + 50) this.dead = true;
+      }
+      if (this.kind === 'wbomb' && !this.dead) {
+        const P = CFG.seaBully;
+        if (this.exT < 0) {
+          if (!this.neutralized) {
+            // 断续团状黑烟（非连续直线）：随机间隔、成团喷出
+            this.smokeT -= dt;
+            if (this.smokeT <= 0) {
+              this.smokeT = rand(0.07, 0.13);
+              if (Math.random() < 0.85) {
+                for (let i = 0; i < 3; i++) {
+                  g.particles.push(new Particle(this.x + rand(-8, 8), this.y - 10 + rand(-4, 4),
+                    rand(-34, 18), rand(-48, -8), rand(0.4, 0.75), rand(4, 8.5),
+                    Math.random() < 0.5 ? '#3a3a44' : '#22222a'));
+                }
+              }
+            }
+            // 到达锁定落点即爆（下降段越过 y，或水平抵达）
+            if ((this.vy > 0 && this.y >= this.ty) || (this.vx < 0 && this.x <= this.tx)) {
+              if (this.vy > 0 && this.y >= this.ty) this.y = this.ty;
+              this.exT = 0;
+              this.grav = 0;
+              this.vx = 0; this.vy = 0;
+              // 深红黑芯 + 外围橙红火焰
+              burst(g, this.x, this.y, 26, ['#1a0505', '#7a1208', '#c62f14', '#ff6a1a', '#ffb13b', '#fff3c8'], 360, 8, 0.6, 110);
+              for (let i = 0; i < 12; i++) {
+                g.particles.push(new Particle(this.x, this.y, rand(-260, 260), rand(-260, -40),
+                  rand(0.4, 0.9), rand(4, 9), Math.random() < 0.5 ? '#2a2a32' : '#4a4a54'));
+              }
+              SFX.explode(true); g.shake(11);
+            }
+          }
+        } else if (!this.neutralized) {
+          this.exT += dt;
+          const p = g.player;
+          // 爆炸中心伤害（一次）
+          if (!this.coreHit) {
+            this.coreHit = true;
+            if (Math.hypot(p.x - this.x, p.y - this.y) < P.coreR + p.radius) p.hurt(this.dmg, g, this.src);
+          }
+          // 三道深色环形冲击波：依次扩散，环带内各结算一次
+          const dur = this.enr ? P.ringDurEnr : P.ringDur;
+          for (let i = 0; i < 3; i++) {
+            const rt = this.exT - P.ringDelay[i];
+            if (rt >= 0 && !this.ringHit[i]) {
+              const kk = Math.min(1, rt / dur);
+              const ee = 1 - Math.pow(1 - kk, 3);
+              const rr = ee * P.ringMax[i];
+              if (Math.abs(Math.hypot(p.x - this.x, p.y - this.y) - rr) < P.ringBand + p.radius) {
+                this.ringHit[i] = true;
+                p.hurt(this.dmg, g, this.src);
+              }
+              if (kk >= 1) this.ringHit[i] = true;
+            }
+          }
+          if (Math.random() < 0.4) {
+            g.particles.push(new Particle(this.x + rand(-40, 40), this.y + rand(-30, 30),
+              rand(-60, 60), rand(-90, -20), rand(0.3, 0.7), rand(2.5, 6),
+              Math.random() < 0.55 ? '#ff7b2e' : '#3a3a44'));
+          }
+          if (this.exT > P.ringDelay[2] + dur + 0.16) this.dead = true;
+        }
+      }
+      if (this.kind === 'whook' && !this.dead) {
+        // 铁链逐节模拟（head 端=钩头，尾端=锚点；双向约束形成甩链波浪）
+        const P = CFG.seaBully;
+        if (!this.hkPts) {
+          const n = Math.floor(P.chainLen / P.linkGap) + 1;
+          this.hkPts = [];
+          for (let i = 0; i < n; i++) this.hkPts.push({ x: this.hkAnchor.x, y: this.hkAnchor.y });
+        }
+        const pts = this.hkPts;
+        if (!this.neutralized) {
+          pts[0].x = this.x; pts[0].y = this.y;
+          for (let i = 1; i < pts.length; i++) {
+            let dx = pts[i].x - pts[i - 1].x, dy = pts[i].y - pts[i - 1].y;
+            const d = Math.hypot(dx, dy) || 0.001;
+            if (d > P.linkGap) { pts[i].x = pts[i - 1].x + dx / d * P.linkGap; pts[i].y = pts[i - 1].y + dy / d * P.linkGap; }
+          }
+          const a = this.hkAnchor;
+          pts[pts.length - 1].x += (a.x - pts[pts.length - 1].x) * Math.min(1, dt * 12);
+          pts[pts.length - 1].y += (a.y - pts[pts.length - 1].y) * Math.min(1, dt * 12);
+          for (let i = pts.length - 2; i >= 0; i--) {
+            let dx = pts[i].x - pts[i + 1].x, dy = pts[i].y - pts[i + 1].y;
+            const d = Math.hypot(dx, dy) || 0.001;
+            if (d > P.linkGap) { pts[i].x = pts[i + 1].x + dx / d * P.linkGap; pts[i].y = pts[i + 1].y + dy / d * P.linkGap; }
+          }
+          this.x = pts[0].x; this.y = pts[0].y;
+          // 钩头朝向跟随实际位移（绷直后被链条牵引会走弧线/回收时朝锚点）
+          const mvx = this.x - this._ox, mvy = this.y - this._oy;
+          if ((this.hkPhase === 'fly2' || this.hkPhase === 'retract') && Math.hypot(mvx, mvy) > 0.3) {
+            this.hkAngle = Math.atan2(mvy, mvx);
+          }
+          // 完全展开判定：链条 6 成长度已沿横跨路线拉开后，绷直段有伤害
+          const headD = Math.hypot(this.x - a.x, this.y - a.y);
+          if (this.hkPhase === 'out' && headD >= P.chainLen * 0.6) this.hkStraight = true;
+          // 伤害：钩头全程有伤害（回收除外）；绷直链条有伤害，转向弯曲/回收无伤害
+          const p = g.player;
+          if (this.hkPhase !== 'retract' && this.hkCd <= 0 &&
+              Math.hypot(p.x - this.x, p.y - this.y) < P.hookW + p.radius * 0.7) {
+            if (p.hurt(this.dmg, g, this.src)) this.hkCd = 0.3;
+          }
+          const chainHurts = (this.hkPhase === 'out' && this.hkStraight) || (this.hkPhase === 'fly2' && this.hkStraight);
+          if (chainHurts) {
+            const cw = P.chainW * 1.5 + p.radius * 0.8;
+            for (let i = 0; i < pts.length - 1; i++) {
+              const A = pts[i], B = pts[i + 1];
+              const vx = B.x - A.x, vy = B.y - A.y;
+              const len2 = vx * vx + vy * vy || 1;
+              const t = clamp(((p.x - A.x) * vx + (p.y - A.y) * vy) / len2, 0, 1);
+              const cx = A.x + vx * t, cy = A.y + vy * t;
+              if (Math.hypot(p.x - cx, p.y - cy) < cw) { p.hurt(this.dmg, g, this.src); break; }
+            }
+          }
+        }
+      }
+
       if (this.eb && this.ebTrail > 0 && !this.neutralized) {
         if (!this.ebPts) this.ebPts = [];
         this.ebPts.push({ x: this.x, y: this.y });
@@ -783,7 +1012,8 @@
         if (this.onExpire) this.onExpire(g, this);
         this.dead = true;
       }
-      if (this.x < -80 || this.x > CFG.W + 80 || this.y < -80 || this.y > CFG.H + 80) {
+      if (this.kind !== 'wshark' && this.kind !== 'wbomb' && this.kind !== 'whook' &&
+          (this.x < -80 || this.x > CFG.W + 80 || this.y < -80 || this.y > CFG.H + 80)) {
         if (this.onExpire && (this.kind === 'fireball' || this.kind === 'lava')) this.onExpire(g, this);
         this.dead = true;
       }
@@ -1013,6 +1243,172 @@
       const k = this.kind;
       /* —— 飞行弹幕小怪能量弹（纯亮矢量弹体 + 能量光带拖尾） —— */
       if (this.eb) { this.renderEnergy(ctx); return; }
+      /* ================= 深海恶霸弹种渲染 ================= */
+      if (k === 'wshark') {
+        // 追踪水鲨：半透明蓝灰水体，头部/背鳍/胸鳍/尾鳍轮廓清晰，身体与尾巴持续摆动
+        const wag = Math.sin(this.swim * 11);
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
+        ctx.scale(0.55, 0.55);   // 体型≈角色高度 35%（身长约 38px）
+        // 尾鳍（V 形叉尾，随摆动左右甩）
+        ctx.fillStyle = 'rgba(110,150,184,0.8)';
+        ctx.strokeStyle = 'rgba(38,66,96,0.9)'; ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(-24, 0);
+        ctx.quadraticCurveTo(-36, -13 + wag * 5, -40, -19 + wag * 6);
+        ctx.quadraticCurveTo(-31, -2, -40, 17 + wag * 6);
+        ctx.quadraticCurveTo(-34, 11 + wag * 4, -24, 0);
+        ctx.fill(); ctx.stroke();
+        // 身体（纺锤形水体）
+        ctx.beginPath();
+        ctx.moveTo(30, 0);
+        ctx.quadraticCurveTo(18, -15, -10, -12);
+        ctx.quadraticCurveTo(-26, -8, -26, 0);
+        ctx.quadraticCurveTo(-26, 8, -10, 12);
+        ctx.quadraticCurveTo(18, 15, 30, 0);
+        ctx.fillStyle = 'rgba(122,158,190,0.82)'; ctx.fill(); ctx.stroke();
+        // 腹部亮色水光
+        ctx.fillStyle = 'rgba(206,232,250,0.5)';
+        ctx.beginPath();
+        ctx.moveTo(24, 2);
+        ctx.quadraticCurveTo(8, 11, -12, 9);
+        ctx.quadraticCurveTo(0, 5, 24, 2); ctx.fill();
+        // 背鳍
+        ctx.fillStyle = 'rgba(96,136,170,0.85)';
+        ctx.beginPath(); ctx.moveTo(6, -12);
+        ctx.quadraticCurveTo(2, -26 - wag * 3, -6, -12); ctx.fill(); ctx.stroke();
+        // 胸鳍（随身体摆动）
+        ctx.beginPath(); ctx.moveTo(2, 8);
+        ctx.quadraticCurveTo(-10, 18 + wag * 5, -16, 14 + wag * 6);
+        ctx.quadraticCurveTo(-6, 10, 2, 8); ctx.fill(); ctx.stroke();
+        // 鳃线 + 眼睛
+        ctx.strokeStyle = 'rgba(38,66,96,0.75)'; ctx.lineWidth = 1.3;
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath(); ctx.moveTo(12 - i * 5, -7);
+          ctx.quadraticCurveTo(10 - i * 5, 0, 13 - i * 5, 7); ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(20,36,54,0.95)';
+        ctx.beginPath(); ctx.arc(20, -4, 2.6, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.beginPath(); ctx.arc(21, -5, 1, 0, TAU); ctx.fill();
+        // 水体高光
+        ctx.strokeStyle = 'rgba(236,248,255,0.55)'; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(26, -3); ctx.quadraticCurveTo(10, -11, -8, -8); ctx.stroke();
+        ctx.restore();
+        return;
+      }
+      if (k === 'wbomb') {
+        const P = CFG.seaBully;
+        if (this.exT < 0) {
+          // 黑色圆铁壳炸弹（比角色还大）：金属铆钉 + 短引线
+          const R = 34;
+          ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.spin * 0.25);
+          const grd = ctx.createRadialGradient(-9, -11, 3, 0, 0, R + 5);
+          grd.addColorStop(0, '#5a5e6b'); grd.addColorStop(0.55, '#2c2e37'); grd.addColorStop(1, '#101117');
+          ctx.fillStyle = grd;
+          ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.fill();
+          ctx.strokeStyle = '#06070a'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();
+          ctx.fillStyle = '#767c8c';
+          for (let i = 0; i < 8; i++) {
+            const a = i * TAU / 8;
+            ctx.beginPath(); ctx.arc(Math.cos(a) * (R - 11), Math.sin(a) * (R - 11), 3.2, 0, TAU); ctx.fill();
+          }
+          // 顶部引信座
+          ctx.fillStyle = '#1a1c23';
+          ctx.fillRect(-7, -R - 4, 14, 8);
+          ctx.restore();
+          // 短引线（不随弹体旋转）+ 引线火花
+          ctx.strokeStyle = '#9a743f'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(this.x, this.y - R - 2);
+          ctx.quadraticCurveTo(this.x + 11, this.y - R - 14, this.x + 20, this.y - R - 9); ctx.stroke();
+          const fl = 1 + Math.sin(this.t * 30) * 0.35;
+          ctx.fillStyle = 'rgba(255,180,60,0.95)';
+          ctx.beginPath(); ctx.arc(this.x + 20, this.y - R - 9, 4.4 * fl, 0, TAU); ctx.fill();
+          ctx.fillStyle = 'rgba(255,240,180,0.9)';
+          ctx.beginPath(); ctx.arc(this.x + 20, this.y - R - 9, 2 * fl, 0, TAU); ctx.fill();
+        } else {
+          // 爆炸：外围橙红火球 + 深红黑芯
+          const dur = this.enr ? P.ringDurEnr : P.ringDur;
+          const tot = P.ringDelay[2] + dur + 0.16;
+          const fade = clamp(1 - Math.max(0, this.exT - (tot - 0.28)) / 0.28, 0, 1);
+          const grow = Math.min(1, this.exT / 0.18);
+          const og = 1 - Math.pow(1 - grow, 3);
+          const og2 = ctx.createRadialGradient(this.x, this.y, 2, this.x, this.y, P.coreR * 1.5 * og + 6);
+          og2.addColorStop(0, 'rgba(255,236,170,' + 0.95 * fade + ')');
+          og2.addColorStop(0.35, 'rgba(255,106,26,' + 0.85 * fade + ')');
+          og2.addColorStop(0.7, 'rgba(198,47,20,' + 0.55 * fade + ')');
+          og2.addColorStop(1, 'rgba(120,10,4,0)');
+          ctx.fillStyle = og2;
+          ctx.beginPath(); ctx.arc(this.x, this.y, P.coreR * 1.5 * og + 6, 0, TAU); ctx.fill();
+          // 深红 + 黑色中心
+          const ck = Math.max(0, 1 - this.exT / 0.5);
+          ctx.fillStyle = 'rgba(26,5,5,' + (0.5 + 0.5 * ck) * fade + ')';
+          ctx.beginPath(); ctx.arc(this.x, this.y, P.coreR * 0.62 * og + 3, 0, TAU); ctx.fill();
+          // 三道深色环形冲击波：依次向外扩大，间隔很短
+          ctx.lineCap = 'round';
+          for (let i = 0; i < 3; i++) {
+            const rt = this.exT - P.ringDelay[i];
+            if (rt < 0) continue;
+            const kk = Math.min(1, rt / dur);
+            const ee = 1 - Math.pow(1 - kk, 3);
+            const rr = ee * P.ringMax[i];
+            const a2 = (kk < 0.7 ? 1 : (1 - kk) / 0.3) * 0.92 * fade;
+            ctx.strokeStyle = 'rgba(16,7,10,' + a2 + ')';
+            ctx.lineWidth = P.ringBand * 0.9;
+            ctx.beginPath(); ctx.arc(this.x, this.y, rr, 0, TAU); ctx.stroke();
+          }
+        }
+        return;
+      }
+      if (k === 'whook') {
+        // 巨型铁钩 + 粗重铁链（链节清晰）
+        const P = CFG.seaBully;
+        const pts = this.hkPts;
+        if (pts) {
+          ctx.lineCap = 'round';
+          for (let i = pts.length - 1; i > 0; i--) {
+            const A = pts[i], B = pts[i - 1];
+            const a = Math.atan2(B.y - A.y, B.x - A.x);
+            const d = Math.hypot(B.x - A.x, B.y - A.y);
+            ctx.save();
+            ctx.translate((A.x + B.x) / 2, (A.y + B.y) / 2);
+            ctx.rotate(a + (i % 2 === 0 ? Math.PI / 2 : 0));   // 链节横竖交替
+            ctx.strokeStyle = '#0c0e13'; ctx.lineWidth = 5.2;
+            ctx.beginPath(); ctx.ellipse(0, 0, Math.min(8.2, d * 0.7), 4.4, 0, 0, TAU); ctx.stroke();
+            ctx.strokeStyle = '#6e7685'; ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.ellipse(0, -0.7, Math.min(7.6, d * 0.62), 3.3, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+            ctx.restore();
+          }
+        }
+        // 钩头：宽大厚重的黑色金属单钩，边缘灰白高光
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.hkAngle);
+        ctx.strokeStyle = '#0a0c11'; ctx.lineWidth = 12; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(16, 0); ctx.lineTo(-16, 0);                       // 钩柄
+        ctx.arc(-16, 10, 10, -Math.PI / 2, Math.PI / 2, false);     // 钩身圆弧
+        ctx.stroke();
+        ctx.strokeStyle = '#232833'; ctx.lineWidth = 8.5;
+        ctx.beginPath();
+        ctx.moveTo(14, 0); ctx.lineTo(-16, 0);
+        ctx.arc(-16, 10, 10, -Math.PI / 2, Math.PI / 2, false);
+        ctx.stroke();
+        // 钩尖
+        ctx.fillStyle = '#c9d0dc';
+        ctx.beginPath(); ctx.moveTo(-16, 20); ctx.lineTo(-12, 14); ctx.lineTo(-20, 15); ctx.fill();
+        // 灰白边缘高光
+        ctx.strokeStyle = 'rgba(196,204,218,0.85)'; ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(12, -4.4); ctx.lineTo(-16, -4.4);
+        ctx.arc(-20.4, 10, 5.6, -Math.PI / 2, -Math.PI * 0.05, false);
+        ctx.stroke();
+        // 钩柄连接处环箍
+        ctx.fillStyle = '#0c0e13';
+        ctx.fillRect(8, -6, 6, 12);
+        ctx.fillStyle = '#8b93a3';
+        ctx.fillRect(9, -5, 1.6, 10);
+        ctx.restore();
+        return;
+      }
       /* —— 角色专属弹种渲染 —— */
       if (k === 'knife' && this.friendly) {
         // 侠客飞刀：4 阶成长（小刀→匕首→宽刃→翠绿大剑），剑尖朝飞行方向
@@ -3486,7 +3882,8 @@
             this.startAutoSkill(g, e);
           } else if (!this.isMeleeing && this.invT <= 0) {
             const dmg = (e.contactDamageAt ? e.contactDamageAt(this.x, this.y) : e.contactDmg);
-            this.hurt(dmg * g.atkScale, g, e.dsrc);
+            if (dmg) this.hurt(dmg * g.atkScale, g, e.dsrc);
+            else { this.invT = Math.max(this.invT, 0.25); }   // 零接触伤害 Boss（深海恶霸）：不伤人但给短暂无敌避免反复判定
             const a = Math.atan2(this.y - e.y, this.x - e.x);
             this.x += Math.cos(a) * 22; this.y += Math.sin(a) * 22;
           }

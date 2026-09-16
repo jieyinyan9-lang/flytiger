@@ -144,6 +144,49 @@
       spinSpd: 13             // 死亡自转角速度
     },
 
+    /** 深海恶霸（海底限定）：笨重迟缓的黑帮打手，右侧缓慢移动，三攻击 + 鲨鱼围猎高潮 + 30% 狂暴 */
+    seaBully: {
+      homeX: 816,                 // 右侧悬停位
+      moveLerp: 0.55,             // 高度跟随玩家的迟缓系数（力量感、笨重）
+      bobAmp: 24,                 // 悬停上下浮动幅度
+      // —— 通用节奏 ——
+      wind: 0.62, windEnr: 0.4,   // 攻击前明显蓄力时长（狂暴缩短）
+      gapMin: 0.55, gapMax: 1.05, // 攻击间隔
+      gapEnrMin: 0.32, gapEnrMax: 0.7,
+      // —— 攻击1：追踪水鲨 ——
+      sharkDmg: 12, sharkR: 12,                 // 本体判定（视觉身长约 38px，约角色高 35%）
+      sharkSpd: 248, sharkSpdEnr: 312,
+      sharkTurn: 1.9, sharkTurnEnr: 3.1,   // 转向惯性（rad/s，越大越灵）
+      sharkCruise: 0.55,          // 出嘴后先沿弧线直游的时长，之后进入持续追踪
+      sharkLife: 6.5,
+      sharkNEnr: 3,               // 狂暴一次 2~3 条
+      // —— 攻击2：炸弹投掷 ——
+      bombDmg: 14,
+      bombR: 13,                  // 铁壳炸弹碰撞/基准半径（视觉半径 34，比角色还大）
+      bombT: 1.18,                // 抛物线飞行时长（秒，出手时锁定落点=玩家当前位置）
+      bombG: 820,
+      coreR: 62,                  // 爆炸中心伤害半径（大炸弹配大爆炸）
+      ringMax: [118, 166, 214],   // 三道冲击波最大半径
+      ringDelay: [0, 0.13, 0.26], // 三道波次释放间隔
+      ringDur: 0.34, ringDurEnr: 0.24,      // 单波扩散耗时（狂暴更快）
+      ringBand: 22,               // 冲击波伤害环带宽度
+      // —— 攻击3：巨型铁钩 ——
+      hookDmg: 16,
+      hookLen: 34, hookW: 22,     // 钩头判定（铁钩本体高度≈角色高 2/3 以上）
+      hookSpd: 600, hookSpdEnr: 742,         // 水平高速
+      hookTurnT: 0.3, hookTurnTEnr: 0.2,     // 唯一一次 90° 转向耗时（狂暴更快）
+      chainLen: 900,              // 铁链长度（横跨整个屏幕宽度）
+      linkGap: 13,                // 链节间距
+      chainW: 7,                  // 链条实际粗细（伤害判定 1.5 倍≈10.5）
+      hookMidX: 150,              // 横跨全屏飞到左侧后做唯一一次 90° 转向（转向沿屏内左缘圆弧完成）
+      // —— 高潮：鲨鱼围猎（66% 血触发一次）——
+      climaxHp: 0.66,
+      climaxDur: 7,
+      climaxSharkGap: 0.95,
+      climaxHookGap: 2.1,
+      climaxSharkN: 2
+    },
+
     /** 闪电子弹（闪电链） */
     chain: {
       range: 180,          // 链接搜索半径
