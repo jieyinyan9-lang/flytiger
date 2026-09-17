@@ -308,8 +308,10 @@
     ice:    ['#bfe9ff', '#eaf7ff', '#7fc6ef']
   };
 
-  /** 命中瞬间：受击点一小圈火花/冰屑/毒液飞散 + 敌人身上留下对应异常像素标记 */
-  function elemHitFx(ent, type, hx, hy, g) {
+  /** 命中瞬间：受击点一小圈火花/冰屑/毒液飞散 + 敌人身上留下对应异常像素标记。
+   *  mul：受击效果范围倍率（冰弹体积 ×1.2 → 冰屑飞散/冰霜覆盖同步 ×1.2） */
+  function elemHitFx(ent, type, hx, hy, g, mul) {
+    mul = mul || 1;
     if (!ent) return;
     const R = ent.radius || 20;
     const ox = clamp(hx - ent.x, -R, R), oy = clamp(hy - ent.y, -R, R);
@@ -319,15 +321,15 @@
       ent.burnMarks.push({ ox, oy, seed: rand(0, TAU), t: 0, life: 3.6 });
       if (ent.burnMarks.length > 6) ent.burnMarks.shift();
     } else if (type === 'ice') {
-      burst(g, hx, hy, 10, ELEM_HIT_COLS.ice, 150, 2.6, 0.36, 40);
+      burst(g, hx, hy, Math.round(10 * mul), ELEM_HIT_COLS.ice, 150 * mul, 2.6 * mul, 0.36, 40);
       if (!ent.frostPts) ent.frostPts = [];
       // 同一区域反复命中 → 合并到同一冰斑（逐渐加厚）
       let fp = ent.frostPts.find(p => Math.hypot(p.ox - ox, p.oy - oy) < R * 0.7 && p.melt < 0.3);
       if (!fp) {
-        fp = { ox, oy, t: 0, melt: 0, dead: false };
+        fp = { ox, oy, t: 0, melt: 0, dead: false, sm: mul };
         ent.frostPts.push(fp);
         if (ent.frostPts.length > 5) ent.frostPts.shift();
-      } else fp.t = Math.max(fp.t, 0.4);   // 续冻：保持厚度
+      } else { fp.t = Math.max(fp.t, 0.4); fp.sm = Math.max(fp.sm || 1, mul); }   // 续冻：保持厚度
     } else if (type === 'poison') {
       burst(g, hx, hy, 10, ELEM_HIT_COLS.poison, 120, 3, 0.34, 90);
       if (!ent.poisonPts) ent.poisonPts = [];
@@ -444,7 +446,7 @@
       const k = clamp(p.t / 1.2, 0, 1) * (1 - clamp(p.melt, 0, 1));
       if (k <= 0.02) return;
       const x0 = ent.x + p.ox, y0 = ent.y + p.oy;
-      const rad = 5 + k * R * 0.8;
+      const rad = (5 + k * R * 0.8) * (p.sm || 1);
       ctx.globalAlpha = 0.8 * k;
       for (let s = 0; s < 11; s++) {
         const ang = pxHash(s, 0, p.ox + p.oy) * TAU;
@@ -507,6 +509,7 @@
       this.sineWave = opts.sine || null;       // S 形弹道：{ amp, freq, phase }（飞刀线性 S 走向）
       this.fireTrail = !!opts.fireTrail;       // 火焰弹：飞行时喷射火焰粒子拖尾 + 火焰分层渲染
       this.pxFire = !!opts.pxFire;             // 像素火球（火鸡王火焰弹）：圆形三层像素火球新样式，尺寸不变
+      this.brTrail = !!opts.brTrail;           // 超猫前3阶段玫红激光块：简单蓝红粒子拖尾
       this.trailCols = opts.trailCols || null; // 自定义拖尾粒子配色（紫焰苹果等），设置后即启用拖尾
       /* —— 大型波形式弹幕（火遮眼火焰斩等）：沿速度方向的旋转矩形判定盒 —— */
       this.boxW = opts.boxW || 0;              // 判定盒沿飞行方向全长（0=退化为圆形判定）
@@ -579,7 +582,11 @@
         this.gT = 0;
         this.gemV0 = opts.gemV0 || 0;          // 飞掷前段速度（慢）
         this.gemV1 = opts.gemV1 || 0;          // 飞掷后段速度（突然加速）
-        this.foldX = opts.foldX || 0;          // 回旋折返点 x
+        this.aimOffX = opts.aimOffX || 0;      // 追踪目标相对玩家的固定偏移（每弹不同点位→弹道分离不叠加）
+        this.aimOffY = opts.aimOffY || 0;
+        this.gemSx = x; this.gemSy = y;        // 出膛点（按飞行距离触发加速/折返，Boss全屏瞬移后方向无关）
+        this.foldDir = opts.foldDir || -1;     // 回旋去程方向：-1 朝玩家所在左侧 / +1 朝右
+        this.foldDist = opts.foldDist || 0;    // 去程折返距离（飞出枪口这么远后急停掉头）
         this.pauseT = opts.pauseT || 0;        // 急停时长
         this.outA = Math.atan2(vy, vx);        // 去程方向（回旋折返按此反向）
         this.backA = 0;                        // 回程方向（折返瞬间算出）
@@ -931,8 +938,24 @@
           } else this._stainWall = null;
         }
       }
-      // 弹速强化速度线：我方弹弹尾拉出青白速度线，等级越高越长越密（纯视觉反馈）
-      if (this.friendly && this.spdTrail > 0 && !this.neutralized) {
+      // 超猫前3阶段玫红激光块：简单蓝红粒子拖尾（蓝/红交替小颗粒，向后缓散）
+      if (this.brTrail && !this.neutralized) {
+        this._brT = (this._brT || 0) + dt;
+        if (this._brT > 0.03) {
+          this._brT = 0;
+          const spd = Math.hypot(this.vx, this.vy) || 1;
+          const bx = this.vx / spd, by = this.vy / spd;
+          g.particles.push(new Particle(
+            this.x - bx * this.r * 1.4 + rand(-2, 2),
+            this.y - by * this.r * 1.4 + rand(-2, 2),
+            -bx * rand(30, 90) + rand(-16, 16),
+            -by * rand(30, 90) + rand(-16, 16),
+            rand(0.18, 0.34), rand(1.5, 2.8),
+            Math.random() < 0.5 ? '#3b8bff' : '#ff3b5c'));
+        }
+      }
+      // 弹速强化速度线：我方弹弹尾拉出青白速度线，等级越高越长越密（纯视觉反馈；超猫蓝红拖尾弹不走青白）
+      if (this.friendly && this.spdTrail > 0 && !this.neutralized && !this.brTrail) {
         this._spdT = (this._spdT || 0) + dt;
         if (this._spdT > 0.035) {
           this._spdT = 0;
@@ -1180,16 +1203,16 @@
         this.gT += dt;
         if (this.gemMode === 'throw' || this.gemMode === 'fwd') {
           if (this.gPhase === 'fly') {
-            // 前段慢：弧线飞向玩家，飞行中逐渐修正方向（throw 修正强 / fwd 修正弱）
+            // 前段慢：弧线飞向各自的瞄准点（玩家+固定偏移），飞行中逐渐修正（throw 修正强 / fwd 修正弱）
             const turn = this.gemMode === 'throw' ? P.throwTurn : P.fwdTurn;
             const sp = this.gemV0 * mul;
-            const ta = Math.atan2(g.player.y - this.y, g.player.x - this.x);
+            const ta = Math.atan2(g.player.y + this.aimOffY - this.y, g.player.x + this.aimOffX - this.x);
             let d = ta - this.outA;
             while (d > Math.PI) d -= TAU;
             while (d < -Math.PI) d += TAU;
             this.outA += clamp(d, -turn * dt, turn * dt);
             this.vx = Math.cos(this.outA) * sp; this.vy = Math.sin(this.outA) * sp;
-            if (this.x <= P.accX) this.gPhase = 'dash';   // 飞到屏幕中段各自加速
+            if (Math.hypot(this.x - this.gemSx, this.y - this.gemSy) >= P.accDist) this.gPhase = 'dash';   // 飞离枪口约屏幕中段各自加速
           } else {
             const sp = this.gemV1;                        // 加速目标为绝对值：强拍最猛
             this.vx = Math.cos(this.outA) * sp; this.vy = Math.sin(this.outA) * sp;
@@ -1202,7 +1225,7 @@
           if (this.gPhase === 'out') {
             const sp = P.retSpd * mul;
             this.vx = Math.cos(this.outA) * sp; this.vy = Math.sin(this.outA) * sp;
-            if (this.x <= this.foldX) {
+            if ((this.x - this.gemSx) * this.foldDir >= this.foldDist) {   // 朝玩家一侧飞出指定距离后折返（左右皆可）
               this.gPhase = 'pause'; this.gT = 0;
               this.pOld = { x: g.player.x, y: g.player.y };
               const C0 = GEM_COLS[this.gemCol];
@@ -2311,26 +2334,26 @@
         return;
       }
       if (k === 'lblock') {
-        // 超猫矩形激光块：青蓝发光矩形沿飞行方向；最终形态长至屏右的粗激光束
+        // 超猫矩形激光块（玫红）：玫红发光矩形沿飞行方向；最终形态长至屏右的粗激光束
         const a = this.angle !== undefined ? this.angle : Math.atan2(this.vy, this.vx);
         const pulse = 1 + Math.sin(this.t * 30) * 0.14;
         if (this.gmax && this.len > 0) {
           ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
           const L = this.len, Wd = this.r * 1.7 * pulse;
-          ctx.fillStyle = 'rgba(53,224,255,0.08)'; ctx.fillRect(-10, -Wd * 0.7, L + 20, Wd * 1.4);   // 外光晕（更细更透，多弹道叠加不糊）
-          ctx.fillStyle = 'rgba(53,224,255,0.20)'; ctx.fillRect(-6, -Wd * 0.48, L + 12, Wd * 0.96);
-          ctx.fillStyle = '#35e0ff'; ctx.fillRect(0, -Wd * 0.3, L, Wd * 0.6);
-          ctx.fillStyle = '#a5f3fc'; ctx.fillRect(0, -Wd * 0.16, L, Wd * 0.32);
+          ctx.fillStyle = 'rgba(255,46,136,0.08)'; ctx.fillRect(-10, -Wd * 0.7, L + 20, Wd * 1.4);   // 外光晕（更细更透，多弹道叠加不糊）
+          ctx.fillStyle = 'rgba(255,46,136,0.20)'; ctx.fillRect(-6, -Wd * 0.48, L + 12, Wd * 0.96);
+          ctx.fillStyle = '#ff2e88'; ctx.fillRect(0, -Wd * 0.3, L, Wd * 0.6);
+          ctx.fillStyle = '#ffa3cf'; ctx.fillRect(0, -Wd * 0.16, L, Wd * 0.32);
           ctx.fillStyle = '#fff'; ctx.fillRect(0, -Wd * 0.08, L, Wd * 0.16);                          // 中心实白芯贯通整条激光
           ctx.restore();
           return;
         }
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
         const L = (this.len || this.r * 3.2), Wd = this.r * 1.5 * pulse;
-        ctx.fillStyle = 'rgba(53,224,255,0.28)'; ctx.fillRect(-L / 2 - 3, -Wd * 0.85 - 3, L + 6, Wd * 1.7 + 6);
-        ctx.fillStyle = '#0b3a6e'; ctx.fillRect(-L / 2, -Wd * 0.6, L, Wd * 1.2);
-        ctx.fillStyle = '#35e0ff'; ctx.fillRect(-L / 2 + 1, -Wd * 0.42, L - 2, Wd * 0.84);
-        ctx.fillStyle = '#d9fbff'; ctx.fillRect(-L / 2 + 2, -Wd * 0.14, L - 4, Wd * 0.28);
+        ctx.fillStyle = 'rgba(255,46,136,0.28)'; ctx.fillRect(-L / 2 - 3, -Wd * 0.85 - 3, L + 6, Wd * 1.7 + 6);
+        ctx.fillStyle = '#7a0e3c'; ctx.fillRect(-L / 2, -Wd * 0.6, L, Wd * 1.2);
+        ctx.fillStyle = '#ff2e88'; ctx.fillRect(-L / 2 + 1, -Wd * 0.42, L - 2, Wd * 0.84);
+        ctx.fillStyle = '#ffd0e6'; ctx.fillRect(-L / 2 + 2, -Wd * 0.14, L - 4, Wd * 0.28);
         ctx.restore();
         return;
       }
@@ -3917,6 +3940,10 @@
       this.laserT = 0;                // 超猫激光剩余时间
       this.laserTarget = null;        // 激光锁定的目标敌人
       this._laserCd = new Map();      // 激光对单体伤害节流（敌人 → 下次可命中时间）
+      this.heldBeamT = 0;             // 超猫最终形态：身前持续贯穿光束剩余时间（开火时不断刷新）
+      this._heldBeamCd = new Map();   // 持续光束对单体伤害节流（敌人 → 下次可命中时间）
+      this._heldBeamDmg = 0;          // 持续光束每跳伤害（取最近一次开火的单发伤害）
+      this._heldBeamScale = 1;        // 持续光束尺寸缩放（随角色体积）
     }
 
     /** 刀刃长度倍率（剑刃延展：1/2/3 倍） */
@@ -4538,6 +4565,32 @@
         });
       }
 
+      // 超猫最终形态：身前持续挂着的玫红贯穿光束（跟随玩家上下移动，不残留飞行激光）
+      if (this.heldBeamT > 0) {
+        this.heldBeamT = Math.max(0, this.heldBeamT - dt);
+        const now = g.time;
+        const bs = this._heldBeamScale || 1;
+        const beamHalfW = 15 * bs;                       // 伤害半宽（与光束视觉粗度一致）
+        const lx = this.x + 40 * this.sizeMul, ly = this.y - 2;
+        const tickDmg = Math.max(1, Math.round(this._heldBeamDmg || this.dmg));
+        const tickInt = this.fireInt || CFG.player.fireInterval;   // 与开火同频：单体每发只吃一跳
+        g.targets().forEach(e => {
+          if (e.dead) return;
+          if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'phaseTrans')) return;
+          let px = e.x, py = e.y;
+          if (e.segments) { const ne = e.nearestExposed(lx, ly); if (!ne) return; px = ne.x; py = ne.y; }
+          if (px > lx - 10 && Math.abs(py - ly) < beamHalfW + e.radius) {
+            const nextHit = this._heldBeamCd.get(e) || 0;
+            if (now >= nextHit) {
+              this._heldBeamCd.set(e, now + tickInt);
+              if (e.segments) e.damageAt(px, py, tickDmg, g);
+              else e.takeDamage(tickDmg, g, { x: 220, y: 0 });   // 向右轻微击退
+              burst(g, px, py, 3, ['#ff2e88', '#ffa3cf', '#fff'], 130, 2.4, 0.18);
+            }
+          }
+        });
+      }
+
       // 地面/海面危险区：贴地持续受伤（走统一受伤通道：取整 + 防护罩判定）；海水掉血量很少
       this.groundTick = (this.groundTick || 0) + dt;
       if (this.y + this.radius * 0.72 >= gy - 4) {
@@ -4676,19 +4729,20 @@
         });
       }
       if (kind === 'lblock') {
-        // 超猫矩形激光块：直射；最高形态长至屏右的粗激光（不间断贯穿，直贯屏右飞出，不反弹）
-        const opts = {
+        // 超猫矩形激光块（玫红）：直射；最高形态不再发射飞行激光，而是在身前持续挂出一道贯穿至屏右的粗光束
+        if (gmax) {
+          // 最终形态：持续光束挂在角色身前，跟随上下移动、无残留（每发开火刷新存活时间）
+          this.heldBeamT = Math.max(this.heldBeamT, 0.18);
+          this._heldBeamDmg = dmg;
+          this._heldBeamScale = bscale;
+          return null;
+        }
+        return new Bullet(x, y, vx, vy, {
           kind: 'lblock', friendly: true, dmg,
           r: (5 + slv * 2) * bscale, glv, gmax,
-          bombLv: this.bombLv, spdTrail: this.spdLv
-        };
-        if (gmax) {
-          opts.len = Math.min(CFG.W - x - 24, 640);   // 一长至屏最右
-          opts.pierce = 999;                           // 不间断贯穿
-          opts.trailCols = FIN ? FIN.trail : null;
-          opts.trailLite = true;
-        }
-        return new Bullet(x, y, vx, vy, opts);
+          bombLv: this.bombLv, spdTrail: this.spdLv,
+          brTrail: true                              // 前 3 阶段：简单蓝红粒子拖尾
+        });
       }
       if (kind === 'soul') {
         // 魅影幽魂弹：飘忽前进（正弦摆动）+ 穿透；最终形态幽冥鬼王（大体型、穿透 4 体、紫色拖尾）
@@ -4722,10 +4776,11 @@
       }
       const shoot = (x, y, an, spdMul) => {
         const off = (this.kind === 'shieldSaw' || this.kind === 'knife') ? -0.16 : 0;
-        g.bullets.push(this.makeCharBullet(
+        const b = this.makeCharBullet(
           g, x, y,
           Math.cos(an + off) * speed * spdMul, Math.sin(an + off) * speed * spdMul,
-          dmg, bscale));
+          dmg, bscale);
+        if (b) g.bullets.push(b);   // 最终形态超猫无飞行弹（返回 null，改挂持续光束）
       };
       angles.forEach((an, i) => {
         const offY = (n === 2) ? (i === 0 ? -9 : 9) : (n % 2 === 0 ? (i - n / 2 + 0.5) * 8 : (i - (n - 1) / 2) * 8);
@@ -4734,19 +4789,21 @@
       // 尾部弹道：向后射击 —— 完整继承正面弹道成长（弹数/扩散/弹速/穿透/爆炸）
       if (this.tailWay) {
         angles.forEach(an => {
-          g.bullets.push(this.makeCharBullet(
+          const b = this.makeCharBullet(
             g, this.x - 44 * this.sizeMul, muzzleY,
             -Math.cos(an) * speed * 0.95, Math.sin(an) * speed * 0.95,
-            dmg, bscale));
+            dmg, bscale);
+          if (b) g.bullets.push(b);
         });
       }
       // 下部弹道：向下射击 —— 同样继承正面弹道成长（扩散方向随弹道旋转）
       if (this.downWay) {
         angles.forEach(an => {
-          g.bullets.push(this.makeCharBullet(
+          const b = this.makeCharBullet(
             g, this.x + 8 * this.sizeMul, this.y + 26 * this.sizeMul,
             Math.sin(an) * speed * 0.9, Math.cos(an) * speed * 0.9,
-            dmg, bscale));
+            dmg, bscale);
+          if (b) g.bullets.push(b);
         });
       }
       // 元素弹道：遍历 elementWay 队列，按获得顺序发射（总最多 3 条）
@@ -4954,6 +5011,26 @@
         ctx.fillRect(0, -Wd * 0.16, L, Wd * 0.32);
         ctx.fillStyle = '#fff5d0';
         ctx.fillRect(0, -Wd * 0.07, L, Wd * 0.14);
+        ctx.restore();
+      }
+
+      // 超猫最终形态：持续挂在身前的玫红贯穿光束（随上下移动即时跟随，无任何残留）
+      if (this.heldBeamT > 0) {
+        const bs = this._heldBeamScale || 1;
+        const lx = this.x + 40 * this.sizeMul, ly = this.y - 2;
+        const L = CFG.W - lx + 20;
+        const pulse = 1 + Math.sin(this.wingT * 30) * 0.14;
+        const Wd = 9 * 1.7 * bs * pulse;              // 与原最终形态激光弹粗度一致（r=9*bscale）
+        ctx.save();
+        ctx.translate(lx, ly);
+        ctx.fillStyle = 'rgba(255,46,136,0.08)'; ctx.fillRect(0, -Wd * 0.7, L, Wd * 1.4);
+        ctx.fillStyle = 'rgba(255,46,136,0.20)'; ctx.fillRect(0, -Wd * 0.48, L, Wd * 0.96);
+        ctx.fillStyle = '#ff2e88'; ctx.fillRect(0, -Wd * 0.3, L, Wd * 0.6);
+        ctx.fillStyle = '#ffa3cf'; ctx.fillRect(0, -Wd * 0.16, L, Wd * 0.32);
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, -Wd * 0.08, L, Wd * 0.16);        // 白芯贯通
+        // 枪口亮头
+        ctx.fillStyle = 'rgba(255,120,180,0.55)';
+        ctx.beginPath(); ctx.arc(0, 0, Wd * 0.55, 0, TAU); ctx.fill();
         ctx.restore();
       }
 
@@ -9703,7 +9780,7 @@
       s.flash = 0.12;
       this.hurtT = 0.12;
       // 元素弹命中节：对应元素色火花（火焰橙红/毒液墨绿/寒冰浅蓝）；无元素保留草龙绿色
-      if (element && ELEM_HIT_COLS[element]) burst(g, s.x, s.y, 8, ELEM_HIT_COLS[element], element === 'ice' ? 150 : 130, 3, 0.3, element === 'ice' ? 40 : 70);
+      if (element && ELEM_HIT_COLS[element]) burst(g, s.x, s.y, element === 'ice' ? 12 : 8, ELEM_HIT_COLS[element], element === 'ice' ? 180 : 130, element === 'ice' ? 3.1 : 3, 0.3, element === 'ice' ? 40 : 70);
       else burst(g, s.x, s.y, 3, ['#fff', '#bff5d6', '#7ed46d'], 130, 3, 0.2);
       SFX.hit();
       // 元素效果（与小怪一致：DoT / 冻结）

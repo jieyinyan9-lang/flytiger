@@ -5238,7 +5238,7 @@
       if (!s || s.dead || this.spawnInvuln > 0) return;
       if (element === 'flame') { this.dotT = 3; this.dotDps = dmg * 0.4; this.dotType = 'flame'; burst(g, s.x, s.y, 8, ['#ff7b2e', '#ff5a1a', '#ffd23b', '#c23408'], 130, 3, 0.3, 60); }
       else if (element === 'poison') { this.dotT = 6; this.dotDps = dmg * 0.25; this.dotType = 'poison'; burst(g, s.x, s.y, 8, ['#2dd44a', '#7dff6a', '#4ade80', '#0a3a0a'], 120, 3, 0.34, 90); }
-      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; this.freezeT = 0; burst(g, s.x, s.y, 10, ['#bfe9ff', '#eaf7ff', '#7fc6ef'], 150, 2.6, 0.36, 40); }
+      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; this.freezeT = 0; burst(g, s.x, s.y, 12, ['#bfe9ff', '#eaf7ff', '#7fc6ef'], 180, 3.1, 0.36, 40); }
       // 骨龙王体积庞大、免疫冰冻（不再设置 freezeT），持续冰弹也不会将其冻住卡死
 
       if (this.headAlive && i !== 0) {
@@ -7143,13 +7143,14 @@
   window.SnowWitch = SnowWitch;
 
   /* ================ 鸦伯爵（城堡限定） ================
-   * 礼帽单片镜的珠宝大盗渡鸦，悬浮屏幕右侧；玩家接近时瞬间随机连闪 3-5 个点躲玩家（CD 10s）。
+   * 礼帽单片镜的珠宝大盗渡鸦，悬浮屏幕右侧；玩家接近时全屏连闪 3-5 个远点躲玩家
+   * （落点尽量远、每点停留0.5s、旧位置留残影，CD 10s）。
    * 节奏总原则「永不停歇，只换节奏」：靠射击方式组合制造节奏。
    *  宝石三档（玩家 48px=1x）：小 0.5x≈24px 快 / 中 1.5x≈72px 中 / 大 2x≈96px 慢；本体有伤害、拖尾无伤害。
    * 攻击1 宝石飞掷（砰——唰唰——滴滴滴）：蓄力掷→连掷→单掷三拍循环——
-   *        第1拍强：蓄力0.5s 掷出 2x 大宝石慢速封路；第2拍中：一次甩出两颗 1.5x 中速；
-   *        第3拍弱：快速连抛三颗 0.5x；强拍后0.3s→中拍后0.15s→弱拍后立刻接下一轮。
-   *        每颗宝石飞到屏幕中段时各自加速（强拍加速最猛）。
+   *        第1拍强：蓄力0.5s 掷出 2x 大宝石慢速封路，大宝石飞出2s后中/小拍才启动；
+   *        第2拍中：一次甩出两颗 1.5x 分列玩家两侧；第3拍弱：快速连抛三颗 0.5x 各锁周边随机点；
+   *        每颗宝石飞离枪口约屏幕中段时各自加速（强拍加速最猛）；各弹独立瞄准点，弹道不叠加。
    * 攻击2 宝石回旋（唰——咚咚咚——咻咻）：连掷去（一次甩出5-7颗直线去程）→按发射顺序依次180°折返
    *        （微偏向玩家旧位置）→折返同时从上方抛下2颗封走位。
    * 高潮 珠宝盗窃（66% 血触发一次，射击方式对位）：组A蓄力掷 2x 大宝石依次掷出不折返（低音鼓占位）
@@ -7199,9 +7200,9 @@
       this.flash = Math.max(0, this.flash - dt);
       this.commonMove(dt);
       const p = g.player;
-      // 残影衰减
+      // 残影衰减（每点停留0.5s，残影留存略久保证肉眼可见）
       for (const a of this.afterimgs) a.age += dt;
-      this.afterimgs = this.afterimgs.filter(a => a.age < 0.4);
+      this.afterimgs = this.afterimgs.filter(a => a.age < 0.55);
 
       if (this.state === 'enter') {
         this.x += (this.homeX - this.x) * Math.min(1, dt * 2.2);
@@ -7237,21 +7238,21 @@
       this.y = this.baseY + Math.sin(this.t * 2.2) * CFG.crowCount.bobAmp;
     }
 
-    /** 瞬移系统：玩家接近 → 瞬间连闪 3-5 个点躲玩家；CD 10s */
+    /** 瞬移系统：玩家接近 → 全屏连闪 3-5 个远点躲玩家（每点停留0.5s，CD 10s） */
     updateTeleport(dt, g) {
-      const P = CFG.crowCount, p = g.player;
+      const P = CFG.crowCount;
       if (this.tpLeft > 0) {
         this.tpT -= dt;
         if (this.tpT <= 0) {
           this.tpT = P.tpBlinkGap;
           this.tpLeft--;
-          this.doBlink(g, P.tpXMin, P.tpXMax, true);      // 躲玩家：纵向+横向随机点
+          this.doBlink(g, true);                        // 躲玩家：全屏远点（纵+横随机）
           if (this.tpLeft <= 0) this.tpCd = P.tpCd;
         }
         return;
       }
       this.tpCd -= dt;
-      if (this.tpCd <= 0 && Math.hypot(p.x - this.x, p.y - this.y) < P.tpDist) {
+      if (this.tpCd <= 0 && Math.hypot(g.player.x - this.x, g.player.y - this.y) < P.tpDist) {
         this.tpLeft = randi(P.tpPointsMin, P.tpPointsMax);   // 连闪 3-5 个点
         this.tpT = 0;
       }
@@ -7285,7 +7286,7 @@
       this.tpCx -= dt;
       if (this.tpCx <= 0) {
         this.tpCx = P.tpClimaxGap;
-        this.doBlink(g, P.tpXMin, P.tpXMax, false);       // 横向瞬移：y 小幅变化
+        this.doBlink(g, false);                      // 横向瞬移：y 小幅变化
       }
       if (this.climaxT <= 0) {
         this.climaxT = 0;
@@ -7296,7 +7297,9 @@
 
     updateFight(dt, g) {
       const P = CFG.crowCount, p = g.player;
-      this.driftVertical(dt, p, 2.0);
+      // 连闪停留期间锁定纵向（落点就是落点，不滑向玩家）；平时轻盈悬浮跟随
+      if (this.tpLeft > 0) this.y = this.baseY + Math.sin(this.t * 2.2) * P.bobAmp;
+      else this.driftVertical(dt, p, 2.0);
       this.actT += dt;
       if (this.act === 'gap') {
         if (this.actT >= 0) {
@@ -7367,32 +7370,39 @@
       }
     }
 
-    /** 攻击1·第1拍（强）蓄力掷：2x 大宝石慢速封路，中段加速最猛 */
+    /** 枪口：始终在朝向玩家的一侧（全屏瞬移到玩家左侧时也能正手发射） */
+    muzzle(p) {
+      return { mx: this.x + (p.x < this.x ? -46 : 46), my: this.y - 8 };
+    }
+
+    /** 攻击1·第1拍（强）蓄力掷：2x 大宝石慢速封路，瞄准点贴玩家，飞2s后中/小拍才启动 */
     fireBeatBig(g, p) {
       const P = CFG.crowCount;
-      const mx = this.x - 46, my = this.y - 8;
-      const base = Math.atan2(p.y - my, p.x - mx);
-      const a = base + rand(-0.12, 0.12);
+      const { mx, my } = this.muzzle(p);
+      const oa = rand(0, TAU), off = rand(0, P.aimBig);
+      const ox = Math.cos(oa) * off, oy = Math.sin(oa) * off;
+      const a = Math.atan2(p.y + oy - my, p.x + ox - mx);
       g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
         kind: 'gem', r: P.gemR[2], dmg: Math.round(P.gemDmg * g.atkScale),
-        life: 8, gemTier: 2, gemMode: 'throw',
+        life: 8, gemTier: 2, gemMode: 'throw', aimOffX: ox, aimOffY: oy,
         gemV0: P.throwV0, gemV1: P.accV[0], spinRate: 2.4, enr: this.enraged
       }));
       burst(g, mx, my, 8, ['#35e0ff', '#fff', '#ffd23b'], 170, 4, 0.3);
       SFX.dash();
     }
 
-    /** 攻击1·第2拍（中）连掷：一次甩出两颗 1.5x（狂暴+1），中速 */
+    /** 攻击1·第2拍（中）连掷：一次甩出两颗 1.5x（狂暴+1），分列玩家两侧两条独立弹道 */
     fireDblGem(g, p) {
       const P = CFG.crowCount;
       const n = P.dblN + (this.enraged ? 1 : 0);
-      const mx = this.x - 46, my = this.y - 8;
-      const base = Math.atan2(p.y - my, p.x - mx);
+      const { mx, my } = this.muzzle(p);
       for (let i = 0; i < n; i++) {
-        const a = base + (i - (n - 1) / 2) * 0.09;
+        const ox = (i - (n - 1) / 2) * (n === 2 ? 2 * P.aimDbl : P.aimDbl);
+        const oy = rand(-42, 42);
+        const a = Math.atan2(p.y + oy - my, p.x + ox - mx);
         g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
           kind: 'gem', r: P.gemR[1], dmg: Math.round(P.gemDmg * g.atkScale),
-          life: 8, gemTier: 1, gemMode: 'throw',
+          life: 8, gemTier: 1, gemMode: 'throw', aimOffX: ox, aimOffY: oy,
           gemV0: P.throwV0, gemV1: P.accV[1], spinRate: 2.4, enr: this.enraged
         }));
       }
@@ -7400,37 +7410,41 @@
       SFX.dash();
     }
 
-    /** 攻击1·第3拍（弱）单掷：快速连抛 0.5x 小宝石（本方法每颗调用一次） */
+    /** 攻击1·第3拍（弱）单掷：快速连抛 0.5x 小宝石（本方法每颗调用一次），各锁玩家周边一个随机点 */
     fireRapGem(g, p) {
       const P = CFG.crowCount;
-      const mx = this.x - 46, my = this.y - 8;
-      const base = Math.atan2(p.y - my, p.x - mx);
-      const a = base + rand(-0.08, 0.08);
+      const { mx, my } = this.muzzle(p);
+      const oa = rand(0, TAU), off = P.aimRap * rand(0.55, 1);
+      const ox = Math.cos(oa) * off, oy = Math.sin(oa) * off;
+      const a = Math.atan2(p.y + oy - my, p.x + ox - mx);
       g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
         kind: 'gem', r: P.gemR[0], dmg: Math.round(P.gemDmg * g.atkScale),
-        life: 8, gemTier: 0, gemMode: 'throw',
+        life: 8, gemTier: 0, gemMode: 'throw', aimOffX: ox, aimOffY: oy,
         gemV0: P.throwV0, gemV1: P.accV[2], spinRate: 2.4, enr: this.enraged
       }));
       if (this.tSmall === 0) SFX.sweep();       // 滴滴滴一串只配一声
     }
 
-    /** 攻击2·第一段连掷去：一次甩出 5~7 颗（狂暴+1）直线去程扇形；折返点随序号递增＝按发射顺序依次折返 */
+    /** 攻击2·第一段连掷去：朝玩家所在方向扇形甩出 5~7 颗（狂暴+1）；折返距离随序号递增＝依次折返 */
     fireRetFan(g, p) {
       const P = CFG.crowCount;
       const n = randi(P.retNMin, P.retNMax) + (this.enraged ? 1 : 0);
-      const mx = this.x - 46, my = this.y - 8;
+      const { mx, my } = this.muzzle(p);
+      const dir = p.x < this.x ? -1 : 1;                // 玩家在哪边就朝哪边放（全屏瞬移不空手）
+      const ca = dir < 0 ? Math.PI : 0;
       let hasBig = false;
       for (let i = 0; i < n; i++) {
         const roll = Math.random();
         let tier = roll < 0.62 ? 0 : (roll < 0.82 ? 1 : 2);   // 0.5x 为主穿插 1.5x/2x
         if (i === n - 1 && !hasBig) tier = 2;                  // 保底一颗大宝石封路
         if (tier === 2) hasBig = true;
-        const foldX = P.retFoldXMin + (n > 1 ? i * (P.retFoldXMax - P.retFoldXMin) / (n - 1) : 0) + rand(-14, 14);
-        const a = Math.PI + (n > 1 ? (i / (n - 1) - 0.5) * 2 * P.retAmp : 0) + rand(-0.03, 0.03);
+        const foldDist = P.retFoldMin + (n > 1 ? i * (P.retFoldMax - P.retFoldMin) / (n - 1) : 0) + rand(-12, 12);
+        const a = ca + (n > 1 ? (i / (n - 1) - 0.5) * 2 * P.retAmp : 0) + rand(-0.03, 0.03);
         g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
           kind: 'gem', r: P.gemR[tier], dmg: Math.round(P.gemDmg * g.atkScale),
           life: 9, gemTier: tier, gemMode: 'ret',
-          foldX, pauseT: P.retPause[tier] * (this.enraged ? P.retPauseEnrMul : 1),
+          foldDir: dir, foldDist,
+          pauseT: P.retPause[tier] * (this.enraged ? P.retPauseEnrMul : 1),
           spinRate: 2.4, enr: this.enraged
         }));
       }
@@ -7440,7 +7454,7 @@
     /** 攻击2·第三段抛掷：从上方抛下宝石封走位（狂暴落点更刁钻+预判提前量） */
     fireLobGem(g, p, i) {
       const P = CFG.crowCount;
-      const mx = this.x - 46, my = this.y - 8;
+      const { mx, my } = this.muzzle(p);
       const off = this.enraged ? P.lobOffEnr : P.lobOff;
       const lead = this.enraged ? p.vx * 0.35 : 0;            // 狂暴：预判走位
       const tx = clamp(p.x + lead + rand(-off, off), 40, CFG.W - 40);
@@ -7456,52 +7470,70 @@
       SFX.sweep();
     }
 
-    /** 高潮组A·蓄力掷：2x 大宝石不折返（低音鼓），慢-慢-慢，中段加速最猛 */
+    /** 高潮组A·蓄力掷：2x 大宝石不折返（低音鼓），慢-慢-慢，各瞄玩家周边错开标线 */
     fireFwdGem(g, p) {
       const P = CFG.crowCount;
-      const mx = this.x - 46, my = this.y - 8;
-      const a = Math.atan2(p.y - my, p.x - mx) + rand(-0.1, 0.1);
+      const { mx, my } = this.muzzle(p);
+      const oa = rand(0, TAU), off = rand(0, 48);
+      const ox = Math.cos(oa) * off, oy = Math.sin(oa) * off;
+      const a = Math.atan2(p.y + oy - my, p.x + ox - mx);
       g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
         kind: 'gem', r: P.gemR[2], dmg: Math.round(P.gemDmg * g.atkScale),
-        life: 8, gemTier: 2, gemMode: 'fwd',
+        life: 8, gemTier: 2, gemMode: 'fwd', aimOffX: ox, aimOffY: oy,
         gemV0: P.throwV0, gemV1: P.accV[0], spinRate: 2.4, enr: this.enraged
       }));
       SFX.dash();
     }
 
-    /** 高潮组B·连掷：0.5x 小宝石快速连掷，提前折返骚扰（高音镲） */
+    /** 高潮组B·连掷：0.5x 小宝石快速连掷，刚放出即折返骚扰（高音镲，朝玩家一侧放出） */
     fireClRetGem(g, p) {
       const P = CFG.crowCount;
-      const mx = this.x - 46, my = this.y - 8;
-      const a = Math.PI + rand(-0.1, 0.1);
+      const { mx, my } = this.muzzle(p);
+      const dir = p.x < this.x ? -1 : 1;
+      const ca = dir < 0 ? Math.PI : 0;
+      const a = ca + rand(-0.1, 0.1);
       g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
         kind: 'gem', r: P.gemR[0], dmg: Math.round(P.gemDmg * g.atkScale),
         life: 9, gemTier: 0, gemMode: 'ret',
-        foldX: rand(P.clFoldXMin, P.clFoldXMax),
+        foldDir: dir, foldDist: rand(P.clFoldMin, P.clFoldMax),
         pauseT: P.retPause[0] * (this.enraged ? P.retPauseEnrMul : 1),
         spinRate: 2.4, enr: this.enraged
       }));
     }
 
-    /** 瞬移：旧位置留残影 + 羽尘爆发，随机落点后新位置再爆发（横向=高潮连续瞬移） */
-    doBlink(g, xMin, xMax, vertical) {
+    /** 瞬移：旧位置留残影 + 羽尘爆发；全屏范围挑远点（离当前点尽量远、离玩家保持距离），落点再爆发 */
+    doBlink(g, vertical) {
       const P = CFG.crowCount;
       this.afterimgs.push({ x: this.x, y: this.y, age: 0 });
       if (this.afterimgs.length > 6) this.afterimgs.shift();
       burst(g, this.x, this.y, 10, ['#3a2f52', '#6a5a9a', '#c9b8ff', '#fff'], 220, 5, 0.35);
-      this.x = rand(xMin, xMax);
-      if (vertical) this.baseY = rand(P.tpYTop, CFG.GROUND_Y - P.tpYBot);
-      else this.baseY = clamp(this.baseY + rand(-46, 46), 80, CFG.GROUND_Y - 90);
-      this.y = this.baseY;
+      // 多抽几次：先找同时满足「距当前点≥tpMinJump、距玩家≥tpMinPlayer」的点；找不到取综合最远
+      let bx = this.x, by = this.baseY, best = -1e9, ok = false;
+      for (let k = 0; k < 8 && !ok; k++) {
+        const cx = rand(P.tpXMin, P.tpXMax);
+        const cy = vertical
+          ? rand(P.tpYTop, CFG.GROUND_Y - P.tpYBot)
+          : clamp(this.baseY + rand(-46, 46), 80, CFG.GROUND_Y - 90);
+        const dj = Math.hypot(cx - this.x, cy - this.y);
+        const dp = Math.hypot(cx - g.player.x, cy - g.player.y);
+        if (dj >= P.tpMinJump && dp >= P.tpMinPlayer) { bx = cx; by = cy; ok = true; }
+        else {
+          const score = dj + Math.min(dp, P.tpMinPlayer) * 0.5;
+          if (score > best) { best = score; bx = cx; by = cy; }
+        }
+      }
+      this.x = bx;
+      this.baseY = by;
+      this.y = by;
       burst(g, this.x, this.y, 10, ['#6a5a9a', '#c9b8ff', '#fff', '#ffd23b'], 220, 5, 0.35);
       SFX.dash();
     }
 
     render(ctx) {
       const P = CFG.crowCount;
-      // 瞬移残影：快速淡出的紫黑轮廓
+      // 瞬移残影：停留0.5s期间旧位置残影保持可见，随后快速淡出
       for (const a of this.afterimgs) {
-        ctx.globalAlpha = 0.26 * Math.max(0, 1 - a.age / 0.4);
+        ctx.globalAlpha = 0.34 * Math.max(0, 1 - a.age / 0.55);
         drawSprite(ctx, Sprites.crowCount, a.x, a.y, 0.5, 0.5, 0, 0);
       }
       ctx.globalAlpha = 1;
