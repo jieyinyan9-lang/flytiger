@@ -5236,9 +5236,9 @@
       if (this.dead) return;
       const s = this.segments[i];
       if (!s || s.dead || this.spawnInvuln > 0) return;
-      if (element === 'flame') { this.dotT = 3; this.dotDps = dmg * 0.4; this.dotType = 'flame'; burst(g, s.x, s.y, 8, ['#ff7b2e', '#ff5a1a', '#ffd23b', '#c23408'], 130, 3, 0.3, 60); }
+      if (element === 'flame') { this.dotT = 3; this.dotDps = dmg * 0.4; this.dotType = 'flame'; burst(g, s.x, s.y, 26, ['#ff7b2e', '#ff5a1a', '#ffd23b', '#c23408'], 260, 6.5, 0.34, 85); burst(g, s.x, s.y, 10, ['#fff3a8', '#ffe94d', '#ffd23b'], 180, 4, 0.24, 50); }
       else if (element === 'poison') { this.dotT = 6; this.dotDps = dmg * 0.25; this.dotType = 'poison'; burst(g, s.x, s.y, 8, ['#2dd44a', '#7dff6a', '#4ade80', '#0a3a0a'], 120, 3, 0.34, 90); }
-      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; this.freezeT = 0; burst(g, s.x, s.y, 12, ['#bfe9ff', '#eaf7ff', '#7fc6ef'], 180, 3.1, 0.36, 40); }
+      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; this.freezeT = 0; burst(g, s.x, s.y, 36, ['#bfe9ff', '#eaf7ff', '#7fc6ef'], 540, 9.4, 0.36, 40); }
       // 骨龙王体积庞大、免疫冰冻（不再设置 freezeT），持续冰弹也不会将其冻住卡死
 
       if (this.headAlive && i !== 0) {

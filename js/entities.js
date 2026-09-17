@@ -199,40 +199,69 @@
     return x - Math.floor(x);
   }
 
-  /** 圆形像素火球：2×2 亮黄芯 → 橙红圈 → 暗红锯齿外圈 + 短火尾（火舌短于球体） */
+  /** 圆形像素火球（放大后重绘：13×13 细密网格，7 层色阶 + 外发光 + 白热芯 + 双层火舌尾） */
   function drawPxFireball(ctx, x, y, r, t, vx, vy) {
-    const u = r / 3.6;
+    const u = r / 6;
     const a = Math.atan2(vy || 0, vx === 0 && vy === 0 ? 1 : vx);
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-    const cell = (i, j, col) => { ctx.fillStyle = col; ctx.fillRect((i - 0.5) * u, (j - 0.5) * u, u + 0.5, u + 0.5); };
-    const flick = Math.floor(t * 12);
-    // 外圈暗红：圆形轮廓，外圈像素高低错落形成轻微锯齿，个别格随火焰跳动明灭
-    for (let j = -4; j <= 4; j++) {
-      for (let i = -4; i <= 4; i++) {
+    // —— 外发光：径向橙红光晕（实心不飘） ——
+    const glow = ctx.createRadialGradient(0, 0, r * 0.15, 0, 0, r * 1.35);
+    glow.addColorStop(0, 'rgba(255,150,40,0.5)');
+    glow.addColorStop(0.55, 'rgba(255,90,20,0.18)');
+    glow.addColorStop(1, 'rgba(255,60,10,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.35, 0, TAU); ctx.fill();
+    const cell = (i, j, col) => { ctx.fillStyle = col; ctx.fillRect((i - 0.5) * u, (j - 0.5) * u, u + 0.6, u + 0.6); };
+    const flick = Math.floor(t * 14);
+    // —— 球体：7 层色阶（外壳只留少量跳空 → 弹体更实） ——
+    for (let j = -6; j <= 6; j++) {
+      for (let i = -6; i <= 6; i++) {
         const d = Math.hypot(i, j);
-        if (d > 4.3) continue;
+        if (d > 6.15) continue;
         const h = pxHash(i, j, 3);
-        if (d > 3.3 && h < 0.30) continue;
-        if (d > 3.3 && ((flick + i * 3 + j * 5) % 7 === 0) && h < 0.58) continue;
-        cell(i, j, h < 0.5 ? '#8f1d04' : '#c23408');
+        if (d > 5.2 && h < 0.16) continue;                              // 外壳仅 16% 锯齿跳空
+        if (d > 5.2 && ((flick + i * 3 + j * 5) % 9 === 0) && h < 0.55) continue;  // 个别格明灭
+        let col;
+        if (d > 5.2) col = h < 0.45 ? '#7a1602' : '#a82a06';           // 1 暗红外壳
+        else if (d > 4.3) col = h < 0.4 ? '#c23408' : '#e8430f';       // 2 深红
+        else if (d > 3.3) col = h < 0.4 ? '#ff5a1a' : '#ff7123';       // 3 橙红
+        else if (d > 2.3) col = h < 0.35 ? '#ff7b2e' : '#ff932e';      // 4 亮橙
+        else if (d > 1.3) col = h < 0.4 ? '#ffb02e' : '#ffc84d';       // 5 金黄
+        else col = h < 0.3 ? '#ffd23b' : '#ffe94d';                    // 6 亮黄芯
+        cell(i, j, col);
       }
     }
-    // 中圈橙红
-    for (let j = -3; j <= 3; j++) {
-      for (let i = -3; i <= 3; i++) {
-        const d = Math.hypot(i, j);
-        if (d <= 2.7 || (d <= 3.2 && pxHash(i, j, 5) > 0.62)) cell(i, j, '#ff5a1a');
-      }
+    // —— 球内光影：下半部压暗、上半部提亮（圆形裁剪内的柔光层） ——
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.98, 0, TAU); ctx.clip();
+    ctx.fillStyle = 'rgba(80,12,0,0.2)';
+    ctx.fillRect(-r, r * 0.12, r * 2, r);
+    ctx.fillStyle = 'rgba(255,240,160,0.14)';
+    ctx.fillRect(-r, -r, r * 2, -r * 0.18);
+    ctx.restore();
+    // —— 白热点：前上方 3 像素 ——
+    cell(1, -1, '#fff6b0'); cell(0, -1, '#fff0a0'); cell(2, 0, '#fff3a8');
+    // —— 外圈火星：沿壳缓慢公转的 6 颗小火星 ——
+    for (let s = 0; s < 6; s++) {
+      const ang = pxHash(s, 7, 11) * TAU + t * (0.8 + pxHash(s, 2, 5) * 0.8);
+      const rr = r * (1.02 + pxHash(s, 3, 7) * 0.25);
+      const ex = Math.cos(ang) * rr / u, ey = Math.sin(ang) * rr / u;
+      if (pxHash(s, 1, flick) > 0.35) cell(ex, ey, pxHash(s, 4, flick) > 0.5 ? '#ffd23b' : '#ff9d2e');
     }
-    // 中心 2×2 亮黄像素块
-    cell(0, 0, '#ffe94d'); cell(1, 0, '#ffd23b');
-    cell(0, 1, '#ffd23b'); cell(1, 1, '#ffb400');
-    // 短火尾：外圈暗红向后偏移 → 火舌像素（2 格，短于 8 格球体直径），逐帧跳动
-    cell(-4, 0, '#8f1d04'); cell(-4, 1, '#c23408'); cell(-4, -1, '#c23408');
-    if (pxHash(5, 0, flick) > 0.22) cell(-5, 0, '#ff7b2e');
-    if (pxHash(5, 1, flick + 2) > 0.30) cell(-5, 1, '#ff5a1a');
-    if (pxHash(5, -1, flick + 4) > 0.30) cell(-5, -1, '#ff5a1a');
-    if (pxHash(6, 0, flick) > 0.45) cell(-6, 0, '#ffd23b');
+    // —— 双层火舌尾：宽短内焰 + 细长外焰，逐帧跳动 ——
+    const tail = (i, w, cols, seed) => {
+      for (let j = -w; j <= w; j++) {
+        const hh = pxHash(i, j, flick + seed);
+        if (hh < 0.22 && j !== 0) continue;
+        cell(i, j, cols[j === 0 ? 0 : (hh > 0.6 ? 1 : 2)]);
+      }
+    };
+    tail(-7, 2, ['#ff9d2e', '#ff5a1a', '#c23408'], 2);
+    tail(-8, 1, ['#ff7b2e', '#ff5a1a', '#a82a06'], 5);
+    if (pxHash(9, 0, flick) > 0.30) cell(-9, 0, '#ff7b2e');
+    if (pxHash(9, 1, flick + 2) > 0.45) cell(-9, 1, '#ff5a1a');
+    if (pxHash(10, 0, flick) > 0.42) cell(-10, 0, '#ffd23b');
+    if (pxHash(11, 0, flick + 3) > 0.55) cell(-11, 0, '#ffe94d');
     ctx.restore();
   }
 
@@ -265,36 +294,57 @@
     ctx.restore();
   }
 
-  /** 小型六棱冰锥：核心冷白、中段浅蓝、边缘深蓝，表面霜纹，外圈淡蓝微光 */
+  /** 六棱冰锥（放大后重绘：9 行细密棱面 + 径向冷光 + 冷白晶芯 + 分叉霜纹 + 侧边碎晶） */
   function drawPxIce(ctx, x, y, r, t, vx, vy) {
-    const u = r / 3.4;
+    const u = r / 4.6;
     const a = Math.atan2(vy || 0, vx === 0 && vy === 0 ? 1 : vx);
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-    // 淡蓝微光（两层）
-    ctx.fillStyle = 'rgba(150,220,255,0.18)';
-    ctx.beginPath(); ctx.arc(0, 0, r * 1.75, 0, TAU); ctx.fill();
-    ctx.fillStyle = 'rgba(205,240,255,0.30)';
-    ctx.beginPath(); ctx.arc(0, 0, r * 1.2, 0, TAU); ctx.fill();
-    const cell = (i, j, col) => { ctx.fillStyle = col; ctx.fillRect((i - 0.5) * u, (j - 0.5) * u, u + 0.5, u + 0.5); };
-    // 六边形棱面行表：尖锥收于前方 +4，六棱平头收尾于 -3
+    // —— 径向冷光（三层：核心青白 → 浅蓝 → 透明） ——
+    const glow = ctx.createRadialGradient(0, 0, r * 0.1, 0, 0, r * 1.7);
+    glow.addColorStop(0, 'rgba(220,245,255,0.55)');
+    glow.addColorStop(0.45, 'rgba(150,220,255,0.28)');
+    glow.addColorStop(1, 'rgba(120,200,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.7, 0, TAU); ctx.fill();
+    const cell = (i, j, col) => { ctx.fillStyle = col; ctx.fillRect((i - 0.5) * u, (j - 0.5) * u, u + 0.6, u + 0.6); };
+    // 棱面行表：尖锥收于前方 +5，六棱平头收尾于 -4
     const rows = [
-      { j: -3, a: -1, b: 0 }, { j: -2, a: -2, b: 1 },
-      { j: -1, a: -3, b: 3 }, { j: 0, a: -3, b: 4 },
-      { j: 1, a: -3, b: 3 }, { j: 2, a: -2, b: 1 },
-      { j: 3, a: -1, b: 0 }
+      { j: -4, a: -1, b: 0 }, { j: -3, a: -3, b: 2 },
+      { j: -2, a: -4, b: 3 }, { j: -1, a: -4, b: 4 },
+      { j: 0, a: -4, b: 5 },
+      { j: 1, a: -4, b: 4 }, { j: 2, a: -4, b: 3 },
+      { j: 3, a: -3, b: 2 }, { j: 4, a: -1, b: 0 }
     ];
+    const flick = Math.floor(t * 10);
     rows.forEach(row => {
       for (let i = row.a; i <= row.b; i++) {
-        const edge = (i === row.a || i === row.b || Math.abs(row.j) === 3);
+        const edge = (i === row.a || i === row.b || Math.abs(row.j) === 4);
+        const h = pxHash(i, row.j, 9);
         let col;
-        if (edge) col = '#1a5a8a';                                  // 边缘深蓝
-        else if (row.j === 0 || (Math.abs(row.j) === 1 && i >= -1 && i <= 2)) col = '#eaf7ff';  // 核心冷白
-        else col = pxHash(i, row.j, 9) > 0.5 ? '#7fd4ff' : '#4ab8ff';   // 中段浅蓝
+        if (edge) col = h > 0.5 ? '#0d3f66' : '#1a5a8a';                    // 棱边深蓝
+        else if (i >= row.b - 1) col = '#ffffff';                            // 前缘切白（受光刃口）
+        else if (Math.abs(row.j) <= 1 && i >= -3) {
+          col = h > 0.45 ? '#ffffff' : '#eaf7ff';                            // 中央冷白晶芯
+        } else if (row.j < 0) col = h > 0.5 ? '#a8e4ff' : '#7fd4ff';         // 上棱面亮
+        else col = h > 0.5 ? '#4ab8ff' : '#2f93e0';                          // 下棱面暗
         cell(i, row.j, col);
       }
     });
-    // 霜纹像素（白色分叉细纹）
-    cell(-1, -2, '#ffffff'); cell(1, 1, '#ffffff'); cell(-2, 1, '#dff4ff');
+    // —— 分叉霜纹：6 道白色细纹沿晶面向前分叉 ——
+    cell(-3, -2, '#ffffff'); cell(-2, -3, '#dff4ff');
+    cell(-1, 2, '#ffffff'); cell(1, 2, '#dff4ff');
+    cell(-3, 1, '#dff4ff'); cell(2, -1, '#ffffff');
+    // —— 尾端深色晶座 + 上下小尾鳍 ——
+    cell(-4, 0, '#0d3f66');
+    cell(-3, 4, '#1a5a8a'); cell(-3, -4, '#1a5a8a');
+    // —— 侧边碎晶：2 颗小冰粒绕锥尖缓慢漂浮、明灭闪烁 ——
+    for (let s = 0; s < 2; s++) {
+      const jj = s ? 3.4 : -3.4;
+      const ii = 1.6 + Math.sin(t * 4 + s * 2.4) * 0.8;
+      if ((flick + s * 3) % 2 === 0) { cell(ii, jj, '#dff4ff'); }
+    }
+    // —— 锥尖高光点 ——
+    cell(5, 0, '#ffffff');
     ctx.restore();
   }
 
@@ -309,17 +359,24 @@
   };
 
   /** 命中瞬间：受击点一小圈火花/冰屑/毒液飞散 + 敌人身上留下对应异常像素标记。
-   *  mul：受击效果范围倍率（冰弹体积为基础 ×3.6 → 冰屑飞散/冰霜覆盖同步 ×3.6） */
+   *  mul：受击效果范围倍率（火球为基础 ×6 / 冰弹 ×3.6 → 火花飞散、灼烧/冰霜覆盖同步放大） */
   function elemHitFx(ent, type, hx, hy, g, mul) {
     mul = mul || 1;
     if (!ent) return;
     const R = ent.radius || 20;
     const ox = clamp(hx - ent.x, -R, R), oy = clamp(hy - ent.y, -R, R);
     if (type === 'flame') {
-      burst(g, hx, hy, 12, ELEM_HIT_COLS.flame, 130, 3, 0.32, 60);
+      // 大火球重炮命中：成簇橙红火花（数量/飞散/颗粒随弹体放大，封顶避免过量）
+      burst(g, hx, hy, Math.round(10 + 6 * mul), ELEM_HIT_COLS.flame, 100 + 40 * mul, 2.2 + 1.1 * mul, 0.38, 30 + 14 * mul);
+      // 中心白热亮斑：少量白炽颗粒
+      burst(g, hx, hy, Math.round(3 + 2 * mul), ['#fff3a8', '#ffe94d', '#ffd23b'], 70 + 20 * mul, 1.6 + 0.7 * mul, 0.26, 20 + 8 * mul);
       if (!ent.burnMarks) ent.burnMarks = [];
-      ent.burnMarks.push({ ox, oy, seed: rand(0, TAU), t: 0, life: 3.6 });
-      if (ent.burnMarks.length > 6) ent.burnMarks.shift();
+      let bm = ent.burnMarks.find(m => Math.hypot(m.ox - ox, m.oy - oy) < R * 0.7);
+      if (bm) { bm.t = 0; bm.sm = Math.max(bm.sm || 1, mul); }   // 续烧：重新引燃 + 保持厚度
+      else {
+        ent.burnMarks.push({ ox, oy, seed: rand(0, TAU), t: 0, life: 3.6, sm: mul });
+        if (ent.burnMarks.length > 6) ent.burnMarks.shift();
+      }
     } else if (type === 'ice') {
       burst(g, hx, hy, Math.round(10 * mul), ELEM_HIT_COLS.ice, 150 * mul, 2.6 * mul, 0.36, 40);
       if (!ent.frostPts) ent.frostPts = [];
@@ -393,29 +450,34 @@
     const R = ent.radius || 20;
     const cs = clamp(R * 0.10, 2.5, 6);    // 单像素块尺寸随敌体缩放
     const tt = ent.t || 0;
-    // —— 灼烧：暗红裂纹（自命中点发散的短折线段）+ 边缘细小火焰像素 ——
+    // —— 灼烧：暗红裂纹（自命中点发散的短折线段）+ 边缘细小火焰像素（尺寸随弹体 sm 放大） ——
     (ent.burnMarks || []).forEach(m => {
       const fade = m.t > m.life - 0.8 ? (m.life - m.t) / 0.8 : 1;
       ctx.globalAlpha = clamp(fade, 0, 1);
+      const bsm = m.sm || 1;
+      const mcs = Math.min(cs * 2.4, cs * (0.8 + bsm * 0.28));   // 焦痕像素块随弹体放大、封顶
+      const lm = 0.9 + bsm * 0.12;                                 // 裂纹长度倍率
       const x0 = ent.x + m.ox, y0 = ent.y + m.oy;
       for (let s = 0; s < 4; s++) {
         const ang = m.seed + s * (TAU / 4) + (pxHash(s, 0, m.seed) - 0.5) * 0.9;
-        const len = 5 + pxHash(s, 1, m.seed) * R * 0.55;
+        const len = (5 + pxHash(s, 1, m.seed) * R * 0.55) * lm;
         const steps = 3 + Math.floor(pxHash(s, 2, m.seed) * 2);
         for (let q = 1; q <= steps; q++) {
           const d = len * q / steps;
-          const jx = (pxHash(q, s, m.seed) - 0.5) * 4;
+          const jx = (pxHash(q, s, m.seed) - 0.5) * 4 * mcs / cs;
           ctx.fillStyle = q === steps ? '#8f1d04' : '#c23408';
-          ctx.fillRect(x0 + Math.cos(ang) * d + jx - cs / 2, y0 + Math.sin(ang) * d - cs / 2, cs, cs);
+          ctx.fillRect(x0 + Math.cos(ang) * d + jx - mcs / 2, y0 + Math.sin(ang) * d - mcs / 2, mcs, mcs);
         }
       }
-      // 边缘小火苗：2 处，按身体时间跳动
-      for (let s = 0; s < 2; s++) {
+      // 边缘小火苗：2 处，按身体时间跳动（大弹体额外多 1 处）
+      const flames = bsm > 2 ? 3 : 2;
+      for (let s = 0; s < flames; s++) {
         if (Math.floor(tt * 10 + m.seed * 3 + s) % 3 === 0) {
-          const fx = x0 + Math.cos(m.seed + s * 2.4) * (6 + R * 0.25);
-          const fy = y0 + Math.sin(m.seed + s * 2.4) * (6 + R * 0.25);
+          const fr = (6 + R * 0.25) * lm;
+          const fx = x0 + Math.cos(m.seed + s * 2.4) * fr;
+          const fy = y0 + Math.sin(m.seed + s * 2.4) * fr;
           ctx.fillStyle = s ? '#ffd23b' : '#ff7b2e';
-          ctx.fillRect(fx - cs / 2, fy - cs / 2, cs, cs);
+          ctx.fillRect(fx - mcs / 2, fy - mcs / 2, mcs, mcs);
         }
       }
     });
@@ -894,36 +956,50 @@
           }
         }
       }
-      // 像素火球（玩家火焰弹 / 火鸡王火焰弹）：球后拖出火星像素，火星向上飘散
+      // 像素火球（玩家火焰弹 / 火鸡王火焰弹）：球后拖出成簇火星像素，火星向上飘散（尺寸随弹体放大）
       if ((this.pxFire || (this.friendly && this.element === 'flame')) && !this.neutralized) {
         this.trail += dt;
         if (this.trail > 0.045) {
           this.trail = 0;
           const spd = Math.hypot(this.vx, this.vy) || 1;
           const bx = this.vx / spd, by = this.vy / spd;
-          for (let i = 0; i < 2; i++) {
+          const sf = 0.7 + this.r / 14;                    // 粒子尺寸随弹体（r=42 → ×3.7）
+          for (let i = 0; i < 3; i++) {
             g.particles.push(new Particle(
-              this.x - bx * this.r * 0.9 + rand(-2, 2),
-              this.y - by * this.r * 0.9 + rand(-2, 2),
-              -bx * rand(30, 90) + rand(-18, 18),
-              -by * rand(20, 60) - rand(28, 70),     // 火星固定向上飘散
-              rand(0.22, 0.42), rand(1.6, 3.2) * Math.max(1, this.r / 7),
-              Math.random() < 0.5 ? '#ffd23b' : (Math.random() < 0.6 ? '#ff9d2e' : '#ff5a1a')));
+              this.x - bx * this.r * 0.95 + rand(-3, 3) * sf,
+              this.y - by * this.r * 0.95 + rand(-3, 3) * sf,
+              -bx * rand(30, 90) * sf + rand(-18, 18) * sf,
+              -by * rand(20, 60) * sf - rand(28, 70) * sf,  // 火星固定向上飘散
+              rand(0.24, 0.46), rand(1.8, 3.6) * sf,
+              Math.random() < 0.45 ? '#ffd23b' : (Math.random() < 0.65 ? '#ff9d2e' : '#ff5a1a')));
           }
+          // 偶发白热亮芯火星（更亮更大）
+          if (Math.random() < 0.5) g.particles.push(new Particle(
+            this.x - bx * this.r * 0.8, this.y - by * this.r * 0.8 + rand(-2, 2) * sf,
+            -bx * rand(20, 50) * sf, -by * rand(10, 40) * sf - rand(20, 50) * sf,
+            rand(0.18, 0.3), rand(1.4, 2.4) * sf, '#fff3a8'));
         }
       }
-      // 寒冰弹拖尾：细长冰晶像素轨迹（冷白/浅蓝，向后缓飘）
+      // 寒冰弹拖尾：成簇冰晶像素轨迹（冷白/浅蓝/深蓝三色，向后缓飘，尺寸随弹体放大）
       if (this.friendly && this.element === 'ice' && !this.neutralized) {
         this.trail += dt;
         if (this.trail > 0.05) {
           this.trail = 0;
           const spd = Math.hypot(this.vx, this.vy) || 1;
           const bx = this.vx / spd, by = this.vy / spd;
-          g.particles.push(new Particle(
-            this.x - bx * this.r + rand(-2, 2), this.y - by * this.r + rand(-2, 2),
-            -bx * rand(20, 70) + rand(-14, 14), -by * rand(20, 70) + rand(-14, 14),
-            rand(0.26, 0.46), rand(1.6, 3),
-            Math.random() < 0.45 ? '#eaf7ff' : (Math.random() < 0.6 ? '#bfe9ff' : '#7fc6ef')));
+          const sf = 0.7 + this.r / 12;                    // 粒子尺寸随弹体（r=21.6 → ×2.5）
+          for (let i = 0; i < 2; i++) {
+            g.particles.push(new Particle(
+              this.x - bx * this.r + rand(-3, 3) * sf, this.y - by * this.r + rand(-3, 3) * sf,
+              -bx * rand(20, 70) * sf + rand(-14, 14) * sf, -by * rand(20, 70) * sf + rand(-14, 14) * sf,
+              rand(0.28, 0.5), rand(1.8, 3.2) * sf,
+              Math.random() < 0.4 ? '#eaf7ff' : (Math.random() < 0.6 ? '#bfe9ff' : '#7fc6ef')));
+          }
+          // 偶发碎白晶（细小亮片）
+          if (Math.random() < 0.55) g.particles.push(new Particle(
+            this.x - bx * this.r * 0.7, this.y - by * this.r * 0.7,
+            -bx * rand(10, 40) * sf + rand(-20, 20) * sf, -by * rand(10, 40) * sf + rand(-20, 20) * sf,
+            rand(0.3, 0.55), rand(1.2, 2.2) * sf, '#ffffff'));
         }
       }
       // 毒液弹拖尾：粘稠丝线像素 + 滴落毒液像素点（向下坠落）；穿过障碍时在墙上留腐蚀痕
@@ -3967,9 +4043,11 @@
       // 额外弹道解锁
       this.tailWay = false;   // 尾部向后弹道
       this.downWay = false;   // 下部向下弹道
-      // 元素弹道（击败 Boss 后解锁，总最多 3 条，FIFO 替换最早获得的）
-      this.elementWay = [];     // ['flame', 'poison', 'ice', ...] 顺序代表获得先后
-      this.elemCd = [];         // 与 elementWay 平行的独立发射冷却（火焰3s/寒冰2s；毒液0=随主射速）
+      // 元素弹道（击败 Boss 后解锁）：火/冰/毒每种最多 3 条，第 1 条朝前、第 2 条朝下、第 3 条朝后
+      // 满配 = 3火+3冰+3毒共 9 条，每个方向恰好火/冰/毒各 1 条，三向独立齐射（不依赖主武器 tailWay/downWay）
+      this.elemWays = { front: [], down: [], back: [] };  // 各向元素队列（每向最多3条、每种元素至多1条）
+      this.elemCds  = { front: [], down: [], back: [] };  // 与各向队列平行的独立冷却（火焰3s/寒冰2s；毒液0=随主射速）
+      this.elementWay = [];                               // 三向拼接镜像（front+down+back），供数量/持有统计复用
       // 元素精通等级（三选一成长，0-3；决定元素弹 DoT 系数/持续/冻结时长）
       this.elemLv = { flame: 0, poison: 0, ice: 0 };
       // 闪电子弹（闪电链）
@@ -4692,10 +4770,13 @@
 
       // 自动射击（近战期间停火；射速按角色射速倍率；Boss 台词演出期间全局停火）
       if (!this.isMeleeing && !g.shootDisabled) {
-        // 元素弹道独立冷却（火焰3s/寒冰2s；毒液 interval=0 不走冷却）
-        for (let w = 0; w < this.elementWay.length; w++) {
-          const eb = CFG.elementBullet[this.elementWay[w]];
-          if (eb && eb.interval > 0 && this.elemCd[w] > 0) this.elemCd[w] = Math.max(0, this.elemCd[w] - dt);
+        // 元素弹道独立冷却（三向各自递减；火焰3s/寒冰2s；毒液 interval=0 不走冷却）
+        for (const dir of ['front', 'down', 'back']) {
+          const q = this.elemWays[dir];
+          for (let w = 0; w < q.length; w++) {
+            const eb = CFG.elementBullet[q[w]];
+            if (eb && eb.interval > 0 && this.elemCds[dir][w] > 0) this.elemCds[dir][w] = Math.max(0, this.elemCds[dir][w] - dt);
+          }
         }
         this.fireT -= dt;
         if (this.fireT <= 0) {
@@ -4873,42 +4954,62 @@
           if (b) g.bullets.push(b);
         });
       }
-      // 元素弹道：遍历 elementWay 队列，按获得顺序发射（总最多 3 条）
+      // 元素弹道：前/下/后三向队列各自齐射（每向最多 3 条，共 9 条；独立于主武器 tailWay/downWay 解锁）
       // 火焰/寒冰有独立发射间隔（3s/2s 重炮）；毒液 interval=0 跟随主射速高频射出
-      const elemCount = this.elementWay.length;
-      // 防御性对齐：三选一 FIFO 替换理论上已同步 elemCd，长度不一致时截断/补零
-      if (this.elemCd.length !== elemCount) {
-        if (this.elemCd.length > elemCount) this.elemCd.length = elemCount;
-        else while (this.elemCd.length < elemCount) this.elemCd.push(0);
-      }
-      for (let w = 0; w < elemCount; w++) {
-        const el = this.elementWay[w];
-        const eb = CFG.elementBullet[el];
-        // 独立冷却未到：该条弹道本轮不发射
-        if (eb.interval > 0 && (this.elemCd[w] || 0) > 0) continue;
-        if (eb.interval > 0) this.elemCd[w] = eb.interval;
-        const off = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 0.42);
-        const eOffY = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 14);
-        const eSpeed = speed * eb.spdMul;
-        let vy = 0, vx = Math.cos(off) * eSpeed;
-        if (el === 'flame') vy = Math.sin(off) * eSpeed - 20;   // 弹速÷3后上抛偏置同步÷3（60→20），保持抛物线仰角不变
-        else if (el === 'poison') vy = Math.sin(off) * eSpeed + 60;
-        else vy = Math.sin(off) * eSpeed;
-        g.bullets.push(new Bullet(
-          muzzleX, muzzleY + eOffY, vx, vy,
-          { kind: 'orb', friendly: true, dmg: Math.max(1, Math.round(dmg * eb.dmgMul)), r: eb.r * bscale,
-            pierce: 0, element: el, life: eb.life || 4, elemPow: this.elemLv[el] || 0 }));
-        // 毒液枪口：绿色浆质喷溅 + 几颗毒液颗粒
-        if (el === 'poison') {
-          for (let i = 0; i < 5; i++) {
-            g.particles.push(new Particle(
-              muzzleX, muzzleY + eOffY + rand(-6, 6),
-              rand(120, 320), rand(-130, 130),
-              rand(0.2, 0.42), rand(2.5, 5),
-              ['#2dd44a', '#4ade80', '#0a5a12', '#7dff6a'][randi(0, 3)]));
+      const fireElemDir = (dir) => {
+        const q = this.elemWays[dir];
+        const cdq = this.elemCds[dir];
+        const cnt = q.length;
+        for (let w = 0; w < cnt; w++) {
+          const el = q[w];
+          const eb = CFG.elementBullet[el];
+          if (!eb) continue;
+          // 独立冷却未到：该条本次不发射
+          if (eb.interval > 0 && (cdq[w] || 0) > 0) continue;
+          if (eb.interval > 0) cdq[w] = eb.interval;
+          const off = (cnt === 1 ? 0 : (w - (cnt - 1) / 2) * 0.42);
+          const slot = (cnt === 1 ? 0 : (w - (cnt - 1) / 2) * 14);   // 同向多条时的炮口排列间距
+          const eSpeed = speed * eb.spdMul;
+          let bx, by, vx, vy;
+          if (dir === 'front') {
+            // 前向：枪口向右；火焰上抛偏置 -20（弹速÷3 后与仰角同步÷3）、毒液下沉 60
+            const bias = el === 'flame' ? -20 : (el === 'poison' ? 60 : 0);
+            bx = muzzleX; by = muzzleY + slot;
+            vx = Math.cos(off) * eSpeed;
+            vy = Math.sin(off) * eSpeed + bias;
+          } else if (dir === 'back') {
+            // 后向：机尾向左水平镜像（×0.95），上下偏向保留
+            const bias = el === 'flame' ? -20 : (el === 'poison' ? 60 : 0);
+            bx = this.x - 44 * this.sizeMul; by = muzzleY + slot;
+            vx = -Math.cos(off) * eSpeed * 0.95;
+            vy = (Math.sin(off) * eSpeed + bias) * 0.95;
+          } else {
+            // 下向：机腹垂直向下（×0.9），散开角转向屏幕前方
+            bx = this.x + 8 * this.sizeMul + slot; by = this.y + 26 * this.sizeMul;
+            vx = Math.sin(off) * eSpeed * 0.9;
+            vy = Math.cos(off) * eSpeed * 0.9;
+          }
+          g.bullets.push(new Bullet(
+            bx, by, vx, vy,
+            { kind: 'orb', friendly: true, dmg: Math.max(1, Math.round(dmg * eb.dmgMul)), r: eb.r * bscale,
+              pierce: 0, element: el, life: eb.life || 4, elemPow: this.elemLv[el] || 0 }));
+          // 毒液枪口：绿色浆质喷溅 + 几颗毒液颗粒（沿发射方向喷出）
+          if (el === 'poison') {
+            const pvx = dir === 'down' ? rand(-130, 130) : rand(120, 320) * (dir === 'back' ? -1 : 1);
+            const pvy = dir === 'down' ? rand(120, 320) : rand(-130, 130);
+            for (let i = 0; i < 5; i++) {
+              g.particles.push(new Particle(
+                bx, by + rand(-6, 6),
+                pvx + (dir === 'down' ? rand(-60, 60) : 0), pvy,
+                rand(0.2, 0.42), rand(2.5, 5),
+                ['#2dd44a', '#4ade80', '#0a5a12', '#7dff6a'][randi(0, 3)]));
+            }
           }
         }
-      }
+      };
+      fireElemDir('front');
+      fireElemDir('down');
+      fireElemDir('back');
       SFX.shoot();
     }
 
@@ -9847,7 +9948,7 @@
       s.flash = 0.12;
       this.hurtT = 0.12;
       // 元素弹命中节：对应元素色火花（火焰橙红/毒液墨绿/寒冰浅蓝）；无元素保留草龙绿色
-      if (element && ELEM_HIT_COLS[element]) burst(g, s.x, s.y, element === 'ice' ? 36 : 8, ELEM_HIT_COLS[element], element === 'ice' ? 540 : 130, element === 'ice' ? 9.4 : 3, 0.3, element === 'ice' ? 40 : 70);
+      if (element && ELEM_HIT_COLS[element]) burst(g, s.x, s.y, element === 'ice' ? 36 : (element === 'flame' ? 26 : 8), ELEM_HIT_COLS[element], element === 'ice' ? 540 : (element === 'flame' ? 260 : 130), element === 'ice' ? 9.4 : (element === 'flame' ? 6.5 : 3), 0.3, element === 'ice' ? 40 : (element === 'flame' ? 85 : 70));
       else burst(g, s.x, s.y, 3, ['#fff', '#bff5d6', '#7ed46d'], 130, 3, 0.2);
       SFX.hit();
       // 元素效果（与小怪一致：DoT / 冻结）

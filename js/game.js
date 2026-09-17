@@ -1264,22 +1264,27 @@
       let dps = shotsPerSec * p.dmg * 0.55;       // 命中率折减
       if (p.bombLv > 0) dps *= 1.25;              // 爆炸溅射
       if (p.bulletTier >= 2) dps *= 1.15;         // 穿透
-      // 元素弹道（直击+DoT 理论收益，吃元素精通等级）：火 3s/发、冰 2s/发、毒随主射速持续刷新
-      (p.elementWay || []).forEach(el => {
-        const eb = CFG.elementBullet[el];
-        if (!eb) return;
-        const m = CFG.elementMaster[el];
-        const lv = Math.max(0, Math.min(3, (p.elemLv && p.elemLv[el]) | 0));
-        const dpsCoef = m.dpsBase + m.dpsPerLv * lv;
-        // 间隔弹：一发的 DoT 在发射间隔内贡献 = dpsCoef×min(持续,间隔)；毒弹高频刷新 → DoT 恒挂 = dpsCoef
-        const dotRatio = eb.interval > 0
-          ? dpsCoef * Math.min(m.durBase + m.durPerLv * lv, eb.interval)
-          : dpsCoef;
-        if (eb.interval > 0) {
-          dps += p.dmg * eb.dmgMul / eb.interval * 0.55 * (1 + dotRatio);
-        } else {
-          dps += shotsPerSec * p.dmg * eb.dmgMul * 0.5 * (1 + dotRatio);
-        }
+      // 元素弹道（前/下/后三向独立队列，直击+DoT 理论收益，吃元素精通等级）：火 3s/发、冰 2s/发、毒随主射速持续刷新
+      // 前向按基础命中率折减；下/后向只能打到身下/身后绕后的敌人，理论收益按 0.2 折减避免 Boss 血量虚高
+      const dirHit = { front: 1, down: 0.2, back: 0.2 };
+      ['front', 'down', 'back'].forEach(dir => {
+        (p.elemWays ? p.elemWays[dir] : []).forEach(el => {
+          const eb = CFG.elementBullet[el];
+          if (!eb) return;
+          const m = CFG.elementMaster[el];
+          const lv = Math.max(0, Math.min(3, (p.elemLv && p.elemLv[el]) | 0));
+          const dpsCoef = m.dpsBase + m.dpsPerLv * lv;
+          // 间隔弹：一发的 DoT 在发射间隔内贡献 = dpsCoef×min(持续,间隔)；毒弹高频刷新 → DoT 恒挂 = dpsCoef
+          const dotRatio = eb.interval > 0
+            ? dpsCoef * Math.min(m.durBase + m.durPerLv * lv, eb.interval)
+            : dpsCoef;
+          const h = dirHit[dir];
+          if (eb.interval > 0) {
+            dps += p.dmg * eb.dmgMul / eb.interval * 0.55 * (1 + dotRatio) * h;
+          } else {
+            dps += shotsPerSec * p.dmg * eb.dmgMul * 0.5 * (1 + dotRatio) * h;
+          }
+        });
       });
       return dps;
     }
@@ -1698,11 +1703,12 @@
       }
       // 首次获得新能力时弹出提示（右下角）
       if (isNew) this.toast(u.id === 'chain' ? '⚡ 闪电子弹解锁！' : '† 防护刀刃解锁！', 2, 'rb');
-      // 元素弹道选择提示（右下角）
+      // 元素弹道选择提示（右下角）：该元素第几条 → 布置方向（前/下/后），上限 x/3
       if (['flame', 'poison', 'ice'].includes(u.id)) {
         const names = { flame: '🔥火焰', poison: '☠毒液', ice: '❄寒冰' };
+        const dirNames = ['前', '下', '后'];
         const cnt = this.player.elementWay.filter(x => x === u.id).length;
-        this.toast(`${names[u.id]}弹道 ${cnt}/3`, 1.5, 'rb');
+        this.toast(`${names[u.id]}弹道 布置于${dirNames[cnt - 1]}向（${cnt}/3）`, 1.5, 'rb');
       }
       this.state = 'playing';
       // 无冷却锁：若剩余能量仍满足门槛，下一帧会连续弹出下一次成长选择
@@ -2745,7 +2751,7 @@
               // 元素弹道命中：施加 DoT / 破无敌 / 冻结（系数吃元素精通等级，同元素可叠层）
               if (b.element === 'flame') {
                 this.applyElement(e, 'flame', b.dmg, b.elemPow);
-                elemHitFx(e, 'flame', b.x, b.y, this);   // 圆形橙红火花 + 灼烧裂纹标记
+                elemHitFx(e, 'flame', b.x, b.y, this, 6);   // 大型橙红火花 + 放大灼烧裂纹标记（火球×6）
                 if (e.spawnInvuln > 0) e.invulnBreakT = 1;   // 火焰：1s 后破无敌
               } else if (b.element === 'poison') {
                 this.applyElement(e, 'poison', b.dmg, b.elemPow);
