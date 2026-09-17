@@ -189,6 +189,114 @@
       climaxSharkN: 2
     },
 
+    /** 鸦伯爵（城堡限定）：礼帽单片镜珠宝大盗渡鸦。右侧悬浮，玩家接近瞬间连闪3-5个点躲玩家（CD 10s）。
+     *  宝石三档（玩家48px=1x）：小0.5x≈24px快 / 中1.5x≈72px中 / 大2x≈96px慢；本体有伤害、拖尾无伤害。
+     *  节奏总原则「永不停歇，只换节奏」：射击方式组合制造节奏——
+     *  攻击1 飞掷＝蓄力掷→连掷→单掷三拍循环（砰——唰唰——滴滴滴），每颗宝石飞到屏幕中段各自加速、强拍最猛；
+     *  攻击2 回旋＝连掷去（一次甩出）→按发射顺序依次折返→折返同时上方抛下2颗封走位；
+     *  高潮 盗窃＝组A蓄力掷大宝石（低音鼓占位）对位组B连掷小宝石（高音镲折返骚扰），弹道交叉；
+     *  狂暴＝蓄力缩短/连掷数量+1/单掷间隔缩短/抛掷落点更刁钻/折返更突然，射击方式不变只是更快更密 */
+    crowCount: {
+      homeX: 806,                 // 右侧悬停位
+      bobAmp: 13,                 // 悬停浮动幅度（轻盈）
+      // —— 瞬移（躲玩家）——
+      tpDist: 250,                // 玩家接近判定距离
+      tpPointsMin: 3, tpPointsMax: 5,   // 一次连闪 3-5 个点
+      tpBlinkGap: 0.09,           // 相邻两点间隔（快速闪烁）
+      tpCd: 10,                   // 瞬移冷却
+      tpXMin: 580, tpXMax: 890,   // 瞬移落点横向范围（右侧区域）
+      tpYTop: 90, tpYBot: 80,     // 瞬移纵向范围：90 ~ GROUND_Y-80
+      // —— 宝石三档 ——
+      gemR: [12, 36, 48],         // 判定半径（直径 24/72/96px）
+      gemSpdMul: [1.18, 0.95, 0.72],    // 小快 / 中等 / 大慢（大宝石占空间逼提前走位）
+      gemDmg: 13,                 // 本体伤害（三档一致；拖尾无伤害）
+      // —— 中段加速（攻击1/高潮组A 共用）——
+      accX: 480,                  // 屏幕中段：每颗宝石各自加速的触发线
+      accV: [520, 430, 400],      // 加速目标速度（绝对值）：强拍最猛 / 中拍 / 弱拍
+      // —— 攻击1：宝石飞掷（蓄力掷→连掷→单掷 三拍循环）——
+      throwRounds: 2,             // 一次攻击循环两遍（弱拍后立刻接下一轮）
+      chargeT: 0.5,               // 第1拍蓄力掷：蓄力 0.5s
+      chargeEnrMul: 0.6,          // 狂暴：蓄力时间缩短
+      gapStrong: 0.3,             // 强拍后间隔
+      gapMid: 0.15,               // 中拍后间隔（弱拍后立刻接下一轮）
+      dblN: 2,                    // 第2拍连掷：一次甩出两颗 1.5x（狂暴+1）
+      rapN: 3,                    // 第3拍单掷：快速连抛三颗 0.5x
+      rapGap: 0.12,               // 单掷连抛间隔
+      rapGapEnrMul: 0.65,         // 狂暴：单掷间隔缩短
+      throwV0: 140,               // 前段慢速
+      throwArcAmp: 0.8,           // 初始偏移角上限（rad，弧线来源；飞行中逐渐修正朝玩家）
+      throwTurn: 2.6,             // 弧线修正转向速率（rad/s）
+      // —— 攻击2：宝石回旋（连掷去→依次折返→抛掷补）——
+      retNMin: 5, retNMax: 7,     // 一次甩出5~7颗（狂暴连掷数量+1）
+      retSpd: 190,                // 去程基准速度（按档位乘 gemSpdMul）
+      retBackMul: 1.9,            // 回程加速倍率（回程快）
+      retFoldXMin: 170, retFoldXMax: 430,  // 折返点横向范围（按发射顺序依次递增=依次折返）
+      retPause: [0.1, 0.2, 0.32], // 急停时长按档位（小宝石折返快难预判 / 大宝石停久封路强）
+      retPauseEnrMul: 0.5,        // 狂暴：停顿缩短（折返更突然）
+      retBias: 0.55,              // 折返朝玩家旧位置偏折比例（保证"身后危险"成立）
+      retAmp: 0.16,               // 一次甩出的扇形散布半幅（rad）
+      lobN: 2, lobGap: 0.12,      // 第三段抛掷：从上方抛下2颗封走位
+      lobT: 0.95, lobG: 1000,     // 抛掷飞行时长与重力（抛物线：从上方落下）
+      lobOff: 70, lobOffEnr: 130, // 抛掷落点随机偏移（狂暴更刁钻+预判提前量）
+      // —— 高潮：珠宝盗窃（组A蓄力掷 对位 组B连掷，66%血触发一次）——
+      climaxHp: 0.66,
+      climaxDur: 8,
+      clACharge: 0.5,             // 组A：每拍蓄力后掷出一颗 2x 大宝石（低音鼓，不折返，强拍加速最猛）
+      clACycle: 1.05,             // 组A节拍间隔（慢-慢-慢）
+      clBN: 4,                    // 组B：4颗小宝石快速连掷（高音镲，狂暴+1）
+      clBGap: 0.16,               // 组B连掷间隔（唰-唰-唰-唰）
+      clBCycle: 1.2,              // 组B节拍周期
+      clFoldXMin: 500, clFoldXMax: 720,    // 组B提前折返点（右中部，折返时穿过组A的缝隙）
+      tpClimaxGap: 1.15,          // 高潮期间连续横向瞬移间隔（位置不断变化）
+      fwdTurn: 1.0,               // 组A轻微朝玩家修正（不折返）
+      // —— 狂暴（30% 基类触发）：射击方式不变，只是更快更密 ——
+      enrSpdMul: 1.22
+    },
+
+    /** 雪巫（雪地限定）：悬浮右上方缓慢上下移动，攻击前展翼凝聚冰霜。
+     *  节奏总原则「永不停歇，只换节奏」：攻击间零空档，靠速度/密度/方向变化制造节奏。
+     *  攻击1 冰晶雨：稀疏3/s↔密集8/s 四段循环，斜向下落、左右交错、速度有差异，白蓝冰雾拖尾；
+     *  攻击2 冰环：大环慢160↔小环快280 无缝交替，水平向左不追踪，环心安全；
+     *  66% 血触发一次「冰霜风暴」三段连打（密集雨→大小环→双环+雨）；30% 血基类狂暴只提速/密度。 */
+    iceWitch: {
+      homeX: 806,                 // 屏幕右上方悬停位
+      hoverY: 128,                // 基准悬停高度
+      hoverAmp: 30,               // 缓慢上下移动幅度
+      hoverFreq: 0.85,            // 上下浮动频率（rad/s）
+      // —— 攻击前短暂蓄力（展翼 + 凝聚冰霜）——
+      wind: 0.52, windEnr: 0.34,
+      // —— 攻击1：冰晶雨（连绵不断，内含 稀疏→密集→再稀疏→再密集）——
+      rainActT: 8.8, rainActTEnr: 5.6,      // 整场冰晶雨时长（内含 4 段密度切换）
+      phaseT: 2.2, phaseTEnr: 1.4,          // 单段密度持续（狂暴切换更快）
+      sparseRate: 3, denseRate: 8,          // 颗/秒
+      sparseRateEnr: 4, denseRateEnr: 11,   // 狂暴：切换更快且密度上限提高
+      rainDmg: 10, rainR: 9,
+      rainSpdMin: 175, rainSpdMax: 268,     // 冰晶速度有差异
+      aimTurn: 1.05, aimTurnEnr: 1.7,       // 法阵瞄准角速度（rad/s，缓慢追踪玩家，可靠横向位移甩开）
+      aimSpread: 0.11, aimJit: 0.05,        // 左右交错角差 + 随机散布
+      aimMin: 1.15, aimMax: 2.95,           // 瞄准角限制（始终向左下方落，约66°~169°）
+      rainLife: 5,
+      // —— 攻击2：冰环（大环慢 → 小环快，环与环无缝衔接）——
+      ringActT: 9.2, ringActTEnr: 6.4,
+      bigSpd: 160, smallSpd: 280,
+      bigSpdEnr: 116, smallSpdEnr: 352,     // 狂暴：小环更快、大环更慢，对比更极端
+      bigOuter: 58, bigInner: 35,           // 大环（环心孔洞大，慢→给钻环判断）
+      smallOuter: 43, smallInner: 24,       // 小环（孔洞仅容贴身，快→逼连钻）
+      bigGap: 1.16, smallGap: 0.64,         // 出环间隔
+      bigGapEnr: 1.34, smallGapEnr: 0.48,
+      ringDmg: 12, ringLife: 9,
+      ringYJit: 48,                         // 出手高度=玩家当前y±抖动（环体本身不追踪）
+      // —— 高潮：冰霜风暴（66% 血触发一次，三段无空档）——
+      climaxHp: 0.66,
+      cl1T: 3.0, cl1TEnr: 2.1,              // 第一段：冰晶雨密集压迫
+      cl1Rate: 9, cl1RateEnr: 12,
+      cl2T: 3.2, cl2TEnr: 2.5,              // 第二段：大环小环交替
+      cl3T: 4.2, cl3TEnr: 3.3,              // 第三段：双环 + 冰晶雨同时爆发
+      cl3Rate: 7, cl3RateEnr: 9,
+      cl3RingGap: 1.12, cl3RingGapEnr: 0.85,
+      cl3RingOff: 80                        // 双环上下错开量（逼玩家选孔）
+    },
+
     /** 闪电子弹（闪电链） */
     chain: {
       range: 180,          // 链接搜索半径
@@ -558,8 +666,9 @@
           return Math.random() < 0.20;      // 中低概率
         },
         apply(p) {
-          if (p.elementWay.length >= 3) p.elementWay.shift();  // 满三条时销毁最早获得的一条
+          if (p.elementWay.length >= 3) { p.elementWay.shift(); if (p.elemCd) p.elemCd.shift(); }  // 满三条时销毁最早获得的一条
           p.elementWay.push('flame');
+          if (p.elemCd) p.elemCd.push(0);   // 新弹道立即可发射
         },
         level(p) { return p.elementWay.filter(x => x === 'flame').length; },
         guaranteed(p, g) { return g.bossCount >= 1 && p.elementWay.indexOf('flame') < 0; }
@@ -574,8 +683,9 @@
           return Math.random() < 0.20;
         },
         apply(p) {
-          if (p.elementWay.length >= 3) p.elementWay.shift();
+          if (p.elementWay.length >= 3) { p.elementWay.shift(); if (p.elemCd) p.elemCd.shift(); }
           p.elementWay.push('poison');
+          if (p.elemCd) p.elemCd.push(0);
         },
         level(p) { return p.elementWay.filter(x => x === 'poison').length; },
         guaranteed(p, g) { return g.round >= 2 && p.elementWay.indexOf('poison') < 0; }
@@ -590,8 +700,9 @@
           return Math.random() < 0.20;
         },
         apply(p) {
-          if (p.elementWay.length >= 3) p.elementWay.shift();
+          if (p.elementWay.length >= 3) { p.elementWay.shift(); if (p.elemCd) p.elemCd.shift(); }
           p.elementWay.push('ice');
+          if (p.elemCd) p.elemCd.push(0);
         },
         level(p) { return p.elementWay.filter(x => x === 'ice').length; },
         guaranteed(p, g) { return g.round >= 4 && p.elementWay.indexOf('ice') < 0; }
@@ -701,6 +812,16 @@
       flame:  { dpsBase: 0.40, dpsPerLv: 0.15, durBase: 3, durPerLv: 0.5 },
       poison: { dpsBase: 0.25, dpsPerLv: 0.10, durBase: 6, durPerLv: 1 },
       ice:    { dpsBase: 0.30, dpsPerLv: 0.10, durBase: 2, durPerLv: 0.5, freezeBase: 4, freezePerLv: 0.5 }
+    },
+
+    /** 玩家元素弹道独立射速（interval：秒/发，0 = 跟随主射速 0.12s）与单发伤害倍率（相对玩家基础伤害）。
+     *  火焰 3s 一发重炮、寒冰 2s 一发、毒液随主射速高频低伤；
+     *  频率不同但综合秒伤（直击 + 异常 DoT）拉平：单条弹道理论收益均≈6×基础伤害/秒。
+     *  毒：0.7÷0.12 ≈ 5.83 直击 + DoT；火：8÷3 ≈ 2.67 直击 + 0.4×8=3.2 DoT；冰：7.5÷2 = 3.75 直击 + 0.3×7.5=2.25 DoT */
+    elementBullet: {
+      flame:  { interval: 3.0, dmgMul: 8.0, r: 7, spdMul: 0.72 },
+      ice:    { interval: 2.0, dmgMul: 7.5, r: 6, spdMul: 0.82 },
+      poison: { interval: 0,   dmgMul: 0.7, r: 6, spdMul: 0.88 }
     },
 
     /** 地图表：每次进入游戏随机刷新一张；阻碍特性与草地相同（撞击掉 30% 生命并碎裂 / 地面单位免疫 / 可被炮弹炸毁）

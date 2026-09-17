@@ -1889,6 +1889,8 @@
     fireBlind: buildNiu('huoyanshan-1.png', 500, 300),  // 火遮眼：熔岩冲浪火魔（火焰山限定）
     purpleHand: buildNiu('huangyuan-1.png', 500, 300),  // 紫手：九尾狐紫焰卡师（紫色荒地限定）
     seaBully: buildNiu('haidi-1.png', 500, 300),        // 深海恶霸：墨镜金链锤头鲨打手（海底限定）
+    iceWitch: buildNiu('bingxue-1.png', 500, 300),      // 雪巫：冰晶冠蓝翼枭面巫女（雪地限定）
+    crowCount: buildNiu('chengbao-1.png', 500, 300),    // 鸦伯爵：礼帽单片镜珠宝大盗渡鸦（城堡限定）
     dogHead: buildGoutou(),
     pheasant: buildHuoji(),
     superboy: buildSuperboy(),

@@ -180,6 +180,291 @@
     seaspike: ['#1f6fb8', '#9fd9f5', '#d8f2ff']
   };
 
+  /** 鸦伯爵宝石配色池（随机彩色宝石：主色/亮切面/暗切面） */
+  const GEM_COLS = [
+    { main: '#ff4a6a', lite: '#ffc0cc', dark: '#7a0f28' },   // 红宝石
+    { main: '#ffb13b', lite: '#ffe6b0', dark: '#8a5208' },   // 黄玉
+    { main: '#35e0ff', lite: '#c8f6ff', dark: '#0a5a78' },   // 海蓝宝
+    { main: '#a855f7', lite: '#e2c8ff', dark: '#4a1278' },   // 紫晶
+    { main: '#4aff9e', lite: '#c8ffdf', dark: '#0a6a3a' }    // 翡翠
+  ];
+
+  /* ============================================================
+   * 元素弹像素造型：三层圆形火球 / 墨绿粘稠液团 / 六棱冰锥
+   * 格子以弹速方向为 +x（局部坐标），u 为单像素块边长
+   * ============================================================ */
+  /** 稳定伪随机：同一格子每帧形状一致（火焰跳动只作用于火舌/明灭格） */
+  function pxHash(i, j, s) {
+    const x = Math.sin(i * 127.1 + j * 311.7 + (s || 0) * 74.7) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  /** 圆形像素火球：2×2 亮黄芯 → 橙红圈 → 暗红锯齿外圈 + 短火尾（火舌短于球体） */
+  function drawPxFireball(ctx, x, y, r, t, vx, vy) {
+    const u = r / 3.6;
+    const a = Math.atan2(vy || 0, vx === 0 && vy === 0 ? 1 : vx);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    const cell = (i, j, col) => { ctx.fillStyle = col; ctx.fillRect((i - 0.5) * u, (j - 0.5) * u, u + 0.5, u + 0.5); };
+    const flick = Math.floor(t * 12);
+    // 外圈暗红：圆形轮廓，外圈像素高低错落形成轻微锯齿，个别格随火焰跳动明灭
+    for (let j = -4; j <= 4; j++) {
+      for (let i = -4; i <= 4; i++) {
+        const d = Math.hypot(i, j);
+        if (d > 4.3) continue;
+        const h = pxHash(i, j, 3);
+        if (d > 3.3 && h < 0.30) continue;
+        if (d > 3.3 && ((flick + i * 3 + j * 5) % 7 === 0) && h < 0.58) continue;
+        cell(i, j, h < 0.5 ? '#8f1d04' : '#c23408');
+      }
+    }
+    // 中圈橙红
+    for (let j = -3; j <= 3; j++) {
+      for (let i = -3; i <= 3; i++) {
+        const d = Math.hypot(i, j);
+        if (d <= 2.7 || (d <= 3.2 && pxHash(i, j, 5) > 0.62)) cell(i, j, '#ff5a1a');
+      }
+    }
+    // 中心 2×2 亮黄像素块
+    cell(0, 0, '#ffe94d'); cell(1, 0, '#ffd23b');
+    cell(0, 1, '#ffd23b'); cell(1, 1, '#ffb400');
+    // 短火尾：外圈暗红向后偏移 → 火舌像素（2 格，短于 8 格球体直径），逐帧跳动
+    cell(-4, 0, '#8f1d04'); cell(-4, 1, '#c23408'); cell(-4, -1, '#c23408');
+    if (pxHash(5, 0, flick) > 0.22) cell(-5, 0, '#ff7b2e');
+    if (pxHash(5, 1, flick + 2) > 0.30) cell(-5, 1, '#ff5a1a');
+    if (pxHash(5, -1, flick + 4) > 0.30) cell(-5, -1, '#ff5a1a');
+    if (pxHash(6, 0, flick) > 0.45) cell(-6, 0, '#ffd23b');
+    ctx.restore();
+  }
+
+  /** 墨绿粘稠液团：表面亮绿、内部深绿，边缘滴落，飞行拉出粘稠丝线（丝线主要靠粒子拖尾） */
+  function drawPxPoison(ctx, x, y, r, t, vx, vy) {
+    const u = r / 3.3;
+    const a = Math.atan2(vy || 0, vx === 0 && vy === 0 ? 1 : vx);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    const cell = (i, j, col) => { ctx.fillStyle = col; ctx.fillRect((i - 0.5) * u, (j - 0.5) * u, u + 0.5, u + 0.5); };
+    const drip = Math.floor(t * 6);
+    for (let j = -3; j <= 3; j++) {
+      for (let i = -4; i <= 3; i++) {
+        const d = Math.hypot(i, j);
+        if (d > 3.5) continue;
+        const h = pxHash(i, j, 13);
+        if (d > 2.7 && h < 0.28) continue;           // 不规则粘稠边缘
+        if (d <= 1.4) cell(i, j, '#0a3a0a');          // 内部深绿（墨绿芯）
+        else if (d <= 2.4) cell(i, j, h > 0.55 ? '#166534' : '#0f5320');
+        else cell(i, j, h > 0.72 ? '#4ade80' : '#2dd44a');   // 表面亮绿
+      }
+    }
+    // 亮绿表面高光（前上方）
+    cell(2, -1, '#86efac'); cell(1, -2, '#4ade80');
+    // 边缘滴落：下沿/尾端的滴状像素缓慢伸缩
+    if (pxHash(0, 4, drip) > 0.30) cell(0, 4, '#2dd44a');
+    if (pxHash(0, 5, drip) > 0.55) cell(0, 5, '#166534');
+    if (pxHash(-2, 4, drip + 3) > 0.42) cell(-2, 4, '#2dd44a');
+    // 尾端粘稠丝线连接像素
+    cell(-4, 0, '#14532d');
+    ctx.restore();
+  }
+
+  /** 小型六棱冰锥：核心冷白、中段浅蓝、边缘深蓝，表面霜纹，外圈淡蓝微光 */
+  function drawPxIce(ctx, x, y, r, t, vx, vy) {
+    const u = r / 3.4;
+    const a = Math.atan2(vy || 0, vx === 0 && vy === 0 ? 1 : vx);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    // 淡蓝微光（两层）
+    ctx.fillStyle = 'rgba(150,220,255,0.18)';
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.75, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(205,240,255,0.30)';
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.2, 0, TAU); ctx.fill();
+    const cell = (i, j, col) => { ctx.fillStyle = col; ctx.fillRect((i - 0.5) * u, (j - 0.5) * u, u + 0.5, u + 0.5); };
+    // 六边形棱面行表：尖锥收于前方 +4，六棱平头收尾于 -3
+    const rows = [
+      { j: -3, a: -1, b: 0 }, { j: -2, a: -2, b: 1 },
+      { j: -1, a: -3, b: 3 }, { j: 0, a: -3, b: 4 },
+      { j: 1, a: -3, b: 3 }, { j: 2, a: -2, b: 1 },
+      { j: 3, a: -1, b: 0 }
+    ];
+    rows.forEach(row => {
+      for (let i = row.a; i <= row.b; i++) {
+        const edge = (i === row.a || i === row.b || Math.abs(row.j) === 3);
+        let col;
+        if (edge) col = '#1a5a8a';                                  // 边缘深蓝
+        else if (row.j === 0 || (Math.abs(row.j) === 1 && i >= -1 && i <= 2)) col = '#eaf7ff';  // 核心冷白
+        else col = pxHash(i, row.j, 9) > 0.5 ? '#7fd4ff' : '#4ab8ff';   // 中段浅蓝
+        cell(i, row.j, col);
+      }
+    });
+    // 霜纹像素（白色分叉细纹）
+    cell(-1, -2, '#ffffff'); cell(1, 1, '#ffffff'); cell(-2, 1, '#dff4ff');
+    ctx.restore();
+  }
+
+  /* ============================================================
+   * 元素异常：命中火花 / 灼烧裂纹 / 冰霜加厚 / 腐蚀斑块 / 死亡爆发
+   * 小怪（Enemy）与 Boss 共用同一套数据与渲染（Boss 由 game 中央驱动）
+   * ============================================================ */
+  const ELEM_HIT_COLS = {
+    flame:  ['#ff7b2e', '#ff5a1a', '#ffd23b', '#c23408'],
+    poison: ['#2dd44a', '#7dff6a', '#4ade80', '#0a3a0a'],
+    ice:    ['#bfe9ff', '#eaf7ff', '#7fc6ef']
+  };
+
+  /** 命中瞬间：受击点一小圈火花/冰屑/毒液飞散 + 敌人身上留下对应异常像素标记 */
+  function elemHitFx(ent, type, hx, hy, g) {
+    if (!ent) return;
+    const R = ent.radius || 20;
+    const ox = clamp(hx - ent.x, -R, R), oy = clamp(hy - ent.y, -R, R);
+    if (type === 'flame') {
+      burst(g, hx, hy, 12, ELEM_HIT_COLS.flame, 130, 3, 0.32, 60);
+      if (!ent.burnMarks) ent.burnMarks = [];
+      ent.burnMarks.push({ ox, oy, seed: rand(0, TAU), t: 0, life: 3.6 });
+      if (ent.burnMarks.length > 6) ent.burnMarks.shift();
+    } else if (type === 'ice') {
+      burst(g, hx, hy, 10, ELEM_HIT_COLS.ice, 150, 2.6, 0.36, 40);
+      if (!ent.frostPts) ent.frostPts = [];
+      // 同一区域反复命中 → 合并到同一冰斑（逐渐加厚）
+      let fp = ent.frostPts.find(p => Math.hypot(p.ox - ox, p.oy - oy) < R * 0.7 && p.melt < 0.3);
+      if (!fp) {
+        fp = { ox, oy, t: 0, melt: 0, dead: false };
+        ent.frostPts.push(fp);
+        if (ent.frostPts.length > 5) ent.frostPts.shift();
+      } else fp.t = Math.max(fp.t, 0.4);   // 续冻：保持厚度
+    } else if (type === 'poison') {
+      burst(g, hx, hy, 10, ELEM_HIT_COLS.poison, 120, 3, 0.34, 90);
+      if (!ent.poisonPts) ent.poisonPts = [];
+      ent.poisonPts.push({ ox, oy, seed: rand(0, TAU), t: 0, life: 7.2 });
+      if (ent.poisonPts.length > 6) ent.poisonPts.shift();
+    }
+  }
+
+  /** 标记年龄推进 / 过期清理（异常结束后冰霜快速消融，其余按 life 淡出） */
+  function elemMarksTick(ent, dt) {
+    if (ent.burnMarks && ent.burnMarks.length) {
+      ent.burnMarks.forEach(m => { m.t += dt; });
+      ent.burnMarks = ent.burnMarks.filter(m => m.t < m.life);
+    }
+    if (ent.poisonPts && ent.poisonPts.length) {
+      ent.poisonPts.forEach(m => { m.t += dt; });
+      ent.poisonPts = ent.poisonPts.filter(m => m.t < m.life);
+    }
+    if (ent.frostPts && ent.frostPts.length) {
+      ent.frostPts.forEach(p => {
+        p.t += dt;
+        if (ent.dotType !== 'ice' || ent.dotT <= 0) p.melt += dt * 2.0;   // 异常结束：快速消融
+        if (p.melt >= 1 || p.t > 7) p.dead = true;
+      });
+      ent.frostPts = ent.frostPts.filter(p => !p.dead);
+    }
+  }
+
+  /** 异常持续期间：身体随机位置冒出小火苗 / 绿色毒泡像素 */
+  function elemAmbient(ent, dt, g) {
+    if (!ent.dotType || ent.dotT <= 0) return;
+    ent._ambT = (ent._ambT || 0) - dt;
+    if (ent._ambT > 0) return;
+    ent._ambT = 0.13;
+    const R = ent.radius || 20;
+    const px = ent.x + rand(-R * 0.75, R * 0.75);
+    const py = ent.y + rand(-R * 0.8, R * 0.45);
+    if (ent.dotType === 'flame') {
+      g.particles.push(new Particle(px, py, rand(-16, 16), -rand(34, 82),
+        rand(0.25, 0.45), rand(2, 3.6), Math.random() < 0.5 ? '#ff7b2e' : '#ffd23b'));
+    } else if (ent.dotType === 'poison') {
+      g.particles.push(new Particle(px, py, rand(-12, 12), -rand(20, 48),
+        rand(0.35, 0.6), rand(1.8, 3.4), Math.random() < 0.5 ? '#7dff6a' : '#2dd44a'));
+    }
+  }
+
+  /** 灼烧死亡圆形小火球爆炸 / 中毒死亡毒云爆发（纯视觉，无伤害） */
+  function elemDeathFx(x, y, type, g, R) {
+    R = R || 22;
+    if (type === 'flame') {
+      burst(g, x, y, 20, ['#ff7b2e', '#ff5a1a', '#ffd23b', '#c23408', '#8f1d04'], 150, 4, 0.4, 60);
+      if (g.addElemFx) g.addElemFx({ kind: 'fireboom', x, y, t: 0, life: 0.45, r: R });
+    } else if (type === 'poison') {
+      burst(g, x, y, 14, ['#2dd44a', '#7dff6a', '#0a3a0a', '#4ade80'], 90, 4, 0.5);
+      if (g.addElemFx) g.addElemFx({ kind: 'pcloud', x, y, t: 0, life: 1.3, r: R });
+    }
+  }
+
+  /** 身上的异常像素标记渲染（世界坐标，小怪/Boss 通用） */
+  function renderElemMarks(ctx, ent) {
+    const R = ent.radius || 20;
+    const cs = clamp(R * 0.10, 2.5, 6);    // 单像素块尺寸随敌体缩放
+    const tt = ent.t || 0;
+    // —— 灼烧：暗红裂纹（自命中点发散的短折线段）+ 边缘细小火焰像素 ——
+    (ent.burnMarks || []).forEach(m => {
+      const fade = m.t > m.life - 0.8 ? (m.life - m.t) / 0.8 : 1;
+      ctx.globalAlpha = clamp(fade, 0, 1);
+      const x0 = ent.x + m.ox, y0 = ent.y + m.oy;
+      for (let s = 0; s < 4; s++) {
+        const ang = m.seed + s * (TAU / 4) + (pxHash(s, 0, m.seed) - 0.5) * 0.9;
+        const len = 5 + pxHash(s, 1, m.seed) * R * 0.55;
+        const steps = 3 + Math.floor(pxHash(s, 2, m.seed) * 2);
+        for (let q = 1; q <= steps; q++) {
+          const d = len * q / steps;
+          const jx = (pxHash(q, s, m.seed) - 0.5) * 4;
+          ctx.fillStyle = q === steps ? '#8f1d04' : '#c23408';
+          ctx.fillRect(x0 + Math.cos(ang) * d + jx - cs / 2, y0 + Math.sin(ang) * d - cs / 2, cs, cs);
+        }
+      }
+      // 边缘小火苗：2 处，按身体时间跳动
+      for (let s = 0; s < 2; s++) {
+        if (Math.floor(tt * 10 + m.seed * 3 + s) % 3 === 0) {
+          const fx = x0 + Math.cos(m.seed + s * 2.4) * (6 + R * 0.25);
+          const fy = y0 + Math.sin(m.seed + s * 2.4) * (6 + R * 0.25);
+          ctx.fillStyle = s ? '#ffd23b' : '#ff7b2e';
+          ctx.fillRect(fx - cs / 2, fy - cs / 2, cs, cs);
+        }
+      }
+    });
+    ctx.globalAlpha = 1;
+    // —— 腐蚀斑块：墨绿像素块 + 周期性冒起的绿色毒泡 ——
+    (ent.poisonPts || []).forEach(m => {
+      const fade = m.t > m.life - 1.0 ? (m.life - m.t) : 1;
+      ctx.globalAlpha = clamp(fade, 0, 1);
+      const x0 = ent.x + m.ox, y0 = ent.y + m.oy;
+      for (let s = 0; s < 8; s++) {
+        const ang = pxHash(s, 0, m.seed) * TAU;
+        const d = pxHash(s, 1, m.seed) * R * 0.6;
+        ctx.fillStyle = pxHash(s, 2, m.seed) > 0.5 ? '#0a3a0a' : '#14532d';
+        const bs = cs * (0.9 + pxHash(s, 3, m.seed) * 0.6);
+        ctx.fillRect(x0 + Math.cos(ang) * d - bs / 2, y0 + Math.sin(ang) * d - bs / 2, bs, bs);
+      }
+      // 毒泡：斑块上周期性鼓出的亮绿像素
+      if (Math.floor(tt * 3.5 + m.seed * 9) % 3 === 0) {
+        const bx = x0 + (pxHash(7, 0, m.seed) - 0.5) * R * 0.7;
+        const by = y0 + (pxHash(7, 1, m.seed) - 0.5) * R * 0.7;
+        ctx.fillStyle = '#7dff6a';
+        ctx.fillRect(bx - cs / 2, by - cs / 2, cs * 0.8, cs * 0.8);
+      }
+    });
+    ctx.globalAlpha = 1;
+    // —— 冰霜：从命中点向外覆盖、逐渐加厚（先浅蓝底冰，厚度上来后压冷白霜层） ——
+    (ent.frostPts || []).forEach(p => {
+      const k = clamp(p.t / 1.2, 0, 1) * (1 - clamp(p.melt, 0, 1));
+      if (k <= 0.02) return;
+      const x0 = ent.x + p.ox, y0 = ent.y + p.oy;
+      const rad = 5 + k * R * 0.8;
+      ctx.globalAlpha = 0.8 * k;
+      for (let s = 0; s < 11; s++) {
+        const ang = pxHash(s, 0, p.ox + p.oy) * TAU;
+        const d = pxHash(s, 1, p.ox - p.oy) * rad;
+        ctx.fillStyle = '#9fd8ff';
+        ctx.fillRect(x0 + Math.cos(ang) * d - cs / 2, y0 + Math.sin(ang) * d - cs / 2, cs, cs);
+      }
+      if (k > 0.45) {
+        ctx.globalAlpha = (k - 0.45) * 1.3;
+        for (let s = 0; s < 6; s++) {
+          const ang = pxHash(s, 4, p.ox * 2) * TAU;
+          const d = pxHash(s, 5, p.oy * 2) * rad * 0.6;
+          ctx.fillStyle = '#eaf7ff';
+          ctx.fillRect(x0 + Math.cos(ang) * d - cs / 2, y0 + Math.sin(ang) * d - cs / 2, cs, cs);
+        }
+      }
+    });
+    ctx.globalAlpha = 1;
+  }
+
   class Bullet {
     /** kind: bolt / orb / shuriken / feather / whirl / flame / fireball / katana / spark / shell / missile / float / apple / cross / knife / axe */
     constructor(x, y, vx, vy, opts) {
@@ -221,6 +506,7 @@
       this.color = opts.color || '';           // 自定义弹体颜色（敌方 orb 等）
       this.sineWave = opts.sine || null;       // S 形弹道：{ amp, freq, phase }（飞刀线性 S 走向）
       this.fireTrail = !!opts.fireTrail;       // 火焰弹：飞行时喷射火焰粒子拖尾 + 火焰分层渲染
+      this.pxFire = !!opts.pxFire;             // 像素火球（火鸡王火焰弹）：圆形三层像素火球新样式，尺寸不变
       this.trailCols = opts.trailCols || null; // 自定义拖尾粒子配色（紫焰苹果等），设置后即启用拖尾
       /* —— 大型波形式弹幕（火遮眼火焰斩等）：沿速度方向的旋转矩形判定盒 —— */
       this.boxW = opts.boxW || 0;              // 判定盒沿飞行方向全长（0=退化为圆形判定）
@@ -284,6 +570,33 @@
         this.hkCd = 0;                         // 铁钩本体伤害节流
         this.hkGrabbed = false;                // 本钩是否已钩中过人（每钩只钩一次）
         this.hkGrab = null;                    // 拖拽中：{p,dist,ox,oy} 玩家挂在钩尖的局部偏移与累计行程
+      }
+      /* —— 鸦伯爵专属弹种（gem 菱形彩色宝石：本体有伤害、拖尾无伤害） —— */
+      if (this.kind === 'gem') {
+        this.gemTier = opts.gemTier || 0;      // 尺寸档：0=小0.5x / 1=中1.5x / 2=大2x
+        this.gemMode = opts.gemMode || 'throw';// throw 飞掷前慢后快 / fwd 高潮前飞 / ret 去程回程
+        this.gPhase = this.gemMode === 'ret' ? 'out' : 'fly';  // ret: out→pause→back
+        this.gT = 0;
+        this.gemV0 = opts.gemV0 || 0;          // 飞掷前段速度（慢）
+        this.gemV1 = opts.gemV1 || 0;          // 飞掷后段速度（突然加速）
+        this.foldX = opts.foldX || 0;          // 回旋折返点 x
+        this.pauseT = opts.pauseT || 0;        // 急停时长
+        this.outA = Math.atan2(vy, vx);        // 去程方向（回旋折返按此反向）
+        this.backA = 0;                        // 回程方向（折返瞬间算出）
+        this.pOld = null;                      // 折返瞬间玩家旧位置（回程偏折目标）
+        this.gemPts = [];                      // 拖尾轨迹点
+        this.glintT = 0;
+        this.gemCol = opts.gemCol !== undefined ? opts.gemCol : randi(0, GEM_COLS.length - 1);
+      }
+      /* —— 雪巫专属弹种（icicle 六角冰晶 / icering 空心冰环） —— */
+      if (this.kind === 'icicle') {
+        this.mistT = 0;                        // 白蓝冰雾拖尾节流（拖尾仅视觉、无伤害）
+      }
+      if (this.kind === 'icering') {
+        this.irOuter = opts.irOuter || 50;     // 环带外缘（冰刺尖在此之外）
+        this.irInner = opts.irInner || 30;     // 环带内缘（以内为安全区）
+        this.irCd = 0;                         // 环带接触伤害节流
+        this.irGrow = 0;                       // 生成展开动画进度 0→1
       }
       /* —— 击杀者归因：显式 opts.src 优先，否则继承发射时刻的当前敌人/Boss —— */
       this.src = opts.src || shooterSrc();
@@ -526,7 +839,8 @@
       }
       // 火焰弹拖尾：沿飞行反方向持续喷射火焰粒子（弹体越大粒子越粗）；trailCols 可自定义配色（紫焰苹果）
       // trailLite（角色最终形态）：稀疏、细小、短命的微粒，仅作点缀不遮挡战场
-      if ((this.fireTrail || this.trailCols) && !this.neutralized) {
+      // pxFire（火鸡王像素火球）不走大块火焰，改走下方「火星向上飘散」像素拖尾
+      if ((this.fireTrail || this.trailCols) && !this.pxFire && !this.neutralized) {
         this.trail += dt;
         const tick = this.trailLite ? 0.11 : 0.03;
         if (this.trail > tick) {
@@ -547,6 +861,74 @@
               this.trailLite ? rand(0.14, 0.26) : rand(0.35, 0.7), psize,
               fireCols[randi(0, fireCols.length - 1)]));
           }
+        }
+      }
+      // 像素火球（玩家火焰弹 / 火鸡王火焰弹）：球后拖出火星像素，火星向上飘散
+      if ((this.pxFire || (this.friendly && this.element === 'flame')) && !this.neutralized) {
+        this.trail += dt;
+        if (this.trail > 0.045) {
+          this.trail = 0;
+          const spd = Math.hypot(this.vx, this.vy) || 1;
+          const bx = this.vx / spd, by = this.vy / spd;
+          for (let i = 0; i < 2; i++) {
+            g.particles.push(new Particle(
+              this.x - bx * this.r * 0.9 + rand(-2, 2),
+              this.y - by * this.r * 0.9 + rand(-2, 2),
+              -bx * rand(30, 90) + rand(-18, 18),
+              -by * rand(20, 60) - rand(28, 70),     // 火星固定向上飘散
+              rand(0.22, 0.42), rand(1.6, 3.2) * Math.max(1, this.r / 7),
+              Math.random() < 0.5 ? '#ffd23b' : (Math.random() < 0.6 ? '#ff9d2e' : '#ff5a1a')));
+          }
+        }
+      }
+      // 寒冰弹拖尾：细长冰晶像素轨迹（冷白/浅蓝，向后缓飘）
+      if (this.friendly && this.element === 'ice' && !this.neutralized) {
+        this.trail += dt;
+        if (this.trail > 0.05) {
+          this.trail = 0;
+          const spd = Math.hypot(this.vx, this.vy) || 1;
+          const bx = this.vx / spd, by = this.vy / spd;
+          g.particles.push(new Particle(
+            this.x - bx * this.r + rand(-2, 2), this.y - by * this.r + rand(-2, 2),
+            -bx * rand(20, 70) + rand(-14, 14), -by * rand(20, 70) + rand(-14, 14),
+            rand(0.26, 0.46), rand(1.6, 3),
+            Math.random() < 0.45 ? '#eaf7ff' : (Math.random() < 0.6 ? '#bfe9ff' : '#7fc6ef')));
+        }
+      }
+      // 毒液弹拖尾：粘稠丝线像素 + 滴落毒液像素点（向下坠落）；穿过障碍时在墙上留腐蚀痕
+      if (this.friendly && this.element === 'poison' && !this.neutralized) {
+        this.trail += dt;
+        if (this.trail > 0.05) {
+          this.trail = 0;
+          const spd = Math.hypot(this.vx, this.vy) || 1;
+          const bx = this.vx / spd, by = this.vy / spd;
+          // 粘稠丝线：浅绿短像素，悬在弹道上
+          g.particles.push(new Particle(
+            this.x - bx * this.r, this.y - by * this.r,
+            -bx * rand(10, 40), -by * rand(10, 40),
+            rand(0.18, 0.3), rand(1.6, 2.6), '#7dff6a'));
+          // 滴落毒液：深绿颗粒，带向下初速
+          if (Math.random() < 0.7) {
+            g.particles.push(new Particle(
+              this.x - bx * this.r * 0.6 + rand(-3, 3), this.y - by * this.r * 0.6 + rand(-3, 3),
+              -bx * rand(10, 40) + rand(-12, 12), -by * rand(0, 20) + rand(20, 60),
+              rand(0.25, 0.45), rand(2, 3.6), Math.random() < 0.5 ? '#14532d' : '#2dd44a', 220));
+          }
+        }
+        // 命中墙壁（山石/破碎障碍）：留下绿色腐蚀痕迹，每面墙只留一次（离开后重置）
+        if (g.addPoisonStain) {
+          let wall = null;
+          for (const rk of g.rocks) {
+            if (!rk.dead && rk.contains && rk.contains(this.x, this.y, this.r)) { wall = rk; break; }
+          }
+          if (!wall) {
+            for (const k of g.breakables) {
+              if (!k.dead && k.onScreen && k.contains(this.x, this.y, this.r)) { wall = k; break; }
+            }
+          }
+          if (wall) {
+            if (this._stainWall !== wall) { this._stainWall = wall; g.addPoisonStain(this.x, this.y); }
+          } else this._stainWall = null;
         }
       }
       // 弹速强化速度线：我方弹弹尾拉出青白速度线，等级越高越长越密（纯视觉反馈）
@@ -791,6 +1173,61 @@
         }
         this._ox = ox; this._oy = oy;
       }
+      /* —— 鸦伯爵宝石（运动控制，统一在通用位移前算出 vx/vy）：三拍循环中段各自加速 / 抛物线抛掷 / 去程回程反转 —— */
+      if (this.kind === 'gem' && !this.neutralized) {
+        const P = CFG.crowCount;
+        const mul = P.gemSpdMul[this.gemTier] * (this.enr ? P.enrSpdMul : 1);
+        this.gT += dt;
+        if (this.gemMode === 'throw' || this.gemMode === 'fwd') {
+          if (this.gPhase === 'fly') {
+            // 前段慢：弧线飞向玩家，飞行中逐渐修正方向（throw 修正强 / fwd 修正弱）
+            const turn = this.gemMode === 'throw' ? P.throwTurn : P.fwdTurn;
+            const sp = this.gemV0 * mul;
+            const ta = Math.atan2(g.player.y - this.y, g.player.x - this.x);
+            let d = ta - this.outA;
+            while (d > Math.PI) d -= TAU;
+            while (d < -Math.PI) d += TAU;
+            this.outA += clamp(d, -turn * dt, turn * dt);
+            this.vx = Math.cos(this.outA) * sp; this.vy = Math.sin(this.outA) * sp;
+            if (this.x <= P.accX) this.gPhase = 'dash';   // 飞到屏幕中段各自加速
+          } else {
+            const sp = this.gemV1;                        // 加速目标为绝对值：强拍最猛
+            this.vx = Math.cos(this.outA) * sp; this.vy = Math.sin(this.outA) * sp;
+          }
+        } else if (this.gemMode === 'lob') {
+          // 抛掷：重力抛物线，从上方落下封走位（触地碎裂在位移后统一处理）
+          this.vy += P.lobG * dt;
+        } else {
+          // 回旋：直线前飞 → 指定点急停 → 瞬间掉头180°沿原路折返（轻微偏向玩家旧位置）
+          if (this.gPhase === 'out') {
+            const sp = P.retSpd * mul;
+            this.vx = Math.cos(this.outA) * sp; this.vy = Math.sin(this.outA) * sp;
+            if (this.x <= this.foldX) {
+              this.gPhase = 'pause'; this.gT = 0;
+              this.pOld = { x: g.player.x, y: g.player.y };
+              const C0 = GEM_COLS[this.gemCol];
+              burst(g, this.x, this.y, 9, [C0.main, C0.lite, '#fff'], 190, 4, 0.3);
+            }
+          } else if (this.gPhase === 'pause') {
+            this.vx = 0; this.vy = 0;
+            if (this.gT >= this.pauseT) {
+              this.gPhase = 'back';
+              let aBack = this.outA + Math.PI;                    // 瞬间掉头 180°
+              const aP = Math.atan2(this.pOld.y - this.y, this.pOld.x - this.x);
+              let d = aP - aBack;
+              while (d > Math.PI) d -= TAU;
+              while (d < -Math.PI) d += TAU;
+              aBack += d * P.retBias;                             // 折返轻微偏向玩家旧位置（身后危险成立）
+              this.backA = aBack;
+              const sp = P.retSpd * mul * P.retBackMul;           // 回程快
+              this.vx = Math.cos(aBack) * sp; this.vy = Math.sin(aBack) * sp;
+            }
+          } else {
+            const sp = P.retSpd * mul * P.retBackMul;
+            this.vx = Math.cos(this.backA) * sp; this.vy = Math.sin(this.backA) * sp;
+          }
+        }
+      }
       this.x += this.vx * dt; this.y += this.vy * dt;
       /* ============== 深海恶霸弹种（位移后：水鲨追踪 / 炸弹起爆 / 铁链模拟伤害） ============== */
       if (this.kind === 'wshark' && !this.dead && !this.neutralized) {
@@ -971,6 +1408,70 @@
               const t = clamp(((p.x - A.x) * vx + (p.y - A.y) * vy) / len2, 0, 1);
               const cx = A.x + vx * t, cy = A.y + vy * t;
               if (Math.hypot(p.x - cx, p.y - cy) < cw) { p.hurt(this.dmg, g, this.src); break; }
+            }
+          }
+        }
+      }
+
+      /* —— 鸦伯爵宝石（位移后：彩色拖尾轨迹点 / 触地碎裂；拖尾仅视觉、无伤害） —— */
+      if (this.kind === 'gem' && !this.dead) {
+        this.gemPts.push({ x: this.x, y: this.y });
+        if (this.gemPts.length > 18) this.gemPts.shift();
+        if (!this.neutralized) {
+          this.glintT -= dt;
+          if (this.glintT <= 0) {
+            this.glintT = 0.06;
+            const C1 = GEM_COLS[this.gemCol];
+            g.particles.push(new Particle(
+              this.x + rand(-this.r * 0.4, this.r * 0.4), this.y + rand(-this.r * 0.4, this.r * 0.4),
+              rand(-26, 26) - this.vx * 0.06, rand(-40, 4) - this.vy * 0.06,
+              rand(0.28, 0.55), rand(2, 4.6) * Math.max(0.6, this.r / 30),
+              Math.random() < 0.5 ? C1.main : C1.lite));
+          }
+        }
+        // 触地碎裂
+        const gyG = g.groundYAt ? g.groundYAt(this.x) : CFG.GROUND_Y;
+        if (this.y > gyG - this.r * 0.35) {
+          const C2 = GEM_COLS[this.gemCol];
+          this.dead = true;
+          burst(g, this.x, gyG - 4, 8, [C2.main, C2.lite, '#fff'], 150, 4, 0.35);
+        }
+      }
+
+      /* ================= 雪巫弹种（位移后：冰晶冰雾拖尾/触地碎散；冰环环带自管伤害） ================= */
+      if (this.kind === 'icicle' && !this.dead && !this.neutralized) {
+        // 白蓝冰雾拖尾（仅视觉，无伤害）：向上飘散的冷雾微粒
+        this.mistT -= dt;
+        if (this.mistT <= 0) {
+          this.mistT = 0.07;
+          for (let i = 0; i < 2; i++) {
+            g.particles.push(new Particle(
+              this.x + rand(-4, 4), this.y + rand(2, 10),
+              -this.vx * 0.12 + rand(-26, 26), rand(-56, -14),
+              rand(0.3, 0.62), rand(2, 5),
+              Math.random() < 0.5 ? 'rgba(214,238,255,0.8)' : 'rgba(150,205,255,0.6)'));
+          }
+        }
+        // 触地碎散成冰粉
+        const gyI = g.groundYAt ? g.groundYAt(this.x) : CFG.GROUND_Y;
+        if (this.y > gyI - 4) {
+          this.y = gyI - 4;
+          this.dead = true;
+          burst(g, this.x, gyI - 4, 5, ['#eaf6ff', '#9fd4ff', '#cfe8ff'], 110, 3, 0.3);
+        }
+      }
+      if (this.kind === 'icering' && !this.dead) {
+        this.irCd = Math.max(0, this.irCd - dt);
+        this.irGrow = Math.min(1, this.irGrow + dt / 0.18);
+        if (!this.neutralized) {
+          // 环形伤害：仅环带（inner~outer 之间）与玩家圆重叠才受伤——环心安全、环外安全
+          const p = g.player;
+          const d = Math.hypot(p.x - this.x, p.y - this.y);
+          const pr = p.radius * 0.85;
+          if (this.irCd <= 0 && d < this.irOuter + pr && d > this.irInner - pr) {
+            if (p.hurt(this.dmg, g, this.src)) {
+              this.irCd = 0.4;
+              burst(g, p.x, p.y, 8, ['#cfeaff', '#7fc4ff', '#ffffff'], 150, 3, 0.35);
             }
           }
         }
@@ -1277,6 +1778,72 @@
       const k = this.kind;
       /* —— 飞行弹幕小怪能量弹（纯亮矢量弹体 + 能量光带拖尾） —— */
       if (this.eb) { this.renderEnergy(ctx); return; }
+      /* ================= 鸦伯爵宝石渲染（菱形彩色宝石 + 内部高亮切面 + 彩色长拖尾） ================= */
+      if (k === 'gem') {
+        const C = GEM_COLS[this.gemCol];
+        const baseAlpha = ctx.globalAlpha;
+        // 彩色长拖尾（无伤害）：沿轨迹渐细渐隐光带
+        const pts = this.gemPts;
+        if (pts && pts.length > 2) {
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          for (let i = 1; i < pts.length; i++) {
+            const f = i / pts.length;          // 0=尾端 1=弹体端
+            ctx.globalAlpha = baseAlpha * 0.42 * f * this.fade;
+            ctx.strokeStyle = C.main;
+            ctx.lineWidth = Math.max(1.5, this.r * 0.55 * f);
+            ctx.beginPath();
+            ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
+            ctx.lineTo(pts[i].x, pts[i].y);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = baseAlpha;
+        }
+        const R = this.r;
+        const base = baseAlpha * this.fade;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.spin * 0.4);           // 缓慢翻滚的宝石切面感
+        ctx.globalAlpha = base;
+        // 外发光
+        ctx.shadowColor = C.main; ctx.shadowBlur = 8 + R * 0.18;
+        // 菱形本体（纵向长菱形）
+        ctx.fillStyle = C.main;
+        ctx.beginPath();
+        ctx.moveTo(0, -R * 1.3); ctx.lineTo(R * 0.8, 0); ctx.lineTo(0, R * 1.3); ctx.lineTo(-R * 0.8, 0);
+        ctx.closePath(); ctx.fill();
+        ctx.shadowBlur = 0;
+        // 左下暗切面
+        ctx.fillStyle = C.dark;
+        ctx.beginPath();
+        ctx.moveTo(0, -R * 1.3); ctx.lineTo(0, R * 1.3); ctx.lineTo(-R * 0.8, 0);
+        ctx.closePath(); ctx.fill();
+        // 右上亮切面
+        ctx.fillStyle = C.lite;
+        ctx.beginPath();
+        ctx.moveTo(0, -R * 1.3); ctx.lineTo(R * 0.8, 0); ctx.lineTo(0, 0);
+        ctx.closePath(); ctx.fill();
+        // 内部切面横纹
+        ctx.strokeStyle = C.lite; ctx.lineWidth = Math.max(1, R * 0.07);
+        ctx.beginPath();
+        ctx.moveTo(-R * 0.42, -R * 0.38); ctx.lineTo(R * 0.42, -R * 0.38);
+        ctx.moveTo(-R * 0.42, R * 0.38); ctx.lineTo(R * 0.42, R * 0.38);
+        ctx.stroke();
+        // 白色高光星芒
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(-R * 0.1, -R * 0.66); ctx.lineTo(R * 0.06, -R * 0.42); ctx.lineTo(-R * 0.1, -R * 0.3); ctx.lineTo(-R * 0.28, -R * 0.46);
+        ctx.closePath(); ctx.fill();
+        // 回旋宝石急停期：白色脉冲圈（提示即将折返）
+        if (this.gemMode === 'ret' && this.gPhase === 'pause') {
+          const k2 = Math.min(1, this.gT / Math.max(0.001, this.pauseT));
+          ctx.strokeStyle = `rgba(255,255,255,${0.55 * (1 - k2)})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(0, 0, R * 1.5 + R * 0.9 * k2, 0, TAU); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.globalAlpha = baseAlpha;
+        return;
+      }
       /* ================= 深海恶霸弹种渲染 ================= */
       if (k === 'wshark') {
         // 追踪水鲨：半透明蓝灰水体，头部/背鳍/胸鳍/尾鳍轮廓清晰，身体与尾巴持续摆动
@@ -1460,6 +2027,98 @@
         ctx.fillRect(8, -6, 6, 12);
         ctx.fillStyle = '#8b93a3';
         ctx.fillRect(9, -5, 1.6, 10);
+        ctx.restore();
+        return;
+      }
+      /* ================= 雪巫弹种渲染 ================= */
+      if (k === 'icicle') {
+        // 蓝白六角冰晶：棱形柱晶尖端朝下，随斜落方向轻微倾斜（始终近垂直）
+        const tilt = clamp(this.vx / Math.max(1, this.vy), -0.7, 0.7) * 0.55;
+        const w = this.r * 0.95, L = this.r * 1.8;
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(tilt);
+        ctx.shadowColor = 'rgba(120,200,255,0.9)'; ctx.shadowBlur = 8;
+        ctx.fillStyle = '#bfe4ff';
+        ctx.strokeStyle = '#2b7fc4'; ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(0, L);                 // 下尖端
+        ctx.lineTo(w, L * 0.3);
+        ctx.lineTo(w * 0.82, -L * 0.55);
+        ctx.lineTo(0, -L * 0.84);        // 上尖端
+        ctx.lineTo(-w * 0.82, -L * 0.55);
+        ctx.lineTo(-w, L * 0.3);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.shadowBlur = 0;
+        // 内部棱面（白蓝高光）
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.beginPath();
+        ctx.moveTo(0, L * 0.72);
+        ctx.lineTo(w * 0.42, L * 0.2);
+        ctx.lineTo(w * 0.3, -L * 0.4);
+        ctx.lineTo(0, -L * 0.62);
+        ctx.lineTo(-w * 0.3, -L * 0.4);
+        ctx.lineTo(-w * 0.42, L * 0.2);
+        ctx.closePath(); ctx.fill();
+        // 中央亮轴
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, -L * 0.72); ctx.lineTo(0, L * 0.84); ctx.stroke();
+        ctx.restore();
+        return;
+      }
+      if (k === 'icering') {
+        // 蓝白透明冰环：外圈厚环带 + 旋转冰刺，环心通透安全（中心仅极淡雪花提示）
+        const grow = 1 - Math.pow(1 - this.irGrow, 3);
+        const pulse = 0.97 + 0.03 * Math.sin(this.t * 6);
+        const oR = this.irOuter * grow * pulse;
+        const iR = this.irInner * grow;
+        const big = this.irOuter > 50;
+        ctx.save(); ctx.translate(this.x, this.y);
+        // 极淡冰雾填充（环心与环带同色但极浅，几乎不遮挡）
+        ctx.fillStyle = 'rgba(160,215,255,0.05)';
+        ctx.beginPath(); ctx.arc(0, 0, oR, 0, TAU); ctx.fill();
+        // 外圈冰刺（缓慢自转）
+        const n = big ? 14 : 10;
+        ctx.save(); ctx.rotate(this.t * 0.9);
+        ctx.fillStyle = 'rgba(224,243,255,0.92)';
+        ctx.strokeStyle = 'rgba(80,150,220,0.85)'; ctx.lineWidth = 1;
+        for (let i = 0; i < n; i++) {
+          const a = TAU / n * i;
+          const ca = Math.cos(a), sa = Math.sin(a);
+          ctx.beginPath();
+          ctx.moveTo(ca * (oR - 3), sa * (oR - 3));
+          ctx.lineTo(ca * (oR + 9), sa * (oR + 9));
+          ctx.lineTo(Math.cos(a + TAU / n * 0.32) * (oR - 3), Math.sin(a + TAU / n * 0.32) * (oR - 3));
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+        // 厚环带（透明冰体）
+        ctx.beginPath();
+        ctx.arc(0, 0, oR, 0, TAU);
+        ctx.arc(0, 0, iR, 0, TAU, true);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(150,205,255,0.26)';
+        ctx.fill('evenodd');
+        // 外/内缘描边（外圈厚亮）
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(228,245,255,0.95)'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(0, 0, oR, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = 'rgba(120,185,240,0.85)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, 0, iR, 0, TAU); ctx.stroke();
+        // 环带上的冰结晶刻面（亮点随自转缓移）
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        for (let i = 0; i < 6; i++) {
+          const a = this.t * 0.5 + i * TAU / 6;
+          ctx.beginPath();
+          ctx.arc(Math.cos(a) * (oR - 5), Math.sin(a) * (oR - 5), 1.7, 0, TAU); ctx.fill();
+        }
+        // 环心：极淡六出雪花（安全区提示，不挡视野）
+        ctx.strokeStyle = 'rgba(220,240,255,0.22)'; ctx.lineWidth = 1.4;
+        for (let i = 0; i < 3; i++) {
+          const a = this.t * 0.9 + i * Math.PI / 3;
+          ctx.beginPath();
+          ctx.moveTo(-Math.cos(a) * iR * 0.4, -Math.sin(a) * iR * 0.4);
+          ctx.lineTo(Math.cos(a) * iR * 0.4, Math.sin(a) * iR * 0.4);
+          ctx.stroke();
+        }
         ctx.restore();
         return;
       }
@@ -1748,8 +2407,10 @@
         return;
       }
       if (k === 'orb' || k === 'spark') {
-        // 元素弹道优先走自定义渲染（火焰圆形/毒液菱形/寒冰锥型）
+        // 元素弹道优先走自定义渲染（三层圆形像素火球/墨绿毒液团/六棱冰锥）
         if (this.element) { this.renderElement(ctx); return; }
+        // 火鸡王像素火球：与玩家火焰弹同款三层圆形像素造型（尺寸保持 r 不变）
+        if (this.pxFire) { drawPxFireball(ctx, this.x, this.y, this.r, this.t, this.vx, this.vy); return; }
         // 火焰弹：暗红→橙→黄→白芯分层 + 跳动闪烁
         if (this.fireTrail) {
           const r = this.r;
@@ -2886,32 +3547,14 @@
       }
     }
 
-    /** 元素弹道专用渲染：火焰=红色圆形，毒液=绿色菱形，寒冰=蓝色锥型 */
+    /** 元素弹道专用渲染：火焰=三层圆形像素火球，毒液=墨绿粘稠液团，寒冰=六棱冰锥 */
     renderElement(ctx) {
-      const r = this.r;
       if (this.element === 'flame') {
-        ctx.fillStyle = '#cc1a00'; ctx.beginPath(); ctx.arc(this.x, this.y, r + 2, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#ff3b1a'; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#ffdd55'; ctx.beginPath(); ctx.arc(this.x, this.y, r * 0.45, 0, TAU); ctx.fill();
+        drawPxFireball(ctx, this.x, this.y, this.r, this.t, this.vx, this.vy);
       } else if (this.element === 'poison') {
-        ctx.save(); ctx.translate(this.x, this.y);
-        ctx.fillStyle = '#0a3a0a';
-        ctx.beginPath(); ctx.moveTo(0, -r - 2); ctx.lineTo(r + 2, 0); ctx.lineTo(0, r + 2); ctx.lineTo(-r - 2, 0); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#2dd44a';
-        ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#a6ffa6';
-        ctx.beginPath(); ctx.moveTo(0, -r * 0.4); ctx.lineTo(r * 0.4, 0); ctx.lineTo(0, r * 0.4); ctx.lineTo(-r * 0.4, 0); ctx.closePath(); ctx.fill();
-        ctx.restore();
+        drawPxPoison(ctx, this.x, this.y, this.r, this.t, this.vx, this.vy);
       } else if (this.element === 'ice') {
-        const a = Math.atan2(this.vy, this.vx);
-        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
-        ctx.fillStyle = '#1a5a8a';
-        ctx.beginPath(); ctx.moveTo(r + 3, 0); ctx.lineTo(-r - 1, -r - 1); ctx.lineTo(-r - 1, r + 1); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#4ab8ff';
-        ctx.beginPath(); ctx.moveTo(r, 0); ctx.lineTo(-r, -r * 0.8); ctx.lineTo(-r, r * 0.8); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#e0f7ff';
-        ctx.beginPath(); ctx.moveTo(r * 0.5, 0); ctx.lineTo(-r * 0.5, -r * 0.35); ctx.lineTo(-r * 0.5, r * 0.35); ctx.closePath(); ctx.fill();
-        ctx.restore();
+        drawPxIce(ctx, this.x, this.y, this.r, this.t, this.vx, this.vy);
       }
     }
   }
@@ -3236,6 +3879,7 @@
       this.downWay = false;   // 下部向下弹道
       // 元素弹道（击败 Boss 后解锁，总最多 3 条，FIFO 替换最早获得的）
       this.elementWay = [];     // ['flame', 'poison', 'ice', ...] 顺序代表获得先后
+      this.elemCd = [];         // 与 elementWay 平行的独立发射冷却（火焰3s/寒冰2s；毒液0=随主射速）
       // 元素精通等级（三选一成长，0-3；决定元素弹 DoT 系数/持续/冻结时长）
       this.elemLv = { flame: 0, poison: 0, ice: 0 };
       // 闪电子弹（闪电链）
@@ -3928,6 +4572,11 @@
 
       // 自动射击（近战期间停火；射速按角色射速倍率；Boss 台词演出期间全局停火）
       if (!this.isMeleeing && !g.shootDisabled) {
+        // 元素弹道独立冷却（火焰3s/寒冰2s；毒液 interval=0 不走冷却）
+        for (let w = 0; w < this.elementWay.length; w++) {
+          const eb = CFG.elementBullet[this.elementWay[w]];
+          if (eb && eb.interval > 0 && this.elemCd[w] > 0) this.elemCd[w] = Math.max(0, this.elemCd[w] - dt);
+        }
         this.fireT -= dt;
         if (this.fireT <= 0) {
           this.fireT = this.fireInt || CFG.player.fireInterval;
@@ -4101,19 +4750,40 @@
         });
       }
       // 元素弹道：遍历 elementWay 队列，按获得顺序发射（总最多 3 条）
+      // 火焰/寒冰有独立发射间隔（3s/2s 重炮）；毒液 interval=0 跟随主射速高频射出
       const elemCount = this.elementWay.length;
+      // 防御性对齐：三选一 FIFO 替换理论上已同步 elemCd，长度不一致时截断/补零
+      if (this.elemCd.length !== elemCount) {
+        if (this.elemCd.length > elemCount) this.elemCd.length = elemCount;
+        else while (this.elemCd.length < elemCount) this.elemCd.push(0);
+      }
       for (let w = 0; w < elemCount; w++) {
-        const off = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 0.42);
         const el = this.elementWay[w];
+        const eb = CFG.elementBullet[el];
+        // 独立冷却未到：该条弹道本轮不发射
+        if (eb.interval > 0 && (this.elemCd[w] || 0) > 0) continue;
+        if (eb.interval > 0) this.elemCd[w] = eb.interval;
+        const off = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 0.42);
         const eOffY = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 14);
-        let vy = 0, vx = Math.cos(off) * speed * 0.88;
-        if (el === 'flame') vy = Math.sin(off) * speed * 0.85 - 60;
-        else if (el === 'poison') vy = Math.sin(off) * speed * 0.85 + 60;
-        else vy = Math.sin(off) * speed * 0.88;
+        const eSpeed = speed * eb.spdMul;
+        let vy = 0, vx = Math.cos(off) * eSpeed;
+        if (el === 'flame') vy = Math.sin(off) * eSpeed - 60;
+        else if (el === 'poison') vy = Math.sin(off) * eSpeed + 60;
+        else vy = Math.sin(off) * eSpeed;
         g.bullets.push(new Bullet(
           muzzleX, muzzleY + eOffY, vx, vy,
-          { kind: 'orb', friendly: true, dmg: Math.round(dmg * 0.7), r: 7 * bscale,
+          { kind: 'orb', friendly: true, dmg: Math.max(1, Math.round(dmg * eb.dmgMul)), r: eb.r * bscale,
             pierce: 0, element: el, life: 4, elemPow: this.elemLv[el] || 0 }));
+        // 毒液枪口：绿色浆质喷溅 + 几颗毒液颗粒
+        if (el === 'poison') {
+          for (let i = 0; i < 5; i++) {
+            g.particles.push(new Particle(
+              muzzleX, muzzleY + eOffY + rand(-6, 6),
+              rand(120, 320), rand(-130, 130),
+              rand(0.2, 0.42), rand(2.5, 5),
+              ['#2dd44a', '#4ade80', '#0a5a12', '#7dff6a'][randi(0, 3)]));
+          }
+        }
       }
       SFX.shoot();
     }
@@ -4400,6 +5070,13 @@
       this.confuseT = 0;       // 困惑时间（法师魔法护盾命中：困惑并下坠）
       this.confuseVy = 0;      // 困惑下坠速度
 
+      // 元素受击视觉（命中点相对自身坐标，随实体移动；Boss 由 game 中央驱动同一套系统）
+      this.burnMarks = [];     // 灼烧暗红裂纹 [{ox,oy,seed,t,life}]
+      this.frostPts = [];      // 冰霜覆盖点（从命中点向外加厚）[{ox,oy,t}]
+      this.poisonPts = [];     // 腐蚀斑块 [{ox,oy,seed,t,life}]
+      this.dotTickT = 0;       // DoT 离散跳伤害计时（每 0.5s 一跳 + 伤害数字）
+      this._ambT = 0;          // 异常身体像素（火苗/毒泡）喷发节流
+
       // 难度缩放
       const round = g.round;
       const hpMul = (1 + (round - 1) * 0.16 + g.time * 0.0025) * g.diffMul;
@@ -4647,6 +5324,10 @@
       // 斧头兵：死亡演出——旋转飞天 → 落地爆炸（奖励立即结算，爆裂演出延迟）
       if (this.type === 'axeMinion') { this.beginAxeDeath(g); return; }
       this.dead = true;
+      // 灼烧/中毒期间死亡：原地小火球爆炸 / 毒云爆发
+      if ((this.dotType === 'flame' || this.dotType === 'poison') && this.dotT > 0) {
+        elemDeathFx(this.x, this.y, this.dotType, g, this.radius * 0.95);
+      }
       g.kills++;
       if (typeof g.roundKills === 'number') g.roundKills++;   // 本轮刷怪段击杀（Boss 提前召唤门槛）
       g.score += this.def.score;
@@ -4722,15 +5403,25 @@
       this.hurtT = Math.max(0, this.hurtT - dt);
       this.spawnInvuln = Math.max(0, this.spawnInvuln - dt);
 
-      // 元素 DoT 处理
+      // 元素 DoT 处理（离散跳伤害：每 0.5s 一跳，火焰跳出橙色伤害数字；持续冒火苗/毒泡像素）
+      elemMarksTick(this, dt);
       if (this.dotT > 0) {
         this.dotT -= dt;
         const tickDmg = this.dotDps * dt;
         if (this.spawnInvuln <= 0 && tickDmg > 0) {
           this.hp -= tickDmg;
           this.hurtT = 0.12;
+          this.dotTickT -= dt;
+          if (this.dotTickT <= 0) {
+            this.dotTickT += 0.5;
+            if (g.popNum && this.dotType === 'flame') {
+              g.popNum(this.x + rand(-10, 10), this.y - this.radius - 6,
+                Math.max(1, Math.round(this.dotDps * 0.5)), '#ff9d2e');
+            }
+          }
           if (this.hp <= 0) { this.die(g); return; }
         }
+        elemAmbient(this, dt, g);
         if (this.dotT <= 0) {   // 异常过期：清空叠层与类型，便于后续重新起算
           this.dotStack = 0; this.dotDps = 0; this.dotType = '';
         }
@@ -5908,6 +6599,8 @@
         ctx.stroke();
         ctx.restore();
       }
+      // 元素异常像素标记：灼烧裂纹 / 腐蚀斑块 / 冰霜覆盖
+      renderElemMarks(ctx, this);
       // 出场无敌期：金色脉动护盾环
       if (this.spawnInvuln > 0) {
         const rr = this.radius + 6 + Math.sin(this.t * 12) * 3;
@@ -9027,7 +9720,9 @@
       s.hp -= dmg;
       s.flash = 0.12;
       this.hurtT = 0.12;
-      burst(g, s.x, s.y, 3, ['#fff', '#bff5d6', '#7ed46d'], 130, 3, 0.2);
+      // 元素弹命中节：对应元素色火花（火焰橙红/毒液墨绿/寒冰浅蓝）；无元素保留草龙绿色
+      if (element && ELEM_HIT_COLS[element]) burst(g, s.x, s.y, 8, ELEM_HIT_COLS[element], element === 'ice' ? 150 : 130, 3, 0.3, element === 'ice' ? 40 : 70);
+      else burst(g, s.x, s.y, 3, ['#fff', '#bff5d6', '#7ed46d'], 130, 3, 0.2);
       SFX.hit();
       // 元素效果（与小怪一致：DoT / 冻结）
       if (element === 'flame') { this.dotT = 3; this.dotDps = dmg * 0.4; this.dotType = 'flame'; }
@@ -9447,6 +10142,8 @@
   }
 
   window.FT = { Particle, Gem, Bullet, Lightning, Beam, CurveBeam, Player, Enemy, Rock, Breakable, GrassDragon, BoneDragonMini, DRAGON_THEMES, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, dist,
+    /* 元素异常视觉（小怪/Boss 共用） */
+    elemHitFx, elemMarksTick, elemAmbient, elemDeathFx, renderElemMarks,
     /* 击杀者归因：敌人/Boss 更新期间发射的弹丸/闪电/光束自动绑定来源 */
     setShooter(e) { curShooter = e; },
     clearShooter() { curShooter = null; }

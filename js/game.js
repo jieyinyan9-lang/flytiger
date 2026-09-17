@@ -5,7 +5,8 @@
   'use strict';
 
   const { Player, Enemy, Gem, Bullet, Particle, Rock, Breakable, GrassDragon, burst, rand, randi, clamp } = window.FT;
-  const { setShooter, clearShooter } = window.FT;
+  const { setShooter, clearShooter, elemHitFx, elemMarksTick, elemAmbient, elemDeathFx, renderElemMarks } = window.FT;
+  const FT = window.FT;
   const Hazards = window.FT.Hazards;
   const TAU = Math.PI * 2;
 
@@ -93,7 +94,9 @@
       captaingeorge: ['大号橙红炮弹轰成了碎渣', '弧形俯冲撞碎了全身骨头', '俯冲过后的炮火追着炸成了焦炭'],
       fireblind: ['半屏宽火焰斩拦腰烧成了两截', '火龙冲刺挥刀劈成了两半', '三道窄火焰斩交错切成了碎片'],
       purplehand: ['紫红扇形魔弹打成了筛子', '高速狐火弹贯穿了心脏', '自转巨牌弧线扫中后削掉了脑袋', '六牌阵齐射的魔光绞成了肉末'],
-      seabully: ['追踪水鲨弧线绕后撕成了碎块', '炸弹连环冲击波震碎了全身骨头', '巨型铁钩拦腰钩成了两截', '鲨鱼围猎中被逼入死角撕成了肉末']
+      seabully: ['追踪水鲨弧线绕后撕成了碎块', '炸弹连环冲击波震碎了全身骨头', '巨型铁钩拦腰钩成了两截', '鲨鱼围猎中被逼入死角撕成了肉末'],
+      snowwitch: ['连绵冰晶雨扎成了冰刺猬', '快环连钻不及被拦腰切成了两截', '冰霜风暴中冻成冰雕后碎成满地冰碴', '双环齐压被逼入死角绞成了碎末'],
+      crowCount: ['飞掷宝石突然加速撞穿了胸口', '回旋宝石折返撞碎了脊椎', '珠宝盗窃两组弹幕绞成了肉末', '连闪残影中迎面撞上了大宝石']
     }
   };
   /** Boss 死法池 key → 显示名 */
@@ -105,7 +108,7 @@
     sphinx: '狮身人面像', niumo: '牛魔', bonedragonking: '巨型骨龙王',
     madhyena: '癫狂鬣狗', raccoonrover: '浣熊漫游者', sandwalker: '沙之行者',
     captaingeorge: '乔治船长', fireblind: '火遮眼', purplehand: '紫手',
-    seabully: '深海恶霸'
+    seabully: '深海恶霸', snowwitch: '雪巫', crowCount: '鸦伯爵'
   };
   /** 死亡演出时序（秒）：黑气涌入 2.4s → 文本逐字 → 完全显示后停留 3s（总上限 10s）→ 黑色淡出 1.6s */
   const DEATH_FX = { BLACK_IN: 2.4, HOLD_AFTER: 3, AUTO_MAX: 10, FADE_OUT: 1.6 };
@@ -398,6 +401,9 @@
       this.beams = [];         // 长线光束（狗王解体攻击）
       this.arcs = [];          // 闪电链电弧视觉
       this.fxRings = [];       // 冲击波环（障碍碎裂爆炸等）{ x,y,r,vr,t,life,col }
+      this.elemFx = [];        // 元素持续特效：毒云/灼烧死亡爆炸/毒液腐蚀痕迹
+      this.poisonStains = [];  // 毒液腐蚀痕迹（命中墙壁的绿色斑，持续片刻）
+      this.dmgNums = [];       // 飘字伤害数字（灼烧跳伤橙色数字）
       this.rocks = [];
       this.breakables = [];   // 破碎障碍物（子弹打满次数爆炸）
       this.breakQueue = [];   // 本轮破碎障碍出场时刻表
@@ -892,6 +898,20 @@
         this.toast('🦈 测试模式：深海恶霸即将登场', 2.5);
         setTimeout(() => { if (this.state === 'playing') this.spawnBoss(window.SeaBully); }, 1500);
       }
+      // —— 测试入口：?boss=snowwitch 直接刷雪巫（锁定雪地） ——
+      if (_bp === 'snowwitch' && window.SnowWitch) {
+        const m = CFG.maps.find(x => x.id === 'snow');
+        if (m) { this.map = m; this.mapId = 'snow'; }
+        this.toast('❄️ 测试模式：雪巫即将登场', 2.5);
+        setTimeout(() => { if (this.state === 'playing') this.spawnBoss(window.SnowWitch); }, 1500);
+      }
+      // —— 测试入口：?boss=crowcount 直接刷鸦伯爵（锁定城堡） ——
+      if (_bp === 'crowcount' && window.CrowCount) {
+        const m = CFG.maps.find(x => x.id === 'castle');
+        if (m) { this.map = m; this.mapId = 'castle'; }
+        this.toast('💎 测试模式：鸦伯爵即将登场', 2.5);
+        setTimeout(() => { if (this.state === 'playing') this.spawnBoss(window.CrowCount); }, 1500);
+      }
       if (this.stageMode) {
         this.toast('🌙 月痕沙海 · 6 分钟生存战，击败狮身人面像！', 3.2);
       } else {
@@ -1202,6 +1222,41 @@
     }
     targets() { return this.enemies.concat(this.bosses); }
 
+    /** 飘字伤害数字（灼烧跳伤）：橙色数字向上飘浮淡出 */
+    popNum(x, y, val, col) {
+      this.dmgNums.push({ x, y, val, col: col || '#ff9d2e', vy: -46, t: 0, life: 0.75 });
+    }
+    /** 元素持续特效（毒云 / 灼烧死亡火球爆发） */
+    addElemFx(fx) { this.elemFx.push(fx); }
+    /** 毒液弹命中墙壁：绿色腐蚀痕迹（持续片刻） */
+    addPoisonStain(x, y) {
+      if (this.poisonStains.length > 48) this.poisonStains.shift();
+      this.poisonStains.push({ x, y, t: 0, life: 2.6, seed: Math.random() * 1000 });
+    }
+    /**
+     * Boss 元素异常中央驱动（骨龙王等节段龙自管，跳过）：
+     * 标记年龄推进 + DoT 连续扣血（火焰每 0.5s 跳橙色数字）+ 火苗/毒泡环境像素。
+     */
+    tickBossElem(b, dt) {
+      FT.elemMarksTick(b, dt);
+      if (b.segments || !b.dotType || b.dotT <= 0) return;
+      b.dotT -= dt;
+      if (b.spawnInvuln <= 0 && b.state !== 'enter') {
+        b.hp -= b.dotDps * dt;
+        b.dotTickT = (b.dotTickT == null ? 0.5 : b.dotTickT) - dt;
+        if (b.dotTickT <= 0) {
+          b.dotTickT += 0.5;
+          if (this.popNum && b.dotType === 'flame') {
+            this.popNum(b.x + (Math.random() * 30 - 15), b.y - (b.radius || 30) - 8,
+              Math.max(1, Math.round(b.dotDps * 0.5)), '#ff9d2e');
+          }
+        }
+        if (b.hp <= 0) { b.hp = 0; b.die(this); return; }
+      }
+      FT.elemAmbient(b, dt, this);
+      if (b.dotT <= 0) { b.dotStack = 0; b.dotDps = 0; b.dotType = ''; }
+    }
+
     /** 玩家当前理论秒伤（用于 Boss 血量动态缩放） */
     playerDps() {
       const p = this.player;
@@ -1209,6 +1264,23 @@
       let dps = shotsPerSec * p.dmg * 0.55;       // 命中率折减
       if (p.bombLv > 0) dps *= 1.25;              // 爆炸溅射
       if (p.bulletTier >= 2) dps *= 1.15;         // 穿透
+      // 元素弹道（直击+DoT 理论收益，吃元素精通等级）：火 3s/发、冰 2s/发、毒随主射速持续刷新
+      (p.elementWay || []).forEach(el => {
+        const eb = CFG.elementBullet[el];
+        if (!eb) return;
+        const m = CFG.elementMaster[el];
+        const lv = Math.max(0, Math.min(3, (p.elemLv && p.elemLv[el]) | 0));
+        const dpsCoef = m.dpsBase + m.dpsPerLv * lv;
+        // 间隔弹：一发的 DoT 在发射间隔内贡献 = dpsCoef×min(持续,间隔)；毒弹高频刷新 → DoT 恒挂 = dpsCoef
+        const dotRatio = eb.interval > 0
+          ? dpsCoef * Math.min(m.durBase + m.durPerLv * lv, eb.interval)
+          : dpsCoef;
+        if (eb.interval > 0) {
+          dps += p.dmg * eb.dmgMul / eb.interval * 0.55 * (1 + dotRatio);
+        } else {
+          dps += shotsPerSec * p.dmg * eb.dmgMul * 0.5 * (1 + dotRatio);
+        }
+      });
       return dps;
     }
 
@@ -2465,7 +2537,11 @@
         // 声波禁锢：Boss 行动冻结（骨龙王免疫——身体太长会被卡死）
         if (this.soundwaveT > 0 && !b.segments) return;
         setShooter(b);
-        try { b.update(dt, this); } finally { clearShooter(); }
+        try {
+          b.update(dt, this);
+          // 元素异常中央驱动（灼烧跳伤/毒泡/标记年龄；节段龙在自身 update 内处理）
+          if (!b.segments && !b.dead) this.tickBossElem(b, dt);
+        } finally { clearShooter(); }
       });
       this.bullets.forEach(b => {
         // 声波禁锢：敌方子弹冻结原地（仍可被击爆）
@@ -2484,6 +2560,18 @@
       this.breakables.forEach(r => r.update(dt, this));
       this.arcs.forEach(a => a.t += dt);
       this.fxRings.forEach(ring => { ring.t += dt; ring.r += ring.vr * dt; });
+
+      // 元素持续特效：毒云期间持续冒绿泡；腐蚀痕迹/飘字数字推进
+      this.elemFx.forEach(fx => {
+        fx.t += dt;
+        if (fx.kind === 'pcloud' && fx.t < fx.life && Math.random() < 0.5) {
+          this.particles.push(new Particle(fx.x + rand(-fx.r * 0.8, fx.r * 0.8),
+            fx.y + rand(-fx.r * 0.5, fx.r * 0.5) - 6, rand(-14, 14), -rand(24, 56),
+            rand(0.4, 0.7), rand(2, 4), Math.random() < 0.5 ? '#7dff6a' : '#2dd44a'));
+        }
+      });
+      this.poisonStains.forEach(s => { s.t += dt; });
+      this.dmgNums.forEach(n => { n.t += dt; n.y += n.vy * dt; n.vy *= 0.92; });
 
       this.collisions();
 
@@ -2544,6 +2632,9 @@
       this.breakables = this.breakables.filter(r => !r.dead);
       this.arcs = this.arcs.filter(a => a.t < a.life);
       this.fxRings = this.fxRings.filter(ring => ring.t < ring.life);
+      this.elemFx = this.elemFx.filter(fx => fx.t < fx.life);
+      this.poisonStains = this.poisonStains.filter(s => s.t < s.life);
+      this.dmgNums = this.dmgNums.filter(n => n.t < n.life);
       if (this.bosses.length === 0) {
         if (!this.el.bossHud.classList.contains('hidden')) this.resetBossBarFx();
         this.el.bossHud.classList.add('hidden');
@@ -2644,12 +2735,15 @@
               // 元素弹道命中：施加 DoT / 破无敌 / 冻结（系数吃元素精通等级，同元素可叠层）
               if (b.element === 'flame') {
                 this.applyElement(e, 'flame', b.dmg, b.elemPow);
+                elemHitFx(e, 'flame', b.x, b.y, this);   // 圆形橙红火花 + 灼烧裂纹标记
                 if (e.spawnInvuln > 0) e.invulnBreakT = 1;   // 火焰：1s 后破无敌
               } else if (b.element === 'poison') {
                 this.applyElement(e, 'poison', b.dmg, b.elemPow);
+                elemHitFx(e, 'poison', b.x, b.y, this);  // 绿色毒液飞溅 + 腐蚀斑块
                 if (e.spawnInvuln > 0) e.invulnBreakT = 3;   // 毒液：3s 后破无敌
               } else if (b.element === 'ice') {
                 this.applyElement(e, 'ice', b.dmg, b.elemPow);
+                elemHitFx(e, 'ice', b.x, b.y, this);     // 浅蓝冰屑 + 冰霜加厚
                 if (e.spawnInvuln > 0) e.invulnBreakT = 0.5; // 寒冰也破无敌
               }
               // 法师魔法护盾期间击中敌人：困惑并下坠 2s
@@ -4517,6 +4611,25 @@
         this.rocks.forEach(r => r.render(ctx));
         // 破碎障碍物（塔楼/残骸/魔方/巨峰/枯木）
         this.breakables.forEach(r => r.render(ctx));
+        // 毒液腐蚀痕迹：命中墙壁的墨绿像素斑（淡入停留后淡出）
+        if (this.poisonStains.length) {
+          for (const s of this.poisonStains) {
+            const fade = Math.min(1, s.t * 4, (s.life - s.t) * 1.4);
+            if (fade <= 0) continue;
+            ctx.globalAlpha = 0.75 * clamp(fade, 0, 1);
+            for (let i = 0; i < 9; i++) {
+              const h = Math.sin(i * 12.9898 + s.seed) * 43758.5453;
+              const n = h - Math.floor(h);
+              const h2 = Math.sin(i * 78.233 + s.seed) * 12731.91;
+              const n2 = h2 - Math.floor(h2);
+              const d = n * 13, ang = n2 * TAU;
+              const sz = 2 + ((n + n2) % 1) * 3.5;
+              ctx.fillStyle = i % 3 ? '#14532d' : '#2dd44a';
+              ctx.fillRect(s.x + Math.cos(ang) * d - sz / 2, s.y + Math.sin(ang) * d - sz / 2, sz, sz);
+            }
+          }
+          ctx.globalAlpha = 1;
+        }
         // 宝石
         this.gems.forEach(g2 => g2.render(ctx));
         // 闪电预警层
@@ -4524,6 +4637,8 @@
         // 敌人 / Boss
         this.enemies.forEach(e => e.render(ctx));
         this.bosses.forEach(b => b.render(ctx));
+        // Boss 身上的元素异常像素标记（灼烧裂纹/腐蚀斑块/冰霜；节段龙无标记）
+        this.bosses.forEach(b => { if (!b.segments) renderElemMarks(ctx, b); });
         // 新地图机关（水流/暴风雪/落雷/移动方石/数据墙）
         if (Hazards) Hazards.render(this, ctx);
         // 声波禁锢视觉：Boss / 龙类覆盖冰蓝色罩（普通敌人自带冻结渲染）
@@ -4753,6 +4868,50 @@
             ctx.restore();
           }
         }
+      }
+
+      // 元素持续特效：灼烧死亡圆形火球爆炸（橙红像素团+暗红外圈）/ 中毒死亡毒云（墨绿像素云）
+      if (this.elemFx.length) {
+        ctx.save();
+        for (const fx of this.elemFx) {
+          const k = fx.t / fx.life;
+          const sd = fx.x * 1.7 + fx.y * 3.1;
+          const hash = i => { const h = Math.sin(i * 127.1 + sd) * 43758.5453; return h - Math.floor(h); };
+          if (fx.kind === 'fireboom') {
+            const rad = fx.r * (0.55 + 0.55 * k);
+            ctx.globalAlpha = Math.min(1, (1 - k) * 1.6);
+            for (let i = 0; i < 26; i++) {
+              const ang = hash(i) * TAU, d = hash(i + 50) * rad;
+              const cs = 3 + hash(i + 90) * 5;
+              ctx.fillStyle = d > rad * 0.62 ? '#8f1d04' : (d > rad * 0.3 ? '#ff5a1a' : (i % 3 ? '#ff7b2e' : '#ffd23b'));
+              ctx.fillRect(fx.x + Math.cos(ang) * d - cs / 2, fx.y + Math.sin(ang) * d - cs / 2, cs, cs);
+            }
+          } else if (fx.kind === 'pcloud') {
+            const rad = fx.r * (0.55 + 0.6 * Math.min(1, k * 2.2));
+            ctx.globalAlpha = 0.82 * Math.min(1, (1 - k) * 1.8);
+            for (let i = 0; i < 24; i++) {
+              const ang = hash(i) * TAU, d = hash(i + 50) * rad;
+              const cs = 4 + hash(i + 90) * 7;
+              ctx.fillStyle = i % 4 === 0 ? '#2dd44a' : (i % 3 ? '#0a3a0a' : '#14532d');
+              ctx.fillRect(fx.x + Math.cos(ang) * d - cs / 2, fx.y + Math.sin(ang) * d * 0.7 - cs / 2, cs, cs);
+            }
+          }
+        }
+        ctx.restore();
+      }
+
+      // 飘字伤害数字（灼烧跳伤：黑边橙字向上飘浮）
+      if (this.dmgNums.length) {
+        ctx.save();
+        ctx.font = 'bold 15px "Microsoft YaHei", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (const n of this.dmgNums) {
+          const a = Math.min(1, (n.life - n.t) * 2.2);
+          ctx.globalAlpha = a;
+          ctx.fillStyle = '#3a0f00'; ctx.fillText(n.val, n.x + 1.5, n.y + 1.5);
+          ctx.fillStyle = n.col; ctx.fillText(n.val, n.x, n.y);
+        }
+        ctx.restore();
       }
 
       // 冲击波环（障碍碎裂爆炸等）

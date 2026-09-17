@@ -6,7 +6,8 @@
 (function () {
   'use strict';
 
-  const { Bullet, Lightning, Beam, CurveBeam, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, Particle, BoneDragonMini, GrassDragon, Enemy, DRAGON_THEMES } = window.FT;
+  const { Bullet, Lightning, Beam, CurveBeam, burst, drawSprite, drawSpriteTinted, rand, randi, clamp, Particle, BoneDragonMini, GrassDragon, Enemy, DRAGON_THEMES,
+    elemHitFx, elemDeathFx } = window.FT;
   const TAU = Math.PI * 2;
 
   /** Boss 受击闪红时长（秒）与冷却（秒，含闪红持续期） */
@@ -32,7 +33,7 @@
     Sphinx: 'sphinx', NiuMo: 'niumo', BoneDragonKing: 'bonedragonking',
     MadHyena: 'madhyena', RaccoonRover: 'raccoonrover', SandWalker: 'sandwalker',
     CaptainGeorge: 'captaingeorge', FireBlind: 'fireblind', PurpleHand: 'purplehand',
-    SeaBully: 'seabully'
+    SeaBully: 'seabully', SnowWitch: 'snowwitch', CrowCount: 'crowCount'
   };
 
   class Boss {
@@ -77,6 +78,10 @@
       if (this.hp <= 0) { this.hp = 0; this.die(g); }
     }
     die(g) {
+      // 灼烧/中毒期间被击杀：原地小火球爆炸 / 毒云爆发（骨龙等无 radius 的用默认值）
+      if (elemDeathFx && (this.dotType === 'flame' || this.dotType === 'poison') && (this.dotT || 0) > 0) {
+        elemDeathFx(this.x, this.y, this.dotType, g, (this.radius || 30) * 1.1);
+      }
       this.dead = true;
       g.onBossDefeated(this);
     }
@@ -878,7 +883,7 @@
           const a = base + i * 0.19;
           g.bullets.push(new Bullet(this.x - 72, this.y - 12,
             Math.cos(a) * 215, Math.sin(a) * 215,
-            { kind: 'orb', r: 15, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#ff9d2e', rockBreak: true, fireTrail: true }));
+            { kind: 'orb', r: 15, dmg: 12 * g.atkScale, dmgScale: g.atkScale, life: 6, color: '#ff9d2e', rockBreak: true, fireTrail: true, pxFire: true }));
         }
         SFX.enemyShoot();
       }
@@ -1424,8 +1429,7 @@
     /** 多命机制：阶段2（巨头）血量打空时不真正死亡，转阶段3（火车入场）；阶段3 血空才真死 */
     die(g) {
       if (this.life < 2) { this.startPhase3(g); return; }
-      this.dead = true;
-      g.onBossDefeated(this);
+      super.die(g);
     }
     /** 五颗巨大漂浮弹：缓慢追踪玩家，被击中 6 次爆炸 */
     launchFloaters(g) {
@@ -3564,8 +3568,7 @@
               ['#b98d4e', '#c9a45c', '#8a6a38'][randi(0, 2)]));
           }
         } else {
-          this.dead = true;
-          g.onBossDefeated(this);
+          super.die(g);
         }
       }
     }
@@ -5233,9 +5236,9 @@
       if (this.dead) return;
       const s = this.segments[i];
       if (!s || s.dead || this.spawnInvuln > 0) return;
-      if (element === 'flame') { this.dotT = 3; this.dotDps = dmg * 0.4; this.dotType = 'flame'; }
-      else if (element === 'poison') { this.dotT = 6; this.dotDps = dmg * 0.25; this.dotType = 'poison'; }
-      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; this.freezeT = 0; }
+      if (element === 'flame') { this.dotT = 3; this.dotDps = dmg * 0.4; this.dotType = 'flame'; burst(g, s.x, s.y, 8, ['#ff7b2e', '#ff5a1a', '#ffd23b', '#c23408'], 130, 3, 0.3, 60); }
+      else if (element === 'poison') { this.dotT = 6; this.dotDps = dmg * 0.25; this.dotType = 'poison'; burst(g, s.x, s.y, 8, ['#2dd44a', '#7dff6a', '#4ade80', '#0a3a0a'], 120, 3, 0.34, 90); }
+      else if (element === 'ice') { this.dotT = 2; this.dotDps = dmg * 0.3; this.dotType = 'ice'; this.freezeT = 0; burst(g, s.x, s.y, 10, ['#bfe9ff', '#eaf7ff', '#7fc6ef'], 150, 2.6, 0.36, 40); }
       // 骨龙王体积庞大、免疫冰冻（不再设置 freezeT），持续冰弹也不会将其冻住卡死
 
       if (this.headAlive && i !== 0) {
@@ -6788,6 +6791,756 @@
   }
   window.SeaBully = SeaBully;
 
+  /* ================ 雪巫（雪地限定） ================
+   * 悬浮屏幕右上方、缓慢上下移动；攻击前展翼、凝聚冰霜。节奏总原则「永不停歇，只换节奏」，
+   * 攻击之间零空档，用速度/密度/方向变化制造节奏感。
+   *  攻击1 冰晶雨：短暂蓄力→法阵出现→冰晶持续落下，稀疏3/s↔密集8/s 四段循环无缝切换；
+   *               法阵发射角以有限角速度缓慢扫向玩家（非即时锁死，可横向甩开），
+   *               蓝白六角冰晶尖端朝下，沿瞄准角左右交错、速度有差异，白蓝冰雾拖尾（无伤害）。
+   *  攻击2 冰环：短暂蓄力→冰环一颗接一颗，大环慢160↔小环快280 无缝交替；
+   *             蓝白透明冰环外圈厚带冰刺，水平向左不追踪，环中心为安全区。
+   *  高潮 冰霜风暴（66%血触发一次，三段无空档）：密集冰晶雨 → 大/小环交替 → 双环+冰晶雨齐爆。
+   *  30%血基类狂暴：雨切换更快、密度上限提高；小环更快、大环更慢；高潮三段衔接更紧。
+   * 美术：bingxue-1.png（500×300，已朝左） */
+  class SnowWitch extends Boss {
+    constructor(g) {
+      super(g, 18, 46);                 // 本体悬在右上方，接触伤害仅为兜底
+      this.bossName = '雪巫';
+      this.title = '冰雪巫女';
+      this.x = CFG.W + 140;
+      this.y = CFG.iceWitch.hoverY;
+      this.baseY = CFG.iceWitch.hoverY;
+      // 攻击节奏状态机：rainWind→rain→ringWind→ring 循环（wind 是短暂蓄力，前一波弹幕仍在场，零空档）
+      this.act = 'rainWind';
+      this.actT = 0;
+      this.phase = 0;                  // 冰晶雨密度段索引（偶数稀疏/奇数密集）
+      this.phaseT = 0;
+      this.rainAcc = 0;                // 冰晶发射数量累加器
+      this.ringT = 0;                  // 冰环发射倒计时
+      this.ringIdx = 0;                // 大环/小环交替（偶=大环，奇=小环）
+      this.driftAlt = 0;               // 斜落左右交错
+      this.rainAim = Math.PI * 0.75;   // 冰晶雨发射角（初值=左下45°，战斗中缓慢扫向玩家）
+      // 高潮「冰霜风暴」
+      this.climaxDone = false;
+      this.cl = '';                    // c1/c2/c3
+      this.clT = 0;
+      this.clRainAcc = 0;
+      this.clRingT = 0;
+      this.clRingIdx = 0;
+      this.frostT = 0;
+      this.snowT = 0;
+      this.deathCols = ['#dff1ff', '#8ecbff', '#4a9fe0', '#ffffff'];
+      this.xpValue = 250;
+    }
+
+    get windTime() { return this.enraged ? CFG.iceWitch.windEnr : CFG.iceWitch.wind; }
+    /** 法阵/出手锚点（立绘左手前侧） */
+    get castX() { return this.x - 92; }
+    get castY() { return this.y - 62; }
+
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const P = CFG.iceWitch;
+
+      if (this.state === 'enter') {
+        this.x += (P.homeX - this.x) * Math.min(1, dt * 1.7);
+        this.baseY += (P.hoverY - this.baseY) * Math.min(1, dt * 2);
+        this.y = this.baseY + Math.sin(this.t * P.hoverFreq) * P.hoverAmp;
+        this.ambientSnow(dt, g);
+        if (Math.abs(this.x - P.homeX) < 16) {
+          this.state = 'fight'; this.stateT = 0;
+          SFX.bossCharge();            // 入场即开始第一发蓄力
+        }
+        return;
+      }
+      if (this.state !== 'fight') return;
+
+      // 悬浮屏幕右上方，缓慢上下移动（固定区域，不追踪玩家）
+      this.x = P.homeX + Math.sin(this.t * 0.5) * 12;
+      this.y = P.hoverY + Math.sin(this.t * P.hoverFreq) * P.hoverAmp;
+      this.ambientSnow(dt, g);
+
+      // 高潮触发（一次）：hp ≤ 66%
+      if (!this.climaxDone && this.hp > 0 && this.hp <= this.maxHp * P.climaxHp) {
+        this.climaxDone = true;
+        this.startClimax(g);
+      }
+      if (this.cl) { this.updateClimax(dt, g); return; }
+      this.updateFight(dt, g);
+    }
+
+    /** 常态：冰晶雨 ↔ 冰环 循环；两种攻击各自连绵不断，切换时只有短暂蓄力 */
+    updateFight(dt, g) {
+      const P = CFG.iceWitch;
+      const enr = this.enraged;
+      this.actT += dt;
+
+      if (this.act === 'rainWind' || this.act === 'ringWind') {
+        // 展翼凝聚冰霜（render 画法阵/凝环，这里汇聚冰霜微粒）
+        this.gatherFrost(dt, g, this.act === 'rainWind' ? 'rain' : 'ring');
+        if (this.act === 'rainWind') this.aimRain(dt, g);   // 蓄力期间法阵就开始缓慢转向玩家
+        if (this.actT >= this.windTime) {
+          if (this.act === 'rainWind') {
+            this.act = 'rain'; this.phase = 0; this.phaseT = 0; this.rainAcc = 0;
+          } else {
+            this.act = 'ring'; this.ringIdx = 0; this.ringT = 0.12;   // 蓄力结束立刻出环
+          }
+          this.actT = 0;
+        }
+        return;
+      }
+
+      if (this.act === 'rain') {
+        // 稀疏↔密集循环：到点瞬时换密度，中间无停顿
+        this.aimRain(dt, g);
+        this.phaseT += dt;
+        const seg = enr ? P.phaseTEnr : P.phaseT;
+        if (this.phaseT >= seg) { this.phaseT -= seg; this.phase = Math.min(3, this.phase + 1); }
+        const dense = this.phase % 2 === 1;
+        const rate = dense
+          ? (enr ? P.denseRateEnr : P.denseRate)
+          : (enr ? P.sparseRateEnr : P.sparseRate);
+        this.rainAcc += rate * dt;
+        while (this.rainAcc >= 1) { this.rainAcc -= 1; this.spawnCrystal(g); }
+        if (this.actT >= (enr ? P.rainActTEnr : P.rainActT)) {
+          this.act = 'ringWind'; this.actT = 0; SFX.bossCharge();
+        }
+      } else {
+        // 冰环一颗接一颗：大环慢 → 小环快，无缝衔接
+        this.ringT -= dt;
+        if (this.ringT <= 0) {
+          const big = this.ringIdx % 2 === 0;
+          this.spawnRing(g, big, 0);
+          this.ringIdx++;
+          this.ringT = big
+            ? (enr ? P.bigGapEnr : P.bigGap)
+            : (enr ? P.smallGapEnr : P.smallGap);
+        }
+        if (this.actT >= (enr ? P.ringActTEnr : P.ringActT)) {
+          this.act = 'rainWind'; this.actT = 0; SFX.bossCharge();
+        }
+      }
+    }
+
+    /** 法阵发射角以有限角速度缓慢扫向玩家（角度限制在左下扇形，保证仍是“雨”） */
+    aimRain(dt, g) {
+      const P = CFG.iceWitch;
+      const want = clamp(
+        Math.atan2(g.player.y - this.castY, g.player.x - this.castX),
+        P.aimMin, P.aimMax);
+      let d = want - this.rainAim;
+      while (d > Math.PI) d -= TAU;
+      while (d < -Math.PI) d += TAU;
+      const maxTurn = (this.enraged ? P.aimTurnEnr : P.aimTurn) * dt;
+      this.rainAim += clamp(d, -maxTurn, maxTurn);
+    }
+
+    /** 攻击1：沿法阵瞄准角射一颗蓝白六角冰晶（左右交错、速度有差异，尖端朝运动方向） */
+    spawnCrystal(g) {
+      const P = CFG.iceWitch;
+      this.driftAlt ^= 1;
+      const sx = this.castX + rand(-30, 42);
+      const sy = this.castY + rand(-18, 22);
+      const spd = rand(P.rainSpdMin, P.rainSpdMax);
+      const a = this.rainAim + (this.driftAlt ? P.aimSpread : -P.aimSpread) + rand(-P.aimJit, P.aimJit);
+      g.bullets.push(new Bullet(sx, sy, Math.cos(a) * spd, Math.sin(a) * spd, {
+        kind: 'icicle', r: P.rainR, dmg: Math.round(P.rainDmg * g.atkScale),
+        life: P.rainLife, enr: this.enraged
+      }));
+    }
+
+    /** 攻击2：出一颗冰环（出手高度锁定玩家当前 y±抖动，环体水平向左、不追踪） */
+    spawnRing(g, big, yOff) {
+      const P = CFG.iceWitch;
+      const enr = this.enraged;
+      const spd = big
+        ? (enr ? P.bigSpdEnr : P.bigSpd)
+        : (enr ? P.smallSpdEnr : P.smallSpd);
+      const outer = big ? P.bigOuter : P.smallOuter;
+      const inner = big ? P.bigInner : P.smallInner;
+      const ry = clamp(g.player.y + yOff + rand(-P.ringYJit, P.ringYJit), 96, CFG.GROUND_Y - 100);
+      g.bullets.push(new Bullet(this.x - 44, ry, -spd, 0, {
+        kind: 'icering', r: outer, irOuter: outer, irInner: inner,
+        dmg: Math.round(P.ringDmg * g.atkScale), life: P.ringLife,
+        noTouch: true, enr: enr
+      }));
+      SFX.sweep();
+    }
+
+    /** 高潮「冰霜风暴」三段连打（段间无空档） */
+    startClimax(g) {
+      const P = CFG.iceWitch;
+      this.cl = 'c1';
+      this.clT = this.enraged ? P.cl1TEnr : P.cl1T;
+      this.clRainAcc = 0;
+      g.toast('❄️ 冰霜风暴！', 1.8, 'lt');
+      SFX.bossEnrage(); g.shake(8);
+      burst(g, this.castX, this.castY, 24, ['#dff1ff', '#8ecbff', '#4a9fe0'], 280, 5, 0.6, -20);
+    }
+    updateClimax(dt, g) {
+      const P = CFG.iceWitch;
+      const enr = this.enraged;
+      this.clT -= dt;
+
+      if (this.cl === 'c1') {
+        // 第一段：冰晶雨密集压迫
+        this.aimRain(dt, g);
+        const rate = enr ? P.cl1RateEnr : P.cl1Rate;
+        this.clRainAcc += rate * dt;
+        while (this.clRainAcc >= 1) { this.clRainAcc -= 1; this.spawnCrystal(g); }
+        if (this.clT <= 0) {
+          this.cl = 'c2'; this.clT = enr ? P.cl2TEnr : P.cl2T;
+          this.clRingIdx = 0; this.clRingT = 0.1;   // 立即接环，无空档
+          SFX.phaseRise(); g.shake(5);
+        }
+      } else if (this.cl === 'c2') {
+        // 第二段：大环小环交替
+        this.clRingT -= dt;
+        if (this.clRingT <= 0) {
+          const big = this.clRingIdx % 2 === 0;
+          this.spawnRing(g, big, 0);
+          this.clRingIdx++;
+          this.clRingT = big
+            ? (enr ? P.bigGapEnr : P.bigGap)
+            : (enr ? P.smallGapEnr : P.smallGap);
+        }
+        if (this.clT <= 0) {
+          this.cl = 'c3'; this.clT = enr ? P.cl3TEnr : P.cl3T;
+          this.clRainAcc = 0; this.clRingT = 0.3; this.clRingIdx = 0;
+          SFX.phaseRise(); g.shake(6);
+        }
+      } else {
+        // 第三段：双环 + 冰晶雨同时爆发
+        this.aimRain(dt, g);
+        const rate = enr ? P.cl3RateEnr : P.cl3Rate;
+        this.clRainAcc += rate * dt;
+        while (this.clRainAcc >= 1) { this.clRainAcc -= 1; this.spawnCrystal(g); }
+        this.clRingT -= dt;
+        if (this.clRingT <= 0) {
+          const off = P.cl3RingOff;
+          const bigTop = this.clRingIdx % 2 === 0;
+          this.spawnRing(g, bigTop, -off);
+          this.spawnRing(g, !bigTop, off);
+          this.clRingIdx++;
+          this.clRingT = enr ? P.cl3RingGapEnr : P.cl3RingGap;
+          g.shake(3);
+        }
+        if (this.clT <= 0) {
+          this.cl = '';
+          this.act = 'rainWind'; this.actT = 0;   // 回到常态循环
+          SFX.bossCharge();
+        }
+      }
+    }
+
+    /** 周身常年飘雪（冷域氛围） */
+    ambientSnow(dt, g) {
+      this.snowT -= dt;
+      if (this.snowT > 0) return;
+      this.snowT = 0.12;
+      g.particles.push(new Particle(
+        this.x + rand(-130, 110), this.y + rand(-96, 70),
+        rand(-34, 8), rand(10, 44),
+        rand(0.8, 1.6), rand(1.6, 3.4),
+        Math.random() < 0.6 ? 'rgba(232,245,255,0.85)' : 'rgba(160,208,255,0.7)'));
+    }
+    /** 蓄力时冰霜微粒从四周向凝聚点汇聚 */
+    gatherFrost(dt, g, type) {
+      this.frostT -= dt;
+      if (this.frostT > 0) return;
+      this.frostT = 0.05;
+      const cx = this.castX, cy = type === 'rain' ? this.castY : this.y;
+      const a = rand(0, TAU), rr = rand(50, 96);
+      const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+      g.particles.push(new Particle(px, py,
+        (cx - px) * 1.6 + rand(-20, 20), (cy - py) * 1.6 + rand(-20, 20),
+        rand(0.3, 0.55), rand(2, 5),
+        Math.random() < 0.5 ? '#dff1ff' : '#8ecbff'));
+    }
+    /** 冰霜法阵：双环 + 符文刻线 + 六出雪花芯，自转 */
+    drawSigil(ctx, cx, cy, a) {
+      if (a <= 0.02) return;
+      const R = 46 * (0.4 + 0.6 * a);
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.translate(cx, cy);
+      ctx.rotate(this.t * 1.2);
+      ctx.strokeStyle = '#aee3ff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, R * 0.62, 0, TAU); ctx.stroke();
+      for (let i = 0; i < 8; i++) {
+        const ang = i * TAU / 8;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ang) * R * 0.62, Math.sin(ang) * R * 0.62);
+        ctx.lineTo(Math.cos(ang) * R, Math.sin(ang) * R);
+        ctx.stroke();
+      }
+      ctx.rotate(-this.t * 2.4);
+      ctx.strokeStyle = '#eaf7ff'; ctx.lineWidth = 1.4;
+      for (let i = 0; i < 3; i++) {
+        const ang = i * Math.PI / 3;
+        ctx.beginPath();
+        ctx.moveTo(-Math.cos(ang) * R * 0.34, -Math.sin(ang) * R * 0.34);
+        ctx.lineTo(Math.cos(ang) * R * 0.34, Math.sin(ang) * R * 0.34);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    render(ctx) {
+      // 高潮：周身冰蓝脉冲
+      if (this.cl) {
+        const a = 0.13 + 0.07 * Math.sin(this.t * 9);
+        ctx.fillStyle = `rgba(120,190,255,${a})`;
+        ctx.beginPath(); ctx.arc(this.x, this.y, 118, 0, TAU); ctx.fill();
+      }
+      // 法阵：冰晶雨蓄力时成形；落雨/高潮雨段淡显常驻
+      const rainOn = this.act === 'rainWind' || this.act === 'rain' || this.cl === 'c1' || this.cl === 'c3';
+      if (rainOn) {
+        let ka;
+        if (this.act === 'rainWind') ka = clamp(this.actT / this.windTime, 0, 1);
+        else if (this.act === 'rain') ka = 0.22 + 0.08 * Math.sin(this.t * 5);
+        else ka = 0.3 + 0.1 * Math.sin(this.t * 7);
+        this.drawSigil(ctx, this.castX, this.castY, ka);
+        // 瞄准刻痕：法阵外缘一道冰蓝光痕，随发射角缓慢扫向玩家（可预判）
+        if (ka > 0.15) {
+          const a0 = this.rainAim;
+          ctx.save();
+          ctx.globalAlpha = Math.min(0.9, ka + 0.2);
+          ctx.strokeStyle = '#eaf7ff';
+          ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+          ctx.shadowColor = '#8ecbff'; ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.moveTo(this.castX + Math.cos(a0) * 32, this.castY + Math.sin(a0) * 32);
+          ctx.lineTo(this.castX + Math.cos(a0) * 70, this.castY + Math.sin(a0) * 70);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+      // 冰环蓄力：手边凝聚中的残缺冰环（逐渐补圆、放大）
+      if (this.act === 'ringWind') {
+        const k = clamp(this.actT / this.windTime, 0, 1);
+        ctx.save();
+        ctx.strokeStyle = `rgba(180,225,255,${0.3 + 0.5 * k})`;
+        ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(this.x - 70, this.y, 22 + 18 * k, -this.t * 4, -this.t * 4 + TAU * (0.4 + 0.6 * k));
+        ctx.stroke();
+        ctx.restore();
+      }
+      // 展翼：蓄力瞬间整体微胀 + 轻微后仰；高潮持续轻微振翼
+      const winding = this.act === 'rainWind' || this.act === 'ringWind';
+      const wk = winding ? clamp(this.actT / this.windTime, 0, 1) : 0;
+      const s = 1 + 0.06 * wk + (this.cl ? 0.02 * Math.sin(this.t * 8) : 0);
+      const tilt = -0.05 * wk + Math.sin(this.t * 1.4) * 0.02;
+      const bob = Math.sin(this.t * 2.2) * 3;
+      // bingxue-1.png 500×300 缩放 .5 → 250×150；躯干偏左，右移 30 让碰撞中心对准身体
+      drawBossSprite(ctx, Sprites.iceWitch, this.x + 30, this.y + bob, 0.5 * s, 0.5 * s, tilt, this.flash);
+    }
+  }
+  window.SnowWitch = SnowWitch;
+
+  /* ================ 鸦伯爵（城堡限定） ================
+   * 礼帽单片镜的珠宝大盗渡鸦，悬浮屏幕右侧；玩家接近时瞬间随机连闪 3-5 个点躲玩家（CD 10s）。
+   * 节奏总原则「永不停歇，只换节奏」：靠射击方式组合制造节奏。
+   *  宝石三档（玩家 48px=1x）：小 0.5x≈24px 快 / 中 1.5x≈72px 中 / 大 2x≈96px 慢；本体有伤害、拖尾无伤害。
+   * 攻击1 宝石飞掷（砰——唰唰——滴滴滴）：蓄力掷→连掷→单掷三拍循环——
+   *        第1拍强：蓄力0.5s 掷出 2x 大宝石慢速封路；第2拍中：一次甩出两颗 1.5x 中速；
+   *        第3拍弱：快速连抛三颗 0.5x；强拍后0.3s→中拍后0.15s→弱拍后立刻接下一轮。
+   *        每颗宝石飞到屏幕中段时各自加速（强拍加速最猛）。
+   * 攻击2 宝石回旋（唰——咚咚咚——咻咻）：连掷去（一次甩出5-7颗直线去程）→按发射顺序依次180°折返
+   *        （微偏向玩家旧位置）→折返同时从上方抛下2颗封走位。
+   * 高潮 珠宝盗窃（66% 血触发一次，射击方式对位）：组A蓄力掷 2x 大宝石依次掷出不折返（低音鼓占位）
+   *        对位组B连掷 0.5x 小宝石快速连掷提前折返（高音镲骚扰），组B折返时穿过组A缝隙；
+   *        Boss 连续横向瞬移位置不断变化。
+   * 狂暴（30% 基类）：蓄力时间缩短 / 连掷数量+1 / 单掷间隔缩短 / 抛掷落点更刁钻 / 折返更突然，
+   *        射击方式不变，只是更快更密。
+   * 美术：chengbao-1.png（500×300，已朝左） */
+  class CrowCount extends Boss {
+    constructor(g) {
+      super(g, 14, 46);                 // 本体悬浮远处靠瞬移躲避，主要威胁来自宝石
+      this.bossName = '鸦伯爵';
+      this.title = '珠宝大盗·城堡贵族';
+      this.x = CFG.W + 140;
+      this.y = 200;
+      this.baseY = 200;
+      this.homeX = CFG.crowCount.homeX;
+      this.act = 'gap';                 // gap → wind（蓄力）→ volley（三拍序列）/ lobwait（回旋抛掷）→ hold → gap
+      this.actT = 0.8;
+      this.pending = '';                // 蓄力对应的攻击 throw/ret
+      this.tRound = 0;                  // 飞掷三拍循环轮次
+      this.tStep = '';                  // 三拍序列步进 big/gap1/gap2
+      this.tSmall = 0;                  // 单掷已抛颗数
+      this.volleyT = 0;                 // 拍点间隔计时
+      this.lobIdx = 0; this.lobT = 0;   // 抛掷已抛颗数/间隔计时
+      this.tpCd = 2.5;                  // 瞬移冷却（开局稍后可用）
+      this.tpLeft = 0;                  // 剩余连闪点数
+      this.tpT = 0;                     // 连闪计时
+      this.afterimgs = [];              // 瞬移残影
+      this.climaxDone = false;          // 珠宝盗窃只触发一次
+      this.climaxT = 0;
+      this.cAT = 0.5; this.cChA = 0; this.clChg = 0.5;   // 组A节拍计时/蓄力剩余/蓄力总长
+      this.cBT = 0.7; this.cBurst = 0; this.cBT2 = 0;    // 组B节拍计时/连掷剩余/连掷间隔
+      this.tpCx = 0;                    // 高潮横向瞬移计时
+      this.deathCols = ['#3a2f52', '#6a5a9a', '#ffd23b', '#fff'];
+      this.xpValue = 250;
+    }
+
+    /** 蓄力时长（狂暴缩短） */
+    get windTime() {
+      const P = CFG.crowCount;
+      return this.enraged ? P.chargeT * P.chargeEnrMul : P.chargeT;
+    }
+
+    update(dt, g) {
+      this.t += dt; this.stateT += dt;
+      this.flash = Math.max(0, this.flash - dt);
+      this.commonMove(dt);
+      const p = g.player;
+      // 残影衰减
+      for (const a of this.afterimgs) a.age += dt;
+      this.afterimgs = this.afterimgs.filter(a => a.age < 0.4);
+
+      if (this.state === 'enter') {
+        this.x += (this.homeX - this.x) * Math.min(1, dt * 2.2);
+        this.baseY += (clamp(p.y, 90, CFG.GROUND_Y - 100) - this.baseY) * Math.min(1, dt * 1.6);
+        this.y = this.baseY + Math.sin(this.t * 2.2) * CFG.crowCount.bobAmp;
+        if (Math.abs(this.x - this.homeX) < 16) { this.state = 'fight'; this.stateT = 0; }
+        return;
+      }
+      if (this.state !== 'fight') return;
+
+      // 高潮触发（一次）：hp ≤ 66%
+      if (!this.climaxDone && this.hp > 0 && this.hp <= this.maxHp * CFG.crowCount.climaxHp) {
+        this.climaxDone = true;
+        this.climaxT = CFG.crowCount.climaxDur;
+        this.cAT = 0.35; this.cChA = 0;
+        this.cBT = 0.7; this.cBurst = 0;
+        this.tpCx = 0.5;
+        g.toast('珠宝盗窃！', 1.8, 'lt');
+        SFX.bossEnrage(); g.shake(7);
+      }
+      if (this.climaxT > 0) {
+        this.updateClimax(dt, g);
+        this.updateTeleport(dt, g);
+        return;
+      }
+      this.updateFight(dt, g);
+      this.updateTeleport(dt, g);
+    }
+
+    /** 轻盈悬浮：较快纵向跟随 + 小幅上下浮动（贵族盗贼的灵巧感） */
+    driftVertical(dt, p, rate) {
+      this.baseY += (clamp(p.y, 80, CFG.GROUND_Y - 90) - this.baseY) * Math.min(1, dt * rate);
+      this.y = this.baseY + Math.sin(this.t * 2.2) * CFG.crowCount.bobAmp;
+    }
+
+    /** 瞬移系统：玩家接近 → 瞬间连闪 3-5 个点躲玩家；CD 10s */
+    updateTeleport(dt, g) {
+      const P = CFG.crowCount, p = g.player;
+      if (this.tpLeft > 0) {
+        this.tpT -= dt;
+        if (this.tpT <= 0) {
+          this.tpT = P.tpBlinkGap;
+          this.tpLeft--;
+          this.doBlink(g, P.tpXMin, P.tpXMax, true);      // 躲玩家：纵向+横向随机点
+          if (this.tpLeft <= 0) this.tpCd = P.tpCd;
+        }
+        return;
+      }
+      this.tpCd -= dt;
+      if (this.tpCd <= 0 && Math.hypot(p.x - this.x, p.y - this.y) < P.tpDist) {
+        this.tpLeft = randi(P.tpPointsMin, P.tpPointsMax);   // 连闪 3-5 个点
+        this.tpT = 0;
+      }
+    }
+
+    /** 高潮「珠宝盗窃」：组A蓄力掷 对位 组B连掷 + 连续横向瞬移 */
+    updateClimax(dt, g) {
+      const P = CFG.crowCount, p = g.player;
+      this.climaxT -= dt;
+      this.driftVertical(dt, p, 2.2);
+      const chg = this.enraged ? P.clACharge * P.chargeEnrMul : P.clACharge;
+      // 组A｜蓄力掷（低音鼓，占位）：每拍蓄力后掷出一颗 2x 大宝石，不折返，中段加速最猛
+      this.cAT -= dt;
+      if (this.cAT <= 0) { this.cChA = chg; this.clChg = chg; this.cAT = P.clACycle + chg; }
+      if (this.cChA > 0) {
+        this.cChA -= dt;
+        if (this.cChA <= 0) this.fireFwdGem(g, p);
+      }
+      // 组B｜连掷（高音镲，折返骚扰）：4颗小宝石快速连掷（狂暴+1），提前折返穿组A缝隙
+      this.cBT -= dt;
+      if (this.cBT <= 0) {
+        this.cBurst = P.clBN + (this.enraged ? 1 : 0);
+        this.cBT2 = 0;
+        this.cBT = P.clBCycle;
+      }
+      if (this.cBurst > 0) {
+        this.cBT2 -= dt;
+        if (this.cBT2 <= 0) { this.fireClRetGem(g, p); this.cBurst--; this.cBT2 = P.clBGap; }
+      }
+      // Boss 连续横向瞬移，位置不断变化
+      this.tpCx -= dt;
+      if (this.tpCx <= 0) {
+        this.tpCx = P.tpClimaxGap;
+        this.doBlink(g, P.tpXMin, P.tpXMax, false);       // 横向瞬移：y 小幅变化
+      }
+      if (this.climaxT <= 0) {
+        this.climaxT = 0;
+        this.cChA = 0; this.cBurst = 0;
+        this.act = 'gap'; this.actT = -0.3;
+      }
+    }
+
+    updateFight(dt, g) {
+      const P = CFG.crowCount, p = g.player;
+      this.driftVertical(dt, p, 2.0);
+      this.actT += dt;
+      if (this.act === 'gap') {
+        if (this.actT >= 0) {
+          // 随机选招（避免与上一招完全相同）
+          let pick = Math.random() < 0.5 ? 'throw' : 'ret';
+          if (pick === this.pending) pick = Math.random() < 0.5 ? 'throw' : 'ret';
+          this.pending = pick;
+          this.tRound = 0; this.tSmall = 0;
+          this.act = 'wind'; this.actT = 0;
+        }
+      } else if (this.act === 'wind') {
+        // 蓄力（飞掷＝第1拍蓄力掷的蓄力；回旋＝甩出前凝气）
+        if (this.actT >= this.windTime) {
+          if (this.pending === 'throw') {
+            this.act = 'volley'; this.actT = 0;
+            this.tStep = 'big'; this.volleyT = 0;
+          } else {
+            this.fireRetFan(g, p);                  // 第一段：连掷去（一次甩出）
+            this.act = 'lobwait'; this.actT = 0;
+            this.lobIdx = 0; this.lobT = 0;
+          }
+        }
+      } else if (this.act === 'volley') {
+        // 三拍序列：蓄力掷(强) → 连掷(中) → 单掷(弱) → 弱拍后立刻接下一轮
+        this.volleyT -= dt;
+        if (this.tStep === 'big') {
+          if (this.volleyT <= 0) {
+            this.fireBeatBig(g, p);                 // 第1拍（强）：蓄力掷 2x 慢速封路
+            this.tStep = 'gap1'; this.volleyT = P.gapStrong;
+          }
+        } else if (this.tStep === 'gap1') {
+          if (this.volleyT <= 0) {
+            this.fireDblGem(g, p);                  // 第2拍（中）：连掷一次甩出两颗
+            this.tStep = 'gap2'; this.volleyT = P.gapMid; this.tSmall = 0;
+          }
+        } else if (this.tStep === 'gap2') {
+          if (this.volleyT <= 0) {
+            this.fireRapGem(g, p);                  // 第3拍（弱）：单掷快速连抛
+            this.tSmall++;
+            this.volleyT = P.rapGap * (this.enraged ? P.rapGapEnrMul : 1);
+            if (this.tSmall >= P.rapN) {
+              this.tRound++;
+              if (this.tRound >= P.throwRounds) { this.act = 'hold'; this.actT = 0; }
+              else { this.act = 'wind'; this.actT = 0; }   // 弱拍后立刻接下一轮（下一拍蓄力掷）
+            }
+          }
+        }
+      } else if (this.act === 'lobwait') {
+        // 第二段：宝石按发射顺序依次折返（折返点随序号递增）
+        // 第三段：折返同时从上方抛下2颗封走位
+        this.lobT -= dt;
+        const folding = g.bullets.some(b => b.kind === 'gem' && b.gemMode === 'ret' && b.gPhase !== 'out');
+        if (folding && this.lobIdx < P.lobN && this.lobT <= 0) {
+          this.fireLobGem(g, p, this.lobIdx);
+          this.lobIdx++;
+          this.lobT = P.lobGap;
+        }
+        if ((this.lobIdx >= P.lobN && this.lobT <= 0) || this.actT > 7) {
+          this.act = 'hold'; this.actT = 0;
+        }
+      } else if (this.act === 'hold') {
+        if (this.actT > 0.28) {
+          this.act = 'gap';
+          // 永不停歇只换节奏：间隔很短
+          const lo = this.enraged ? 0.35 : 0.6, hi = this.enraged ? 0.8 : 1.15;
+          this.actT = -rand(lo, hi);
+        }
+      }
+    }
+
+    /** 攻击1·第1拍（强）蓄力掷：2x 大宝石慢速封路，中段加速最猛 */
+    fireBeatBig(g, p) {
+      const P = CFG.crowCount;
+      const mx = this.x - 46, my = this.y - 8;
+      const base = Math.atan2(p.y - my, p.x - mx);
+      const a = base + rand(-0.12, 0.12);
+      g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
+        kind: 'gem', r: P.gemR[2], dmg: Math.round(P.gemDmg * g.atkScale),
+        life: 8, gemTier: 2, gemMode: 'throw',
+        gemV0: P.throwV0, gemV1: P.accV[0], spinRate: 2.4, enr: this.enraged
+      }));
+      burst(g, mx, my, 8, ['#35e0ff', '#fff', '#ffd23b'], 170, 4, 0.3);
+      SFX.dash();
+    }
+
+    /** 攻击1·第2拍（中）连掷：一次甩出两颗 1.5x（狂暴+1），中速 */
+    fireDblGem(g, p) {
+      const P = CFG.crowCount;
+      const n = P.dblN + (this.enraged ? 1 : 0);
+      const mx = this.x - 46, my = this.y - 8;
+      const base = Math.atan2(p.y - my, p.x - mx);
+      for (let i = 0; i < n; i++) {
+        const a = base + (i - (n - 1) / 2) * 0.09;
+        g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
+          kind: 'gem', r: P.gemR[1], dmg: Math.round(P.gemDmg * g.atkScale),
+          life: 8, gemTier: 1, gemMode: 'throw',
+          gemV0: P.throwV0, gemV1: P.accV[1], spinRate: 2.4, enr: this.enraged
+        }));
+      }
+      burst(g, mx, my, 8, ['#a855f7', '#fff', '#ffd23b'], 170, 4, 0.3);
+      SFX.dash();
+    }
+
+    /** 攻击1·第3拍（弱）单掷：快速连抛 0.5x 小宝石（本方法每颗调用一次） */
+    fireRapGem(g, p) {
+      const P = CFG.crowCount;
+      const mx = this.x - 46, my = this.y - 8;
+      const base = Math.atan2(p.y - my, p.x - mx);
+      const a = base + rand(-0.08, 0.08);
+      g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
+        kind: 'gem', r: P.gemR[0], dmg: Math.round(P.gemDmg * g.atkScale),
+        life: 8, gemTier: 0, gemMode: 'throw',
+        gemV0: P.throwV0, gemV1: P.accV[2], spinRate: 2.4, enr: this.enraged
+      }));
+      if (this.tSmall === 0) SFX.sweep();       // 滴滴滴一串只配一声
+    }
+
+    /** 攻击2·第一段连掷去：一次甩出 5~7 颗（狂暴+1）直线去程扇形；折返点随序号递增＝按发射顺序依次折返 */
+    fireRetFan(g, p) {
+      const P = CFG.crowCount;
+      const n = randi(P.retNMin, P.retNMax) + (this.enraged ? 1 : 0);
+      const mx = this.x - 46, my = this.y - 8;
+      let hasBig = false;
+      for (let i = 0; i < n; i++) {
+        const roll = Math.random();
+        let tier = roll < 0.62 ? 0 : (roll < 0.82 ? 1 : 2);   // 0.5x 为主穿插 1.5x/2x
+        if (i === n - 1 && !hasBig) tier = 2;                  // 保底一颗大宝石封路
+        if (tier === 2) hasBig = true;
+        const foldX = P.retFoldXMin + (n > 1 ? i * (P.retFoldXMax - P.retFoldXMin) / (n - 1) : 0) + rand(-14, 14);
+        const a = Math.PI + (n > 1 ? (i / (n - 1) - 0.5) * 2 * P.retAmp : 0) + rand(-0.03, 0.03);
+        g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
+          kind: 'gem', r: P.gemR[tier], dmg: Math.round(P.gemDmg * g.atkScale),
+          life: 9, gemTier: tier, gemMode: 'ret',
+          foldX, pauseT: P.retPause[tier] * (this.enraged ? P.retPauseEnrMul : 1),
+          spinRate: 2.4, enr: this.enraged
+        }));
+      }
+      SFX.dash();
+    }
+
+    /** 攻击2·第三段抛掷：从上方抛下宝石封走位（狂暴落点更刁钻+预判提前量） */
+    fireLobGem(g, p, i) {
+      const P = CFG.crowCount;
+      const mx = this.x - 46, my = this.y - 8;
+      const off = this.enraged ? P.lobOffEnr : P.lobOff;
+      const lead = this.enraged ? p.vx * 0.35 : 0;            // 狂暴：预判走位
+      const tx = clamp(p.x + lead + rand(-off, off), 40, CFG.W - 40);
+      const ty = (g.groundYAt ? g.groundYAt(tx) : CFG.GROUND_Y) - 10;
+      const T = P.lobT;
+      const vx = (tx - mx) / T;
+      const vy = (ty - my) / T - 0.5 * P.lobG * T;            // 抛物线：先升后降，从上方落下
+      const tier = i % 2;                                     // 中宝石+小宝石各一颗
+      g.bullets.push(new Bullet(mx, my, vx, vy, {
+        kind: 'gem', r: P.gemR[tier], dmg: Math.round(P.gemDmg * g.atkScale),
+        life: 6, gemTier: tier, gemMode: 'lob', spinRate: 3.2, enr: this.enraged
+      }));
+      SFX.sweep();
+    }
+
+    /** 高潮组A·蓄力掷：2x 大宝石不折返（低音鼓），慢-慢-慢，中段加速最猛 */
+    fireFwdGem(g, p) {
+      const P = CFG.crowCount;
+      const mx = this.x - 46, my = this.y - 8;
+      const a = Math.atan2(p.y - my, p.x - mx) + rand(-0.1, 0.1);
+      g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
+        kind: 'gem', r: P.gemR[2], dmg: Math.round(P.gemDmg * g.atkScale),
+        life: 8, gemTier: 2, gemMode: 'fwd',
+        gemV0: P.throwV0, gemV1: P.accV[0], spinRate: 2.4, enr: this.enraged
+      }));
+      SFX.dash();
+    }
+
+    /** 高潮组B·连掷：0.5x 小宝石快速连掷，提前折返骚扰（高音镲） */
+    fireClRetGem(g, p) {
+      const P = CFG.crowCount;
+      const mx = this.x - 46, my = this.y - 8;
+      const a = Math.PI + rand(-0.1, 0.1);
+      g.bullets.push(new Bullet(mx, my, Math.cos(a), Math.sin(a), {
+        kind: 'gem', r: P.gemR[0], dmg: Math.round(P.gemDmg * g.atkScale),
+        life: 9, gemTier: 0, gemMode: 'ret',
+        foldX: rand(P.clFoldXMin, P.clFoldXMax),
+        pauseT: P.retPause[0] * (this.enraged ? P.retPauseEnrMul : 1),
+        spinRate: 2.4, enr: this.enraged
+      }));
+    }
+
+    /** 瞬移：旧位置留残影 + 羽尘爆发，随机落点后新位置再爆发（横向=高潮连续瞬移） */
+    doBlink(g, xMin, xMax, vertical) {
+      const P = CFG.crowCount;
+      this.afterimgs.push({ x: this.x, y: this.y, age: 0 });
+      if (this.afterimgs.length > 6) this.afterimgs.shift();
+      burst(g, this.x, this.y, 10, ['#3a2f52', '#6a5a9a', '#c9b8ff', '#fff'], 220, 5, 0.35);
+      this.x = rand(xMin, xMax);
+      if (vertical) this.baseY = rand(P.tpYTop, CFG.GROUND_Y - P.tpYBot);
+      else this.baseY = clamp(this.baseY + rand(-46, 46), 80, CFG.GROUND_Y - 90);
+      this.y = this.baseY;
+      burst(g, this.x, this.y, 10, ['#6a5a9a', '#c9b8ff', '#fff', '#ffd23b'], 220, 5, 0.35);
+      SFX.dash();
+    }
+
+    render(ctx) {
+      const P = CFG.crowCount;
+      // 瞬移残影：快速淡出的紫黑轮廓
+      for (const a of this.afterimgs) {
+        ctx.globalAlpha = 0.26 * Math.max(0, 1 - a.age / 0.4);
+        drawSprite(ctx, Sprites.crowCount, a.x, a.y, 0.5, 0.5, 0, 0);
+      }
+      ctx.globalAlpha = 1;
+      // 蓄力特效：掌心彩色宝石光点汇聚（攻击蓄力 / 高潮组A每拍蓄力）
+      let cg = -1;
+      if (this.act === 'wind') { cg = clamp(this.actT / this.windTime, 0, 1); }
+      else if (this.cChA > 0) { cg = clamp(1 - this.cChA / Math.max(0.001, this.clChg), 0, 1); }
+      if (cg >= 0) {
+        const k = cg;
+        const hx = this.x - 58, hy = this.y - 8;
+        const glow = ctx.createRadialGradient(hx, hy, 0, hx, hy, 14 + 22 * k);
+        glow.addColorStop(0, `rgba(255,214,120,${0.5 + 0.35 * k})`);
+        glow.addColorStop(0.55, `rgba(168,85,247,${0.3 + 0.3 * k})`);
+        glow.addColorStop(1, 'rgba(168,85,247,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(hx, hy, 14 + 22 * k, 0, TAU); ctx.fill();
+        for (let i = 0; i < 3; i++) {
+          const aa = this.t * 7 + i * TAU / 3;
+          const rr = (1 - k) * 26 + 4;
+          ctx.fillStyle = ['#ff4a6a', '#35e0ff', '#ffd23b'][i];
+          ctx.globalAlpha = 0.5 + 0.5 * k;
+          ctx.beginPath(); ctx.arc(hx + Math.cos(aa) * rr, hy + Math.sin(aa) * rr, 2.6, 0, TAU); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      // 高潮：金紫脉冲
+      if (this.climaxT > 0) {
+        const a = 0.12 + 0.07 * Math.sin(this.t * 9);
+        ctx.fillStyle = `rgba(255,205,90,${a})`;
+        ctx.beginPath(); ctx.arc(this.x, this.y, 116, 0, TAU); ctx.fill();
+      }
+      const bob = Math.sin(this.t * 3.2) * 3;
+      const tilt = Math.sin(this.t * 2.2) * 0.06;   // 悬浮轻微摆动
+      // chengbao-1.png 500×300 缩放 .5 → 250×150；躯干居中，左移 -6 让喙部朝向玩家
+      drawBossSprite(ctx, Sprites.crowCount, this.x - 6, this.y + bob, 0.5, 0.5, tilt, this.flash);
+    }
+  }
+  window.CrowCount = CrowCount;
+
   /* ================ 火遮眼（火焰山限定） ================
    * 固定屏幕右侧小幅上下移动；固定循环 火焰斩 → 火龙冲锋：
    *  火焰斩：举刀蓄力 → 1 道红橙色弧形火焰斩（红黄色长拖尾，斩击宽度填充半屏）；
@@ -7281,7 +8034,7 @@
     ctx.closePath();
   }
 
-  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage, Sphinx, NiuMo, BoneDragonKing, MadHyena, RaccoonRover, SandWalker, CaptainGeorge, FireBlind, PurpleHand };
+  window.Bosses = { PigKing, ThunderBehemoth, Samurai, SwordEagle, SkullKing, DogKing, GiantPheasant, Homelander, BossMan, Stranger, FrogKing, CraneSage, Sphinx, NiuMo, BoneDragonKing, MadHyena, RaccoonRover, SandWalker, CaptainGeorge, FireBlind, PurpleHand, SeaBully, SnowWitch, CrowCount };
   /**
    * Boss 池：所有 Boss 等权（weight 相同），每一轮都可能出现。
    * 本局已出场过的 Boss 后续抽取权重持续减半（game.js bossSeen 加权抽取）；
@@ -7330,6 +8083,10 @@
     // 紫手：紫色荒地永久限定（map），第1轮起进入普通等权池；a随机攻击↔b角牌阵，狂暴6牌
     { cls: PurpleHand, weight: 3, map: 'wasteland', music: 'boss-2' },
     // 深海恶霸：深海永久限定（map）；追踪水鲨/炸弹3环冲击波/90°转向铁钩链，66%血鲨鱼围猎高潮
-    { cls: SeaBully, weight: 3, map: 'seabed', music: 'boss-1' }
+    { cls: SeaBully, weight: 3, map: 'seabed', music: 'boss-1' },
+    // 雪巫：雪地永久限定（map）；冰晶雨密度循环/冰环环心安全，66%血冰霜风暴三段连打
+    { cls: SnowWitch, weight: 3, map: 'snow', music: 'boss-2' },
+    // 鸦伯爵：城堡永久限定（map）；瞬移躲玩家（10s CD）+宝石三档弹道反转（飞掷前慢后快/回旋去回/珠宝盗窃两组交叉）
+    { cls: CrowCount, weight: 3, map: 'castle', music: 'boss-2' }
   ];
 })();
