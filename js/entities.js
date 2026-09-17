@@ -7057,7 +7057,6 @@
       if (this.hitCd > 0) return;
       this.hitCd = 0.07;
       this.hp = Math.max(0, this.hp - 1);
-      this.flashT = 0.12;
       const cols = this.debris;
       burst(g, b ? b.x : this.x, b ? b.y : this.ccyNow(), 6,
         [cols[0], cols[2] || cols[1], '#fff'], 150, 4, 0.35, 110);
