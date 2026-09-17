@@ -8,6 +8,13 @@
   let muted = false;
   let lastShoot = 0;
 
+  // —— 打击音突发抑制：短窗口内最多播 N 声，超发后冷却静音一段时间（子弹/敌人密集时防吵）——
+  let lastHit = 0, hitBurst = 0, hitWinStart = 0, hitMuteUntil = 0;
+  const HIT_BURST_WIN = 400;   // 突发统计窗口 ms
+  const HIT_BURST_MAX = 4;     // 窗口内最多发声数
+  const HIT_COOLDOWN = 250;    // 超发后静音时长 ms
+  const HIT_MIN_GAP = 30;      // 同帧/极近命中合并间隔 ms（防声波叠加爆音）
+
   function ac() {
     if (!ctx) {
       try { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
@@ -115,7 +122,23 @@
           break;
       }
     },
-    hit() { tone(240, 0.05, 'square', 0.05, 140); },
+    /** 打击音：突发抑制——400ms 窗口内最多 4 声，随后静音 250ms（密集命中防吵，低密度点射不受影响）。
+     *  force=true 用于低频重要事件（被铁钩钩中/Boss爪击），绕过节流强制播放 */
+    hit(force) {
+      const now = performance.now();
+      if (!force) {
+        if (now < hitMuteUntil) return;                              // 冷却静音期
+        if (now - hitWinStart > HIT_BURST_WIN) { hitWinStart = now; hitBurst = 0; }
+        if (hitBurst >= HIT_BURST_MAX) {                             // 窗口播满 → 进入冷却
+          hitMuteUntil = now + HIT_COOLDOWN; hitBurst = 0; hitWinStart = 0;
+          return;
+        }
+        if (now - lastHit < HIT_MIN_GAP) return;                     // 同帧多发命中合并
+      }
+      lastHit = now;
+      if (!force) hitBurst++;
+      tone(240, 0.05, 'square', 0.05, 140);
+    },
     melee() {
       noise(0.18, 0.22, 2600);
       tone(520, 0.16, 'sawtooth', 0.09, 110);

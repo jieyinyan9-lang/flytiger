@@ -934,7 +934,7 @@
             p.hookedBy = this;
             p.vx = 0; p.vy = 0;
             p.hurt(this.dmg, g, this.src);   // 钩中瞬间结算一次伤害（无敌期仍会被钩走）
-            if (window.SFX) SFX.hit();
+            if (window.SFX) SFX.hit(true);   // 被钩中为关键受击反馈：强制播放，不受突发抑制影响
             g.shake(7);
             burst(g, p.x, p.y, 10, ['#9aa3b2', '#d7dde8', '#2a2e38'], 170, 4, 0.4);
           }

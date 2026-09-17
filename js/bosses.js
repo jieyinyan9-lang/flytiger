@@ -2353,7 +2353,7 @@
       }
       else if (this.state === 'clawWind') {
         // 抬爪蓄力 0.32s
-        if (this.stateT > 0.32) { this.state = 'clawHit'; this.stateT = 0; g.shake(6); SFX.hit(); }
+        if (this.stateT > 0.32) { this.state = 'clawHit'; this.stateT = 0; g.shake(6); SFX.hit(true); }   // Boss 爪击：关键事件强制播放
       }
       else if (this.state === 'clawHit') {
         // 快速爪击：前方扇形判定
