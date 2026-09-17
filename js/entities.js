@@ -309,7 +309,7 @@
   };
 
   /** 命中瞬间：受击点一小圈火花/冰屑/毒液飞散 + 敌人身上留下对应异常像素标记。
-   *  mul：受击效果范围倍率（冰弹体积 ×1.2 → 冰屑飞散/冰霜覆盖同步 ×1.2） */
+   *  mul：受击效果范围倍率（冰弹体积为基础 ×3.6 → 冰屑飞散/冰霜覆盖同步 ×3.6） */
   function elemHitFx(ent, type, hx, hy, g, mul) {
     mul = mul || 1;
     if (!ent) return;
@@ -535,6 +535,9 @@
       this.ultraKill = !!opts.ultraKill;       // 秒杀小怪（含地下龙类）
       this.onHitEnemy = opts.onHitEnemy || null;    // 命中敌人回调（反弹逻辑）
       this.target = opts.target || null;       // 追踪目标（超猫激光串）
+      this.straightT = opts.straightT || 0;    // 初射直线飞行时间（超猫五重激光：先分向直射，飞满后才索敌）
+      this._sought = false;                    // 初射段结束后是否已执行首次索敌
+      this.ultPts = null;                      // 五重激光飞行轨迹点（玫红光带缎带数据源）
       this.trailLite = !!opts.trailLite;       // 轻量化拖尾（角色最终形态：少而小的粒子，避免遮挡战场）
       this.whiteStar = !!opts.whiteStar;       // 法师护盾碎星：纯白色五角星
       /* —— 飞行弹幕小怪能量弹（纯亮矢量样式 + 能量光带拖尾） —— */
@@ -702,8 +705,29 @@
         this.vx = Math.cos(a) * spd; this.vy = Math.sin(a) * spd;
         this.angle = a;
       }
-      // 追踪导弹 / 漂浮弹 / 超猫激光串：按转向速率缓慢修正朝向目标（默认玩家）
-      if (this.homing && !this.neutralized) {
+      // 超猫五重激光串：先沿各自固定方向直线初射（不索敌、不转向），飞满 straightT 后才开始索敌追踪最近目标
+      if (this.kind === 'ultlaser' && this.homing && !this.neutralized) {
+        if (this.straightT > 0) {
+          this.straightT = Math.max(0, this.straightT - dt);
+          if (this.straightT <= 0) { this._sought = true; this.target = this.pickRetarget(g); }
+        } else {
+          let tgt = this.target;
+          if (!tgt || tgt.dead) { tgt = this.pickRetarget(g); this.target = tgt; }
+          if (tgt) {
+            const ta = Math.atan2(tgt.y - this.y, tgt.x - this.x);
+            let cur = Math.atan2(this.vy, this.vx);
+            let d = ta - cur;
+            while (d > Math.PI) d -= TAU;
+            while (d < -Math.PI) d += TAU;
+            cur += clamp(d, -this.turnRate * dt, this.turnRate * dt);
+            const sp = Math.hypot(this.vx, this.vy);
+            this.vx = Math.cos(cur) * sp; this.vy = Math.sin(cur) * sp;
+            this.angle = cur;
+          }
+        }
+      }
+      // 追踪导弹 / 漂浮弹：按转向速率缓慢修正朝向目标（默认玩家）；超猫激光串走上方专属分支
+      if (this.homing && !this.neutralized && this.kind !== 'ultlaser') {
         let p = this.target ? (this.target.dead ? this.pickRetarget(g) : this.target) : g.player;
         if (p) {
         const ta = Math.atan2(p.y - this.y, p.x - this.x);
@@ -952,6 +976,28 @@
             -by * rand(30, 90) + rand(-16, 16),
             rand(0.18, 0.34), rand(1.5, 2.8),
             Math.random() < 0.5 ? '#3b8bff' : '#ff3b5c'));
+        }
+      }
+      // 超猫五重激光串：明显玫红拖尾 —— 每帧记录轨迹点（光带缎带数据源）+ 高频浓密玫红粒子
+      if (this.kind === 'ultlaser' && !this.neutralized) {
+        if (!this.ultPts) this.ultPts = [];
+        this.ultPts.push({ x: this.x, y: this.y });
+        if (this.ultPts.length > 18) this.ultPts.shift();
+        this._ultT = (this._ultT || 0) + dt;
+        if (this._ultT > 0.018) {
+          this._ultT = 0;
+          const spd = Math.hypot(this.vx, this.vy) || 1;
+          const bx = this.vx / spd, by = this.vy / spd;
+          const cols = ['#ff2e88', '#ff6fb0', '#ffb0d4', '#ffe0ef', '#ffffff'];
+          for (let i = 0; i < 2; i++) {
+            g.particles.push(new Particle(
+              this.x - bx * this.r * 1.3 + rand(-3, 3),
+              this.y - by * this.r * 1.3 + rand(-3, 3),
+              -bx * rand(40, 150) + rand(-42, 42),
+              -by * rand(40, 150) + rand(-42, 42),
+              rand(0.22, 0.44), rand(2, 5.2),
+              cols[randi(0, cols.length - 1)]));
+          }
         }
       }
       // 弹速强化速度线：我方弹弹尾拉出青白速度线，等级越高越长越密（纯视觉反馈；超猫蓝红拖尾弹不走青白）
@@ -2358,14 +2404,35 @@
         return;
       }
       if (k === 'ultlaser') {
-        // 超猫大招激光串：亮青白粗光束 + 强光晕 + 前端亮头
+        // 超猫大招五重激光：玫红粗光束 + 强光晕 + 前端亮头 + 明显长拖尾缎带
         const a = Math.atan2(this.vy, this.vx);
         const pulse = 1 + Math.sin(this.t * 26) * 0.16;
+        // 玫红光带缎带：沿飞行轨迹的三层渐细渐隐拖尾（外玫红晕 / 中亮粉 / 内白芯）
+        const pts = this.ultPts;
+        if (pts && pts.length > 1) {
+          const layers = [
+            { rgb: '255,46,136', w: this.r * 1.9, amax: 0.30 },
+            { rgb: '255,111,176', w: this.r * 1.05, amax: 0.45 },
+            { rgb: '255,224,239', w: this.r * 0.42, amax: 0.62 }
+          ];
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          for (const L of layers) {
+            for (let i = 1; i < pts.length; i++) {
+              const kk = i / pts.length;
+              ctx.strokeStyle = 'rgba(' + L.rgb + ',' + (L.amax * kk).toFixed(3) + ')';
+              ctx.lineWidth = L.w * kk;
+              ctx.beginPath();
+              ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
+              ctx.lineTo(pts[i].x, pts[i].y);
+              ctx.stroke();
+            }
+          }
+        }
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a);
         const Wd = this.r * 2 * pulse;
-        ctx.fillStyle = 'rgba(53,224,255,0.25)'; ctx.fillRect(-46, -Wd, 52, Wd * 2);
-        ctx.fillStyle = '#35e0ff'; ctx.fillRect(-34, -Wd * 0.6, 40, Wd * 1.2);
-        ctx.fillStyle = '#d9fbff'; ctx.fillRect(-34, -Wd * 0.28, 40, Wd * 0.56);
+        ctx.fillStyle = 'rgba(255,46,136,0.28)'; ctx.fillRect(-46, -Wd, 52, Wd * 2);
+        ctx.fillStyle = '#ff2e88'; ctx.fillRect(-34, -Wd * 0.6, 40, Wd * 1.2);
+        ctx.fillStyle = '#ffb0d4'; ctx.fillRect(-34, -Wd * 0.28, 40, Wd * 0.56);
         ctx.fillStyle = '#fff'; ctx.fillRect(4, -Wd * 0.4, 8, Wd * 0.8);
         ctx.restore();
         return;
@@ -4824,13 +4891,13 @@
         const eOffY = (elemCount === 1 ? 0 : (w - (elemCount - 1) / 2) * 14);
         const eSpeed = speed * eb.spdMul;
         let vy = 0, vx = Math.cos(off) * eSpeed;
-        if (el === 'flame') vy = Math.sin(off) * eSpeed - 60;
+        if (el === 'flame') vy = Math.sin(off) * eSpeed - 20;   // 弹速÷3后上抛偏置同步÷3（60→20），保持抛物线仰角不变
         else if (el === 'poison') vy = Math.sin(off) * eSpeed + 60;
         else vy = Math.sin(off) * eSpeed;
         g.bullets.push(new Bullet(
           muzzleX, muzzleY + eOffY, vx, vy,
           { kind: 'orb', friendly: true, dmg: Math.max(1, Math.round(dmg * eb.dmgMul)), r: eb.r * bscale,
-            pierce: 0, element: el, life: 4, elemPow: this.elemLv[el] || 0 }));
+            pierce: 0, element: el, life: eb.life || 4, elemPow: this.elemLv[el] || 0 }));
         // 毒液枪口：绿色浆质喷溅 + 几颗毒液颗粒
         if (el === 'poison') {
           for (let i = 0; i < 5; i++) {
@@ -9780,7 +9847,7 @@
       s.flash = 0.12;
       this.hurtT = 0.12;
       // 元素弹命中节：对应元素色火花（火焰橙红/毒液墨绿/寒冰浅蓝）；无元素保留草龙绿色
-      if (element && ELEM_HIT_COLS[element]) burst(g, s.x, s.y, element === 'ice' ? 12 : 8, ELEM_HIT_COLS[element], element === 'ice' ? 180 : 130, element === 'ice' ? 3.1 : 3, 0.3, element === 'ice' ? 40 : 70);
+      if (element && ELEM_HIT_COLS[element]) burst(g, s.x, s.y, element === 'ice' ? 36 : 8, ELEM_HIT_COLS[element], element === 'ice' ? 540 : 130, element === 'ice' ? 9.4 : 3, 0.3, element === 'ice' ? 40 : 70);
       else burst(g, s.x, s.y, 3, ['#fff', '#bff5d6', '#7ed46d'], 130, 3, 0.2);
       SFX.hit();
       // 元素效果（与小怪一致：DoT / 冻结）

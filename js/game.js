@@ -1525,35 +1525,45 @@
       this.toast('🩸 血怒开启！受创越多，弹幕越强', 2.2);
     }
 
-    /** [超猫] 五重激光串：5 道追踪激光，秒杀小怪（含地下龙类）、每道对 Boss 造成 4% 最大生命、摧毁障碍；
-     *  5 道初射角度各不相同（扇形展开），发射后由追踪转向修正命中目标 */
+    /** [超猫] 五重激光串：5 道玫红追踪激光，秒杀小怪（含地下龙类）、每道对 Boss 造成 4% 最大生命、摧毁障碍；
+     *  初射沿 5 个完全不同的固定方向直线飞行一段（-72°~+72° 五等分，间隔36°），飞满后再各自索敌追踪最近目标 */
     ultLasers() {
       SFX.ultimate();
       this.shake(12);
-      this.flashT = 0.4; this.flashColor = '#35e0ff';
+      this.flashT = 0.4; this.flashColor = '#ff2e88';
       const p = this.player;
-      // 收集屏幕内目标（含地下龙类小段：以首节为代表目标；本体草龙免疫秒杀的约定保留——激光只杀伤小段与普通敌人）
-      const targets = [];
-      this.enemies.forEach(e => {
-        if (e.dead) return;
-        if (e.segments) {
-          if (e.isMini) { const fa = e.firstAlive(); if (fa) targets.push(fa.s); }   // 小段：以首节为追踪目标
-        } else targets.push(e);
-      });
-      this.bosses.forEach(b => { if (!b.dead && b.state !== 'enter' && b.state !== 'trans') targets.push(b); });
       for (let i = 0; i < 5; i++) {
-        const t = targets.length ? targets[i % targets.length] : null;
-        const a = t ? Math.atan2((t.y || CFG.H / 2) - p.y, (t.x || CFG.W / 2) - p.x) : 0;
-        // 初射角度以瞄准角为中心扇形展开（i=0..4 → -0.64/-0.32/0/+0.32/+0.64 rad，各不相同）
-        const la = a + (i - 2) * 0.32;
+        // 5 个完全不同的初射方向：以前进方向（右）为基准 -72°/-36°/0°/+36°/+72°
+        const la = (i - 2) * 0.2 * Math.PI;
         this.bullets.push(new Bullet(p.x + 30, p.y, Math.cos(la) * 560, Math.sin(la) * 560, {
           kind: 'ultlaser', friendly: true, dmg: 60, r: 9,
-          homing: true, turnRate: 5.5, target: t, life: 3.2,
-          ultraKill: true, bossDmgRatio: 0.04, rockBreak: true, rockReact: true,
-          trailCols: ['#35e0ff', '#a5f3fc', '#fff', '#7fe7ff'], trailLite: true
+          homing: true, turnRate: 5.5, life: 3.2, straightT: 0.24,
+          ultraKill: true, bossDmgRatio: 0.04, rockBreak: true, rockReact: true
         }));
       }
       this.toast('🦸 五重激光串！', 1.8);
+    }
+
+    /** [超猫] 五重激光命中特效：玫红爆炸（扩散冲击环 + 浓密玫红粒子）+ 蓝色电流从炸点四射 */
+    ultLaserBlast(x, y) {
+      this.fxRings.push({ x, y, r: 8, vr: 470, t: 0, life: 0.38, col: '#ff2e88' });
+      burst(this, x, y, 24, ['#ff2e88', '#ff6fb0', '#ffb0d4', '#ffe0ef', '#fff'], 330, 6, 0.5);
+      // 蓝色电流：4~5 道从炸点向四周迸射的锯齿短电弧
+      const n = 4 + randi(0, 1);
+      for (let i = 0; i < n; i++) {
+        const base = rand(0, TAU), rad = rand(36, 72);
+        const pts = [{ x, y }];
+        for (let s = 1; s <= 5; s++) {
+          const tt = s / 5;
+          pts.push({
+            x: x + Math.cos(base) * rad * tt + rand(-9, 9),
+            y: y + Math.sin(base) * rad * tt + rand(-9, 9)
+          });
+        }
+        this.arcs.push({ pts, t: 0, life: 0.22, blue: true });
+      }
+      SFX.zap();
+      this.shake(4);
     }
 
     gainXp(v) {
@@ -2711,7 +2721,7 @@
                   if (aliveBefore && e.dead) Ach.evt('bulletKill', { g: this, kind: b.kind, bounced: false, ult: true });
                 }
               }
-              burst(this, b.x, b.y, 16, ['#35e0ff', '#a5f3fc', '#fff'], 260, 5, 0.5);
+              this.ultLaserBlast(b.x, b.y);
               b.dead = true;
               break;
             }
@@ -2719,7 +2729,7 @@
             if (b.bossDmgRatio > 0 && e.isBoss) {
               e.takeDamage(e.maxHp * b.bossDmgRatio, this);
               if (window.Ach) Ach.evt('ultLaserHit', { g: this, target: e });
-              burst(this, b.x, b.y, 16, ['#35e0ff', '#fff'], 260, 5, 0.5);
+              this.ultLaserBlast(b.x, b.y);
               b.dead = true;
               break;
             }
@@ -2743,7 +2753,7 @@
                 if (e.spawnInvuln > 0) e.invulnBreakT = 3;   // 毒液：3s 后破无敌
               } else if (b.element === 'ice') {
                 this.applyElement(e, 'ice', b.dmg, b.elemPow);
-                elemHitFx(e, 'ice', b.x, b.y, this, 1.2);  // 浅蓝冰屑 + 冰霜加厚（冰弹×1.2，受击范围同步）
+                elemHitFx(e, 'ice', b.x, b.y, this, 3.6);  // 浅蓝冰屑 + 冰霜加厚（冰弹体积×3.6，受击范围同步）
                 if (e.spawnInvuln > 0) e.invulnBreakT = 0.5; // 寒冰也破无敌
               }
               // 法师魔法护盾期间击中敌人：困惑并下坠 2s
@@ -4661,17 +4671,27 @@
         }
         // 玩家
         if (this.player.hp > 0) this.player.render(ctx);
-        // 闪电链电弧（子弹层前）：白色粗线 + 黄色细线
+        // 闪电链电弧（子弹层前）：白色粗线 + 黄色细线；五重激光命中电弧为蓝色电流
         this.arcs.forEach(a => {
           const alpha = clamp(1 - a.t / a.life, 0, 1);
           ctx.globalAlpha = alpha;
           ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5;
           ctx.beginPath();
           a.pts.forEach((pt, i) => i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y));
-          ctx.stroke();
-          ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 2;
-          ctx.stroke();
+          if (a.blue) {
+            // 蓝色电流：浅蓝粗弧（带发光） + 蓝色亮芯
+            ctx.shadowColor = '#3b9bff'; ctx.shadowBlur = 8;
+            ctx.strokeStyle = '#bfe9ff'; ctx.lineWidth = 4;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#3b9bff'; ctx.lineWidth = 1.8;
+            ctx.stroke();
+          } else {
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5;
+            ctx.stroke();
+            ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 2;
+            ctx.stroke();
+          }
           ctx.globalAlpha = 1;
         });
         // 子弹
