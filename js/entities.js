@@ -307,12 +307,12 @@
     ctx.fillStyle = glow;
     ctx.beginPath(); ctx.arc(0, 0, r * 1.7, 0, TAU); ctx.fill();
     const cell = (i, j, col) => { ctx.fillStyle = col; ctx.fillRect((i - 0.5) * u, (j - 0.5) * u, u + 0.6, u + 0.6); };
-    // 棱面行表：尖锥收于前方 +5，六棱平头收尾于 -4
+    // 棱面行表：前端收成长尖刺（中轴线延至 +8：8→6→4→2→0 阶梯收尖），六棱平头收尾于 -4
     const rows = [
       { j: -4, a: -1, b: 0 }, { j: -3, a: -3, b: 2 },
-      { j: -2, a: -4, b: 3 }, { j: -1, a: -4, b: 4 },
-      { j: 0, a: -4, b: 5 },
-      { j: 1, a: -4, b: 4 }, { j: 2, a: -4, b: 3 },
+      { j: -2, a: -4, b: 4 }, { j: -1, a: -4, b: 6 },
+      { j: 0, a: -4, b: 8 },
+      { j: 1, a: -4, b: 6 }, { j: 2, a: -4, b: 4 },
       { j: 3, a: -3, b: 2 }, { j: 4, a: -1, b: 0 }
     ];
     const flick = Math.floor(t * 10);
@@ -343,8 +343,8 @@
       const ii = 1.6 + Math.sin(t * 4 + s * 2.4) * 0.8;
       if ((flick + s * 3) % 2 === 0) { cell(ii, jj, '#dff4ff'); }
     }
-    // —— 锥尖高光点 ——
-    cell(5, 0, '#ffffff');
+    // —— 锥尖高光点（长尖刺最前端） ——
+    cell(8, 0, '#ffffff');
     ctx.restore();
   }
 
@@ -963,21 +963,21 @@
           this.trail = 0;
           const spd = Math.hypot(this.vx, this.vy) || 1;
           const bx = this.vx / spd, by = this.vy / spd;
-          const sf = 0.7 + this.r / 14;                    // 粒子尺寸随弹体（r=42 → ×3.7）
-          for (let i = 0; i < 3; i++) {
+          const sf = 0.7 + this.r / 14;                    // 粒子尺寸随弹体（r=21 → ×2.2）
+          for (let i = 0; i < 4; i++) {
             g.particles.push(new Particle(
-              this.x - bx * this.r * 0.95 + rand(-3, 3) * sf,
-              this.y - by * this.r * 0.95 + rand(-3, 3) * sf,
-              -bx * rand(30, 90) * sf + rand(-18, 18) * sf,
-              -by * rand(20, 60) * sf - rand(28, 70) * sf,  // 火星固定向上飘散
-              rand(0.24, 0.46), rand(1.8, 3.6) * sf,
+              this.x - bx * this.r * 0.95 + rand(-5, 5) * sf,
+              this.y - by * this.r * 0.95 + rand(-5, 5) * sf,
+              -bx * rand(60, 150) * sf + rand(-26, 26) * sf,
+              -by * rand(40, 100) * sf - rand(26, 60) * sf,  // 火星固定向上飘散
+              rand(0.45, 0.8), rand(2.8, 5.2) * sf,
               Math.random() < 0.45 ? '#ffd23b' : (Math.random() < 0.65 ? '#ff9d2e' : '#ff5a1a')));
           }
           // 偶发白热亮芯火星（更亮更大）
           if (Math.random() < 0.5) g.particles.push(new Particle(
-            this.x - bx * this.r * 0.8, this.y - by * this.r * 0.8 + rand(-2, 2) * sf,
-            -bx * rand(20, 50) * sf, -by * rand(10, 40) * sf - rand(20, 50) * sf,
-            rand(0.18, 0.3), rand(1.4, 2.4) * sf, '#fff3a8'));
+            this.x - bx * this.r * 0.8, this.y - by * this.r * 0.8 + rand(-3, 3) * sf,
+            -bx * rand(40, 90) * sf, -by * rand(30, 70) * sf - rand(20, 50) * sf,
+            rand(0.35, 0.6), rand(2.2, 3.8) * sf, '#fff3a8'));
         }
       }
       // 寒冰弹拖尾：成簇冰晶像素轨迹（冷白/浅蓝/深蓝三色，向后缓飘，尺寸随弹体放大）
@@ -988,18 +988,18 @@
           const spd = Math.hypot(this.vx, this.vy) || 1;
           const bx = this.vx / spd, by = this.vy / spd;
           const sf = 0.7 + this.r / 12;                    // 粒子尺寸随弹体（r=21.6 → ×2.5）
-          for (let i = 0; i < 2; i++) {
+          for (let i = 0; i < 3; i++) {
             g.particles.push(new Particle(
-              this.x - bx * this.r + rand(-3, 3) * sf, this.y - by * this.r + rand(-3, 3) * sf,
-              -bx * rand(20, 70) * sf + rand(-14, 14) * sf, -by * rand(20, 70) * sf + rand(-14, 14) * sf,
-              rand(0.28, 0.5), rand(1.8, 3.2) * sf,
+              this.x - bx * this.r + rand(-5, 5) * sf, this.y - by * this.r + rand(-5, 5) * sf,
+              -bx * rand(50, 130) * sf + rand(-20, 20) * sf, -by * rand(50, 130) * sf + rand(-20, 20) * sf,
+              rand(0.5, 0.85), rand(2.8, 4.8) * sf,
               Math.random() < 0.4 ? '#eaf7ff' : (Math.random() < 0.6 ? '#bfe9ff' : '#7fc6ef')));
           }
-          // 偶发碎白晶（细小亮片）
+          // 偶发碎白晶（亮片，粗长尾中的大颗晶屑）
           if (Math.random() < 0.55) g.particles.push(new Particle(
             this.x - bx * this.r * 0.7, this.y - by * this.r * 0.7,
-            -bx * rand(10, 40) * sf + rand(-20, 20) * sf, -by * rand(10, 40) * sf + rand(-20, 20) * sf,
-            rand(0.3, 0.55), rand(1.2, 2.2) * sf, '#ffffff'));
+            -bx * rand(30, 80) * sf + rand(-24, 24) * sf, -by * rand(30, 80) * sf + rand(-24, 24) * sf,
+            rand(0.5, 0.9), rand(2, 3.4) * sf, '#ffffff'));
         }
       }
       // 毒液弹拖尾：粘稠丝线像素 + 滴落毒液像素点（向下坠落）；穿过障碍时在墙上留腐蚀痕
