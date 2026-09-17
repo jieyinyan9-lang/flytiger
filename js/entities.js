@@ -282,6 +282,8 @@
         this.hkAngle = Math.PI;                // 钩头朝向（初始朝左）
         this.hkPts = null;                     // 铁链逐节坐标
         this.hkCd = 0;                         // 铁钩本体伤害节流
+        this.hkGrabbed = false;                // 本钩是否已钩中过人（每钩只钩一次）
+        this.hkGrab = null;                    // 拖拽中：{p,dist,ox,oy} 玩家挂在钩尖的局部偏移与累计行程
       }
       /* —— 击杀者归因：显式 opts.src 优先，否则继承发射时刻的当前敌人/Boss —— */
       this.src = opts.src || shooterSrc();
@@ -921,13 +923,45 @@
           // 完全展开判定：链条 6 成长度已沿横跨路线拉开后，绷直段有伤害
           const headD = Math.hypot(this.x - a.x, this.y - a.y);
           if (this.hkPhase === 'out' && headD >= P.chainLen * 0.6) this.hkStraight = true;
-          // 伤害：钩头全程有伤害（回收除外）；绷直链条有伤害，转向弯曲/回收无伤害
           const p = g.player;
-          if (this.hkPhase !== 'retract' && this.hkCd <= 0 &&
+          const mSpd = Math.hypot(mvx, mvy);
+          // —— 钩中玩家：钩住并拖走（每钩只钩一次；回收阶段不钩；已被别的钩拖着不重复钩） ——
+          if (!this.hkGrabbed && !p.hookedBy && this.hkPhase !== 'retract' &&
+              Math.hypot(p.x - this.x, p.y - this.y) < P.hookW + p.radius * 0.7) {
+            this.hkGrabbed = true;
+            // 玩家挂在钩尖：钩头局部坐标偏移（放大后钩尖约在局部 (-34,42)）
+            this.hkGrab = { p, dist: 0, ox: -14, oy: 40 };
+            p.hookedBy = this;
+            p.vx = 0; p.vy = 0;
+            p.hurt(this.dmg, g, this.src);   // 钩中瞬间结算一次伤害（无敌期仍会被钩走）
+            if (window.SFX) SFX.hit();
+            g.shake(7);
+            burst(g, p.x, p.y, 10, ['#9aa3b2', '#d7dde8', '#2a2e38'], 170, 4, 0.4);
+          }
+          // —— 拖拽中：玩家贴钩尖跟随移动，累计行程满半屏宽度后脱钩 ——
+          if (this.hkGrab) {
+            const gr = this.hkGrab;
+            gr.dist += mSpd;
+            const cs = Math.cos(this.hkAngle), sn = Math.sin(this.hkAngle);
+            const nx = this.x + cs * gr.ox - sn * gr.oy;
+            const ny = this.y + sn * gr.ox + cs * gr.oy;
+            const gyD = g.groundYAt ? g.groundYAt(nx) : CFG.GROUND_Y;
+            p.x = clamp(nx, 40, CFG.W - 60);
+            p.y = clamp(ny, CFG.TOP_Y, gyD - p.radius * 0.5);
+            p.vx = 0; p.vy = 0;
+            if (gr.dist >= P.hookGrabDist || this.hkPhase === 'retract') {
+              p.hookedBy = null;
+              this.hkGrab = null;
+            }
+          }
+          // 钩头接触伤害（尚未钩住任何人时才有；钩中瞬间伤害已在上方结算）
+          if (!this.hkGrabbed && this.hkPhase !== 'retract' && this.hkCd <= 0 &&
               Math.hypot(p.x - this.x, p.y - this.y) < P.hookW + p.radius * 0.7) {
             if (p.hurt(this.dmg, g, this.src)) this.hkCd = 0.3;
           }
-          const chainHurts = (this.hkPhase === 'out' && this.hkStraight) || (this.hkPhase === 'fly2' && this.hkStraight);
+          // 绷直链条伤害（转向弯曲/回收无伤害；已被钩住拖着的玩家不再吃链条伤害）
+          const chainHurts = !this.hkGrab &&
+            ((this.hkPhase === 'out' && this.hkStraight) || (this.hkPhase === 'fly2' && this.hkStraight));
           if (chainHurts) {
             const cw = P.chainW * 1.5 + p.radius * 0.8;
             for (let i = 0; i < pts.length - 1; i++) {
@@ -1380,8 +1414,28 @@
             ctx.restore();
           }
         }
-        // 钩头：宽大厚重的黑色金属单钩，边缘灰白高光
+        // 钩中玩家：钩尖与玩家之间补几节短链（绑定拖拽视觉）
+        if (this.hkGrab && this.hkGrab.p) {
+          const pp = this.hkGrab.p;
+          const dx = pp.x - this.x, dy = pp.y - this.y;
+          const dd = Math.hypot(dx, dy) || 1;
+          const la = Math.atan2(dy, dx);
+          ctx.lineCap = 'round';
+          for (let i = 1; i <= 3; i++) {
+            const t = i / 4;
+            ctx.save();
+            ctx.translate(this.x + dx * t, this.y + dy * t);
+            ctx.rotate(la + (i % 2 === 0 ? Math.PI / 2 : 0));
+            ctx.strokeStyle = '#0c0e13'; ctx.lineWidth = 5.2;
+            ctx.beginPath(); ctx.ellipse(0, 0, Math.min(8.2, dd * 0.2), 4.4, 0, 0, TAU); ctx.stroke();
+            ctx.strokeStyle = '#6e7685'; ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.ellipse(0, -0.7, Math.min(7.6, dd * 0.17), 3.3, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+            ctx.restore();
+          }
+        }
+        // 钩头：宽大厚重的黑色金属单钩，边缘灰白高光（整体放大 hookScale，比角色还大）
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.hkAngle);
+        ctx.scale(P.hookScale, P.hookScale);
         ctx.strokeStyle = '#0a0c11'; ctx.lineWidth = 12; ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(16, 0); ctx.lineTo(-16, 0);                       // 钩柄
@@ -3610,6 +3664,11 @@
       if (this.meleeT <= 0 && this.wasMeleeing) { this.cdT = CFG.player.meleeCooldown; this.wasMeleeing = false; }
       if (this.meleeT > 0) this.wasMeleeing = true;
 
+      // 被深海恶霸铁钩钩住：钩体消亡/失效时安全解绑（位置由铁钩拖拽接管）
+      if (this.hookedBy && (this.hookedBy.dead || this.hookedBy.neutralized ||
+          !g.bullets.includes(this.hookedBy))) {
+        this.hookedBy = null;
+      }
       // 移动：按开局选择的操作模式 —— 键盘模式仅键盘，鼠标模式仅鼠标
       let mx = 0, my = 0;
       if (g.ctrlMode === 'mouse' && g.mouse && g.mouse.active) {
@@ -3628,6 +3687,8 @@
       if (this.downT > 0) { mx = 0; my = 0; }
       // Boss 入场演出：禁用玩家输入（由演出逻辑自动移动）
       if (g.bossIntro) { mx = 0; my = 0; }
+      // 被铁钩钩住拖走：禁用飞行输入
+      if (this.hookedBy) { mx = 0; my = 0; }
       // 护罩存在期间移速加成（护罩强化 Lv5/Lv8）
       const shieldSpd = (this.shieldActive && this.shieldDef && this.shieldDef.spd) ? this.shieldDef.spd : 0;
       const spd = CFG.player.speed * (this.speedMul || 1) * (1 + (this.sizeMul - 1) * 0.08)
@@ -3640,14 +3701,20 @@
         const floor = gyD - this.radius * 0.5;
         if (this.y < floor - 1) this.vy = Math.min(780, this.vy + 2400 * dt);
         else { this.vy = 0; this.y = floor; }
+      } else if (this.hookedBy) {
+        // 被铁钩拖走中：速度清零，位置完全由铁钩接管（不做自主位移/环境推力）
+        this.downSpin = 0;
+        this.vx = 0; this.vy = 0;
       } else {
         this.downSpin = 0;
         this.vx = mx * spd; this.vy = my * spd;
       }
-      // 环境推力（海底水流 / 雪地暴风雪：弱于满速，可逆向操作对抗）
-      const ef = g.envForce || null;
-      this.x += (this.vx + (ef ? ef.x : 0)) * dt;
-      this.y += (this.vy + (ef ? ef.y : 0)) * dt;
+      if (!this.hookedBy) {
+        // 环境推力（海底水流 / 雪地暴风雪：弱于满速，可逆向操作对抗）
+        const ef = g.envForce || null;
+        this.x += (this.vx + (ef ? ef.x : 0)) * dt;
+        this.y += (this.vy + (ef ? ef.y : 0)) * dt;
+      }
       this.radius = CFG.player.radius;   // 碰撞体固定：生命强化只放大视觉体型，不放大受击判定
       this.x = clamp(this.x, 40, CFG.W - 60);
       // 危险地面高度：大海为波动海平面（g.groundYAt），其余地图为固定地面
@@ -3658,8 +3725,8 @@
       this.faceTilt += (clamp(this.vy / 900, -0.25, 0.25) - this.faceTilt) * Math.min(1, dt * 10);
 
       /* ===== 角色自动技能持续效果 ===== */
-      // 侠客疾风突刺：高速前冲 + 飞叶拖尾 + 路径刀光/伤害/破障
-      if (this.autoSkill === 'dash' && this.meleeT > 0) {
+      // 侠客疾风突刺：高速前冲 + 飞叶拖尾 + 路径刀光/伤害/破障（被铁钩拖走期间不触发位移）
+      if (this.autoSkill === 'dash' && this.meleeT > 0 && !this.hookedBy) {
         this.dashPrevX = this.x; this.dashPrevY = this.y;
         this.x += this.dashVx * dt;
         // 冲出屏幕边缘 → 瞬移到屏幕左侧中间

@@ -172,7 +172,9 @@
       ringBand: 22,               // 冲击波伤害环带宽度
       // —— 攻击3：巨型铁钩 ——
       hookDmg: 16,
-      hookLen: 34, hookW: 22,     // 钩头判定（铁钩本体高度≈角色高 2/3 以上）
+      hookLen: 34, hookW: 32,     // 钩头判定半径（视觉钩头≈角色高1.5倍以上）
+      hookScale: 2.1,             // 钩头视觉缩放（描边/钩身整体放大）
+      hookGrabDist: 480,          // 钩中玩家后拖拽行程（≈半屏宽度）
       hookSpd: 600, hookSpdEnr: 742,         // 水平高速
       hookTurnT: 0.3, hookTurnTEnr: 0.2,     // 唯一一次 90° 转向耗时（狂暴更快）
       chainLen: 900,              // 铁链长度（横跨整个屏幕宽度）
