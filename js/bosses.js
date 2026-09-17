@@ -7040,7 +7040,7 @@
     }
   }
 
-  /* ================ 紫手（紫色荒地限定，第4关之后） ================
+  /* ================ 紫手（紫色荒地限定，第1轮起出场） ================
    * 固定屏幕右侧小幅上下移动，偶尔瞬移；行为 a → b 循环：
    *  a：随机 ①3 发紫红扇形弹（红拖尾）②1 发高速直线狐火弹（紫焰拖尾）③投掷自转弧线巨型卡牌；
    *  b：4 张巨牌在四角浮现，短暂预警后依次向玩家发射紫红扇形弹。
@@ -7327,8 +7327,8 @@
     { cls: CaptainGeorge, weight: 3, map: 'ocean', music: 'boss-1' },
     // 火遮眼：火焰山永久限定（map），火焰斩→火龙冲锋循环，狂暴3道窄斩
     { cls: FireBlind, weight: 3, map: 'volcano', music: 'boss-1' },
-    // 紫手：紫色荒地永久限定（map），第4关之后（minOrd 5）；a随机攻击↔b角牌阵，狂暴6牌
-    { cls: PurpleHand, weight: 3, map: 'wasteland', minOrd: 5, music: 'boss-2' },
+    // 紫手：紫色荒地永久限定（map），第1轮起进入普通等权池；a随机攻击↔b角牌阵，狂暴6牌
+    { cls: PurpleHand, weight: 3, map: 'wasteland', music: 'boss-2' },
     // 深海恶霸：深海永久限定（map）；追踪水鲨/炸弹3环冲击波/90°转向铁钩链，66%血鲨鱼围猎高潮
     { cls: SeaBully, weight: 3, map: 'seabed', music: 'boss-1' }
   ];
