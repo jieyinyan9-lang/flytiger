@@ -7016,7 +7016,6 @@
       this.angle = rand(0, TAU);
       this.angV = id === 'bkCube' ? 0.62 : 0;
       this.hitCd = 0;
-      this.flashT = 0;
       this.fadeT = 0.5;
       this.t = 0;
       this.dead = false;
@@ -7068,7 +7067,6 @@
       this.t += dt;
       this.fadeT = Math.max(0, this.fadeT - dt);
       this.hitCd = Math.max(0, this.hitCd - dt);
-      this.flashT = Math.max(0, this.flashT - dt);
       if (this.angV) this.angle += dt * this.angV;
       this.x -= 62 * dt * (g.map.scrollMul || 1);
       if (this.x < -this.w / 2 - 140) this.dead = true;
@@ -7143,23 +7141,8 @@
         case 'bkmesa': drawBreakMesa(ctx, r); break;
         case 'bkwood': drawBreakWood(ctx, r); break;
       }
-      // 裂纹/崩口：随掉血加深（4 个阶段）；转动魔方用白闪即可，不叠固定裂纹
+      // 裂纹/崩口：随掉血加深（4 个阶段）；转动魔方不叠固定裂纹
       if (this.id !== 'bkCube') drawBreakDamage(ctx, r);
-      // 受击白闪（包络盒剪影，短暂）
-      if (this.flashT > 0) {
-        ctx.globalAlpha = 0.55 * Math.min(1, this.flashT / 0.12);
-        ctx.fillStyle = '#ffffff';
-        if (this.id === 'bkCube') {
-          ctx.save();
-          ctx.translate(this.x, this.ccyNow());
-          ctx.rotate(this.angle);
-          const s = this.w * 0.40;
-          ctx.fillRect(-s, -s, s * 2, s * 2);
-          ctx.restore();
-        } else {
-          ctx.fillRect(this.left, this.top, this.w, this.h);
-        }
-      }
       ctx.restore();
     }
   }
