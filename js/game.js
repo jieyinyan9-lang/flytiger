@@ -2743,7 +2743,7 @@
                 if (e.spawnInvuln > 0) e.invulnBreakT = 3;   // 毒液：3s 后破无敌
               } else if (b.element === 'ice') {
                 this.applyElement(e, 'ice', b.dmg, b.elemPow);
-                elemHitFx(e, 'ice', b.x, b.y, this);     // 浅蓝冰屑 + 冰霜加厚
+                elemHitFx(e, 'ice', b.x, b.y, this, 1.2);  // 浅蓝冰屑 + 冰霜加厚（冰弹×1.2，受击范围同步）
                 if (e.spawnInvuln > 0) e.invulnBreakT = 0.5; // 寒冰也破无敌
               }
               // 法师魔法护盾期间击中敌人：困惑并下坠 2s
