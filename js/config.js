@@ -823,9 +823,9 @@
      *  频率不同但综合秒伤（直击 + 异常 DoT）拉平：单条弹道理论收益均≈6×基础伤害/秒。
      *  毒：0.7÷0.12 ≈ 5.83 直击 + DoT；火：8÷3 ≈ 2.67 直击 + 0.4×8=3.2 DoT；冰：7.5÷2 = 3.75 直击 + 0.3×7.5=2.25 DoT */
     elementBullet: {
-      flame:  { interval: 3.0, dmgMul: 8.0, r: 14, spdMul: 0.72 },
-      ice:    { interval: 2.0, dmgMul: 7.5, r: 7.2, spdMul: 0.82 },
-      poison: { interval: 0,   dmgMul: 0.7, r: 6, spdMul: 0.88 }
+      flame:  { interval: 3.0, dmgMul: 8.0, r: 42,  spdMul: 0.24, life: 12 },   // 速度÷3、体积再×3（7→14→42）；寿命×3保证慢速弹仍可飞抵屏右
+      ice:    { interval: 2.0, dmgMul: 7.5, r: 21.6, spdMul: 0.273, life: 12 },  // 速度÷3、体积再×3（6→7.2→21.6）
+      poison: { interval: 0,   dmgMul: 0.7, r: 6, spdMul: 0.88, life: 4 }
     },
 
     /** 地图表：每次进入游戏随机刷新一张；阻碍特性与草地相同（撞击掉 30% 生命并碎裂 / 地面单位免疫 / 可被炮弹炸毁）
