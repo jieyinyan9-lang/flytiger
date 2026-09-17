@@ -884,6 +884,14 @@
       this.el.hud.classList.remove('hidden');
       this.el.bossHud.classList.add('hidden');
       this.syncBgmBtn();     // HUD 首次显示：音乐按钮文案与实际开关状态对齐
+      // —— 测试入口：?boss=seabully 直接刷深海恶霸 ——
+      const _bp = new URLSearchParams(location.search).get('boss');
+      if (_bp === 'seabully' && window.SeaBully) {
+        const m = CFG.maps.find(x => x.id === 'seabed');
+        if (m) { this.map = m; this.mapId = 'seabed'; }
+        this.toast('🦈 测试模式：深海恶霸即将登场', 2.5);
+        setTimeout(() => { if (this.state === 'playing') this.spawnBoss(window.SeaBully); }, 1500);
+      }
       if (this.stageMode) {
         this.toast('🌙 月痕沙海 · 6 分钟生存战，击败狮身人面像！', 3.2);
       } else {
@@ -3214,74 +3222,79 @@
         cloud: cloud('#ffffff', '#f0e2c0')
       };
 
-      /* —— 雪地：冷蓝灰阴天，灰黑岩脊 + 蓝白雪山 + 斜向风雪 —— */
+      /* —— 雪地：低饱和灰蓝阴天，四层明度递进（远岩脊→雪山脊→冰崖→近雪丘），条带边缘等高无缝 —— */
       this.bg.snow = {
-        sky: sky([[0, '#6d8397'], [0.55, '#91a6b7'], [1, '#c2d0db']], x => {
-          disk(x, 790, 84, 4, '#eef4fa', '#ffffff');
-          // 低空冷雾
-          const hz = x.createLinearGradient(0, 200, 0, 420);
-          hz.addColorStop(0, 'rgba(220,232,242,0)'); hz.addColorStop(1, 'rgba(220,232,242,0.35)');
+        sky: sky([[0, '#7b8895'], [0.55, '#97a2ad'], [1, '#c1c9d1']], x => {
+          disk(x, 790, 84, 4, '#e9eef3', '#f7fafb');
+          // 低空冷雾（灰蓝，弱化边界）
+          const hz = x.createLinearGradient(0, 200, 0, 430);
+          hz.addColorStop(0, 'rgba(214,221,228,0)'); hz.addColorStop(1, 'rgba(214,221,228,0.35)');
           x.fillStyle = hz; x.fillRect(0, 180, CFG.W, 260);
         }),
         far: strip(480, 200, (c, w, h) => {
-          // 灰黑远岩脊
-          bumps(c, w, h, [[0, 150], [46, 78], [96, 132], [150, 40], [210, 112], [268, 66], [330, 122], [392, 50], [448, 106], [480, 84]], '#5b646e');
-          // 蓝白雪山前层
-          bumps(c, w, h, [[0, 184], [40, 118], [96, 158], [146, 72], [200, 140], [256, 92], [316, 150], [372, 76], [426, 134], [480, 108]], '#d9e6f0');
-          // 雪坡上的灰黑岩面
-          c.fillStyle = '#8a98a8';
-          [[146, 72], [256, 92], [372, 76]].forEach(([px, py]) => {
-            c.beginPath(); c.moveTo(px + 4, py + 30); c.lineTo(px + 26, py + 70); c.lineTo(px + 8, py + 70); c.closePath(); c.fill();
+          // 最远岩脊（灰蓝剪影）
+          bumps(c, w, h, [[0, 128], [46, 86], [96, 132], [150, 52], [210, 118], [268, 74], [330, 126], [392, 58], [448, 112], [480, 128]], '#8d98a3');
+          // 前缘雪山脊（更浅一层）
+          bumps(c, w, h, [[0, 160], [40, 116], [96, 152], [146, 78], [200, 136], [256, 96], [316, 144], [372, 82], [426, 128], [480, 160]], '#abb5bf');
+          // 峰顶柔积雪（不使用纯白，避免硬色块）
+          c.fillStyle = '#dde4ea';
+          [[146, 78], [256, 96], [372, 82]].forEach(([px, py]) => {
+            c.beginPath(); c.moveTo(px - 16, py + 22); c.lineTo(px, py); c.lineTo(px + 16, py + 22); c.closePath(); c.fill();
           });
-          // 雪亮峰顶
-          c.fillStyle = '#ffffff';
-          [[146, 72], [372, 76], [40, 118]].forEach(([px, py]) => {
-            c.beginPath(); c.moveTo(px - 18, py + 26); c.lineTo(px, py); c.lineTo(px + 18, py + 26); c.closePath(); c.fill();
+          // 雪坡暗面（同色系弱对比）
+          c.fillStyle = '#99a4ae';
+          [[146, 78], [372, 82]].forEach(([px, py]) => {
+            c.beginPath(); c.moveTo(px + 2, py + 24); c.lineTo(px + 20, py + 58); c.lineTo(px + 6, py + 58); c.closePath(); c.fill();
           });
-          // 斜向风雪走向（右上→左下细线）
-          c.strokeStyle = 'rgba(255,255,255,0.28)'; c.lineWidth = 2;
-          for (let i = 0; i < 34; i++) {
-            const sx = rand(0, w), sy = rand(0, 160);
-            c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx - 12, sy + 12); c.stroke();
+          // 高空霾：峰顶向天空柔化，消除硬剪影视觉
+          const hz = c.createLinearGradient(0, 20, 0, 110);
+          hz.addColorStop(0, 'rgba(196,204,212,0.55)'); hz.addColorStop(1, 'rgba(196,204,212,0)');
+          c.fillStyle = hz; c.fillRect(0, 20, w, 90);
+          // 斜向风雪细线（稀少、低透明）
+          c.strokeStyle = 'rgba(238,243,247,0.22)'; c.lineWidth = 1;
+          for (let i = 0; i < 22; i++) {
+            const sx = rand(0, w), sy = rand(20, 150);
+            c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx - 10, sy + 10); c.stroke();
           }
         }),
         mid: strip(480, 120, (c, w, h) => {
-          // 参差冰崖（深蓝阴影 + 雪顶）
-          bumps(c, w, h, [[0, 104], [60, 52], [130, 92], [200, 44], [270, 86], [340, 50], [410, 90], [480, 64]], '#8fb2c8');
-          c.fillStyle = '#6f96b2';
-          [[60, 52], [200, 44], [340, 50]].forEach(([px, py]) => {
-            c.beginPath(); c.moveTo(px, py + 18); c.lineTo(px + 22, 96); c.lineTo(px + 2, 96); c.closePath(); c.fill();
+          // 冰崖主体（灰蓝剪影，左右边缘等高便于平铺无缝）
+          bumps(c, w, h, [[0, 84], [60, 54], [130, 90], [200, 46], [270, 84], [340, 52], [410, 88], [480, 84]], '#a7b1bb');
+          // 阴坡面：仅主峰右下，沿轮廓，同色系
+          c.fillStyle = '#95a0aa';
+          [[60, 54], [200, 46], [340, 52]].forEach(([px, py]) => {
+            c.beginPath(); c.moveTo(px - 4, py + 18); c.lineTo(px + 26, 94); c.lineTo(px, 94); c.closePath(); c.fill();
           });
-          c.fillStyle = '#f4f9fd';
-          bumps(c, w, h, [[0, 100], [60, 48], [130, 88], [200, 40], [270, 82], [340, 46], [410, 86], [480, 60]], '#f4f9fd');
-          // 冰裂缝
-          c.strokeStyle = '#5a7ea0'; c.lineWidth = 2;
-          for (let i = 0; i < 8; i++) {
-            const cx = i * 60 + 20;
-            c.beginPath(); c.moveTo(cx, 60); c.lineTo(cx + 6, 100); c.stroke();
-          }
+          // 雪顶脊线：与主体同形整体上移 4px，形成薄雪冠（避免异形叠加的双层锯齿）
+          bumps(c, w, h, [[0, 80], [60, 50], [130, 86], [200, 42], [270, 80], [340, 48], [410, 84], [480, 80]], '#e4eaef');
+          // 顺坡短擦痕（稀少、弱对比，替代原来的垂直冰裂缝）
+          c.strokeStyle = 'rgba(126,138,150,0.35)'; c.lineWidth = 1;
+          [[96, 84], [240, 80], [376, 82]].forEach(([px, py]) => {
+            c.beginPath(); c.moveTo(px, py); c.lineTo(px + 8, py + 12); c.stroke();
+          });
         }),
         groundTop: strip(480, 86, (c, w, h) => {
-          // 起伏雪丘（底色与 ground 顶带同色）
-          bumps(c, w, h, [[0, 60], [70, 46], [150, 56], [230, 38], [310, 52], [390, 42], [480, 54]], '#eaf2f9');
-          c.fillStyle = '#ffffff';
-          bumps(c, w, h, [[0, 58], [70, 44], [150, 54], [230, 36], [310, 50], [390, 40], [480, 52]], '#ffffff');
-          // 蓝灰雪坡阴影折面
-          c.fillStyle = '#c2d8e8';
-          [[150, 56], [310, 52]].forEach(([px, py]) => {
-            c.beginPath(); c.moveTo(px - 20, py); c.lineTo(px, py - 10); c.lineTo(px + 20, py); c.closePath(); c.fill();
+          // 近景雪丘
+          bumps(c, w, h, [[0, 56], [70, 44], [150, 54], [230, 38], [310, 50], [390, 40], [480, 56]], '#edf2f6');
+          // 丘顶亮线（同形上移 2px）
+          bumps(c, w, h, [[0, 54], [70, 42], [150, 52], [230, 36], [310, 48], [390, 38], [480, 54]], '#f8fbfd');
+          // 雪丘阴面（灰色弱折面）
+          c.fillStyle = '#d6dee5';
+          [[150, 52], [310, 48]].forEach(([px, py]) => {
+            c.beginPath(); c.moveTo(px - 18, py); c.lineTo(px, py - 8); c.lineTo(px + 18, py); c.closePath(); c.fill();
           });
         }),
         ground: strip(480, 100, (c, w, h) => {
-          c.fillStyle = '#d4e2ee'; c.fillRect(0, 0, w, h);
-          c.fillStyle = '#eaf2f9'; c.fillRect(0, 0, w, 18);
-          c.fillStyle = '#ffffff'; c.fillRect(0, 0, w, 6);
-          c.fillStyle = '#b9d0e2';
-          for (let i = 0; i < 30; i++) c.fillRect(rand(0, w), rand(20, 80), 24, 5);
-          c.fillStyle = '#9fbcd2';
-          for (let i = 0; i < 12; i++) c.fillRect(rand(0, w), rand(30, 84), 14, 3);
+          c.fillStyle = '#d7dee4'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#e7edf2'; c.fillRect(0, 0, w, 18);
+          c.fillStyle = '#f6fafc'; c.fillRect(0, 0, w, 6);
+          // 细碎起伏：小而弱、同色系，不做长条色块
+          c.fillStyle = '#cfd7de';
+          for (let i = 0; i < 26; i++) c.fillRect(rand(0, w), rand(22, 82), 8, 2);
+          c.fillStyle = '#c5ced6';
+          for (let i = 0; i < 14; i++) c.fillRect(rand(0, w), rand(34, 88), 3, 2);
         }),
-        cloud: cloud('#f4f8ff', '#d4e2ef')
+        cloud: cloud('#eef3f7', '#d3dbe2')
       };
 
       /* —— 火焰山：尖石地图，暗红火山天空 —— */
