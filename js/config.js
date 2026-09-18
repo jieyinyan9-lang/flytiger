@@ -321,6 +321,15 @@
       dmgPerLv: 0.25       // 每级"闪电强化"提升伤害系数
     },
 
+    /** 雷霆领域（获得闪电子弹后的特殊攻击）：每 interval 秒自动电击屏幕内敌人。
+     *  Lv1~6 = 单次电击敌人数；屏幕内敌人不足时对同一敌人重复电击。
+     *  电流配色：Lv1-2 白灰 / Lv3-4 黄白 / Lv5-6 蓝白且更粗 */
+    chainStorm: {
+      interval: 2.0,       // 自动电击周期（秒/轮）
+      maxLv: 6,            // 可升级次数
+      dmgMul: 1.0          // 每道电击伤害系数（相对玩家当前基础伤害）
+    },
+
     /** 防护刀刃（环绕光剑） */
     blade: {
       orbitR: 56,          // 环绕半径
@@ -589,6 +598,16 @@
         can(p, g) { return g && g.round >= 4 && p.chainJumps >= 1 && p.chainJumps < CFG.chain.maxJumps; },
         apply(p) { p.chainJumps = Math.min(CFG.chain.maxJumps, p.chainJumps + 2); },
         level(p) { return p.chainJumps; }
+      },
+      {
+        id: 'chainStorm', icon: 'ϟ', cls: 'c-way', name: '雷霆领域',
+        desc(p) {
+          const lv = p.stormLv || 0;
+          return `获得特殊攻击：每 2s 自动电击屏幕内 ${lv > 0 ? lv : 1} 名敌人；每升 1 级电击数量 +1（屏幕内仅 1 名敌人时对其重复电击），共 6 级。电流随等级变色：初期白灰 → 中期黄白 → 后期蓝白且更粗。当前 Lv.${lv}/6`;
+        },
+        can(p) { return p.chainJumps >= 1 && (p.stormLv || 0) < CFG.chainStorm.maxLv; },
+        apply(p) { p.stormLv = (p.stormLv || 0) + 1; p.stormCd = CFG.chainStorm.interval; },
+        level(p) { return p.stormLv || 0; }
       },
       /* —— 第三轮后出现：防护刀刃（环绕光剑） —— */
       {

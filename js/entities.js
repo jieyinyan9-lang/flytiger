@@ -4053,6 +4053,9 @@
       // 闪电子弹（闪电链）
       this.chainJumps = 0;    // 链接敌人数量（0=未解锁）
       this.chainDmgLv = 0;    // 闪电伤害强化等级
+      // 雷霆领域（闪电子弹获得后的特殊攻击）：每 2s 自动电击屏幕内敌人
+      this.stormLv = 0;       // 等级 0=未获得，1~6 = 每轮电击敌人数（决定电流配色/粗细）
+      this.stormCd = 0;       // 距下一次自动电击的冷却（秒）
       // 防护刀刃（环绕光剑）
       this.blades = 0;        // 环绕光剑数量
       this.bladeDmgLv = 0;    // 刀刃伤害强化等级
@@ -4479,6 +4482,9 @@
       }
       if (this.meleeT <= 0 && this.wasMeleeing) { this.cdT = CFG.player.meleeCooldown; this.wasMeleeing = false; }
       if (this.meleeT > 0) this.wasMeleeing = true;
+
+      // 雷霆领域：每 2s 自动电击屏幕内敌人（方法挂在 Game 上；未获得/非战斗态由其内部自行跳过）
+      if (g.chainStormTick) g.chainStormTick(dt);
 
       // 被深海恶霸铁钩钩住：钩体消亡/失效时安全解绑（位置由铁钩拖拽接管）
       if (this.hookedBy && (this.hookedBy.dead || this.hookedBy.neutralized ||

@@ -1618,7 +1618,7 @@
       if (u.id === 'poisonM' && p.elementWay.includes('poison')) w *= 1.5;
       if (u.id === 'iceM' && p.elementWay.includes('ice')) w *= 1.5;
       // 已有体系的连贯强化：闪电链 / 刀刃系
-      if (u.id === 'chainN' || u.id === 'bladeN' || u.id === 'bladeL') w *= 1.5;
+      if (u.id === 'chainN' || u.id === 'chainStorm' || u.id === 'bladeN' || u.id === 'bladeL') w *= 1.5;
       return w;
     }
     openLevelup() {
@@ -1698,7 +1698,7 @@
       this.pendingOptions = null;
       this.el.levelup.classList.add('hidden');
       // 专属升级提示音效：闪电子弹（电流升腾）/ 防护刀刃（金属出鞘）
-      if (u.id === 'chain' || u.id === 'chainN') {
+      if (u.id === 'chain' || u.id === 'chainN' || u.id === 'chainStorm') {
         SFX.chainGet();
         burst(this, this.player.x, this.player.y, 28, ['#fff', '#ffe066', '#7fe7ff'], 260, 5, 0.6);
       } else if (u.id === 'blade' || u.id === 'bladeN') {
@@ -3052,6 +3052,67 @@
         this.arcs.push({ pts, t: 0, life: 0.18 });
         SFX.zap();
       }
+    }
+
+    /** 雷霆领域：每 2s 自动从飞喵身上射出电流电击屏幕内敌人。
+     *  Lv = 电击道数（1~6）：优先最近的 Lv 个目标；目标不足时对同一敌人重复电击。
+     *  Lv1-2 白灰电流 / Lv3-4 黄白 / Lv5-6 蓝白且更粗 */
+    chainStormTick(dt) {
+      const p = this.player;
+      const lv = p.stormLv || 0;
+      if (!lv || p.hp <= 0 || this.state !== 'playing') return;
+      // 同一帧只触发一次（调用点可能同时存在于玩家 update 与主循环）
+      if (this._stormLastTime === this.time) return;
+      this._stormLastTime = this.time;
+      p.stormCd -= dt;
+      if (p.stormCd > 0) return;
+      const C = CFG.chainStorm;
+      p.stormCd = C.interval;
+      // —— 收集屏幕内可受击目标（草龙按最近露出节取点；Boss 入场/转场/锁血期跳过） ——
+      const list = [];
+      for (const e of this.targets()) {
+        if (e.dead || e.dying) continue;
+        if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'phaseTrans' || e.state === 'summon' || e.state === 'transform')) continue;
+        const pt = e.segments ? e.nearestExposed(p.x, p.y) : { x: e.x, y: e.y };
+        if (!pt) continue;
+        if (pt.x < -30 || pt.x > CFG.W + 30 || pt.y < -30 || pt.y > CFG.H + 30) continue;
+        list.push({ e, x: pt.x, y: pt.y, d: Math.hypot(pt.x - p.x, pt.y - p.y) });
+      }
+      if (!list.length) return;
+      list.sort((a, b) => a.d - b.d);
+      // —— 阶段配色与粗细（gray 白灰 / gold 黄白 / storm 蓝白加粗） ——
+      const style = lv <= 2 ? 'gray' : (lv <= 4 ? 'gold' : 'storm');
+      const cols = style === 'gray' ? ['#ffffff', '#cfd6dd', '#9fb0bd']
+        : style === 'gold' ? ['#ffffff', '#ffe066', '#ffd23b']
+          : ['#ffffff', '#bfe9ff', '#5db4ff'];
+      const dmg = Math.round(p.dmg * (p.ultDmgMul || 1) * C.dmgMul);
+      const sx = p.x + 30 * p.sizeMul, sy = p.y - 2;
+      // —— 逐道电击：目标循环复用（仅 1 名敌人时重复命中，落点略散开） ——
+      for (let k = 0; k < lv; k++) {
+        const tgt = list[k % list.length];
+        const e = tgt.e;
+        const R = e.radius || 20;
+        const repeat = k >= list.length;
+        const hx = tgt.x + (repeat ? rand(-R * 0.5, R * 0.5) : 0);
+        const hy = tgt.y + (repeat ? rand(-R * 0.5, R * 0.5) : 0);
+        if (e.segments) e.damageAt(hx, hy, dmg, this);
+        else e.takeDamage(dmg, this, { x: 0, y: 0 });
+        // 锯齿电弧折点（抖动幅度随距离自适应）
+        const pts = [{ x: sx, y: sy }];
+        const dist = Math.hypot(hx - sx, hy - sy) || 1;
+        const segs = 6, jit = clamp(dist * 0.09, 7, 18);
+        for (let s = 1; s < segs; s++) {
+          const t = s / segs;
+          pts.push({
+            x: sx + (hx - sx) * t + rand(-jit, jit),
+            y: sy + (hy - sy) * t + rand(-jit, jit)
+          });
+        }
+        pts.push({ x: hx, y: hy });
+        this.arcs.push({ pts, t: 0, life: 0.2, style });
+        burst(this, hx, hy, 5, cols, 120, style === 'storm' ? 4 : 3, 0.22);
+      }
+      SFX.zap();
     }
 
     /* ---------------- HUD ---------------- */
@@ -4739,7 +4800,24 @@
             ctx.shadowBlur = 0;
             ctx.strokeStyle = '#3b9bff'; ctx.lineWidth = 1.8;
             ctx.stroke();
+          } else if (a.style === 'storm') {
+            // 雷霆领域后期：蓝白加粗电流（蓝色外发光 + 冷白粗弧 + 蓝芯 + 白亮芯）
+            ctx.shadowColor = '#5db4ff'; ctx.shadowBlur = 10;
+            ctx.strokeStyle = '#dff1ff'; ctx.lineWidth = 7;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#7fc6ef'; ctx.lineWidth = 3.2;
+            ctx.stroke();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.3;
+            ctx.stroke();
+          } else if (a.style === 'gray') {
+            // 雷霆领域初期：白灰电流（灰弧 + 冷白细芯）
+            ctx.strokeStyle = '#aeb9c4'; ctx.lineWidth = 4.5;
+            ctx.stroke();
+            ctx.strokeStyle = '#f4f7fa'; ctx.lineWidth = 1.6;
+            ctx.stroke();
           } else {
+            // 黄白电流：闪电链默认 / 雷霆领域中期
             ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5;
             ctx.stroke();
             ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 2;
