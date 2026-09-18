@@ -454,6 +454,8 @@
       this.wayPicksThisRound = 0;   // 每轮弹道类成长选择次数（上限 3）
       this.elemPicksThisRound = 0;  // 每轮元素弹道成长选择次数（上限 2）
       this.grassDragonThisRound = false;   // 草龙每轮至多出现一次
+      this.dragonFirstRound = 0;          // 草龙首次自然出场轮次（0=尚未出场，boss召唤不记录）
+      this.dragonAllowedThisRound = true; // 本轮草龙是否允许进入普通刷怪池（隔轮出场/30%缺席/死亡换图封禁）
       this.unlockedFlyers = new Set();      // 已解锁的飞行弹幕敌人（每轮 30% 概率解锁）
       this._idleAnchor = null;              // 成就：长时间不移动判定锚点（每局重置）
       // 月痕沙海关卡模式状态
@@ -575,6 +577,7 @@
 
     /** 死亡复活后刷新至另一张地图：清空旧地图障碍与残留龙系，保留轮次/成长/生命。
      *  随机切换；若场上有地面类敌人，则不会切到大海（大海不出现地面类敌人）。
+     *  换图当轮不再自然刷出龙系（Boss 战召唤除外），下一轮按节奏恢复。
      *  角斗场特殊规则：角斗场内死亡复活仍留在角斗场；其它地图死亡不会随机进角斗场（rollMap 已排除） */
     rerollMap() {
       if (this.mapId === 'colosseum') {
@@ -585,11 +588,12 @@
       }
       this.rocks.length = 0;
       this.rockT = 1.2;
-      // 旧地图的龙系怪物随之消失，新地图的龙当轮可再次出场
+      // 旧地图的龙系怪物随之消失；死亡换图后当轮不再自然刷出龙系（Boss 战召唤除外，下一轮恢复节奏）
       for (const e of this.enemies) {
         if (e.type === 'grassdragon') e.dead = true;
       }
       this.grassDragonThisRound = false;
+      this.dragonAllowedThisRound = false;
       this.toast(`${this.map.icon} 转移至：${this.map.name}！`, 2.6);
     }
 
@@ -1830,6 +1834,7 @@
       this.wayPicksThisRound = 0;   // 新一轮重置弹道成长计数
       this.elemPicksThisRound = 0;  // 新一轮重置元素弹道成长计数
       this.grassDragonThisRound = false;   // 新一轮重置草龙出场标记
+      this.refreshDragonSchedule();       // 新一轮重算草龙出场许可（隔1轮出场+30%缺席）
       if (Hazards) Hazards.startRound(this);   // 新一轮重排特殊机关触发时刻
       this.startBreakRound();                   // 新一轮重排破碎障碍物出场时刻
       // 飞行弹幕敌人：每轮 30% 概率解锁各档次中 1 只未解锁的
@@ -1963,6 +1968,7 @@
       if (type === 'grassdragon') {
         // 龙系特殊小怪：机制/节数/出场轮数与草龙完全相同，外形按当前地图主题区分
         const thId = Game.MAP_THEME[this.mapId] || 'grass';
+        if (!this.dragonFirstRound) this.dragonFirstRound = this.round;   // 记录首次自然出场轮次
         this.grassDragonThisRound = true;
         const dragon = new GrassDragon(this, false, null, thId);
         this.enemies.push(dragon);
@@ -1970,6 +1976,13 @@
         return;
       }
       this.enemies.push(new Enemy(type, this));
+    }
+
+    /** 刷新本轮草龙出场许可：尚未首次出场→正常进入刷怪池；首次出场后隔1轮出场1次，应出场轮次另有30%概率缺席 */
+    refreshDragonSchedule() {
+      if (!this.dragonFirstRound) { this.dragonAllowedThisRound = true; return; }
+      const gap = this.round - this.dragonFirstRound;
+      this.dragonAllowedThisRound = gap > 0 && gap % 2 === 0 && Math.random() < 0.7;
     }
 
     /** 飞行弹幕敌人解锁：通过指定关卡后，每轮各档次 30% 概率解锁 1 只未解锁的 */
@@ -2003,6 +2016,7 @@
         if (def.ground && (this.mapId === 'ocean' || this.mapId === 'mountains')) return;           // 大海/群山：不出现地面类敌人（弓箭手/炮师）
         if (def.arenaOnly && this.mapId !== 'colosseum' &&
             !(this.mapId === 'moondesert' && stageOk)) return;      // 斗兽场专属小怪（投掷奴/羊头斗士/盾奴/皮影客/自爆囚）
+        if (def.oncePerRound && !this.dragonAllowedThisRound) return;   // 草龙：隔轮出场/30%缺席/死亡换图当轮封禁
         if (def.oncePerRound && this.grassDragonThisRound) return;   // 草龙：每轮至多一次
         if ((def.elite || def.ground) && this.enemies.some(e => e.type === type && !e.isMini)) return;  // 精英/地面单位场上限 1（分裂小段不计）
         // 罗马角斗场：地面类敌人（弓箭手/炮师）刷出权重 ×3，明显更常见
