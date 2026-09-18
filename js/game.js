@@ -1772,14 +1772,14 @@
         if (Math.random() < b.forceChance[ord]) { pick = b; break; }
       }
       // debutChance：新批次地图限定 Boss（鬣狗起 9 只），本局首次登场前为"首秀"状态——
-      // 地图限定永久生效（硬规则）：仅当预警发生在该 Boss 专属地图时才纳入首秀掷骰，
-      // 在本图内把所有未登场新 Boss 汇集、随机洗牌顺序逐一掷骰 90%，命中即出场；
-      // 全部未命中本轮才回到普通随机池（地面 Boss 仍受大海/群山硬性环境限制）。
-      // 某只一旦登场（bossSeen 登记），仅它自己拉平为本图普通池成员；
+      // 不受地图限定：任何地图的 Boss 预警都把所有未登场新 Boss 纳入，随机洗牌顺序逐一掷骰 90%，
+      // 命中即出场；全部未命中本轮才回到普通随机池（地面 Boss 仍受大海/群山硬性环境限制）。
+      // 某只一旦登场（bossSeen 登记），仅它自己拉平为普通池成员、地图限定重新生效；
       // 其余未登场新 Boss 仍保持 90%，不会被连带拉平
       const debutable = b => b.debutChance && !this.bossSeen.has(b.cls.name);
+      const envHard = b => !(b.ground && (this.mapId === 'ocean' || this.mapId === 'mountains'));
       const debutPool = window.BOSS_LIST.filter(b =>
-        debutable(b) && ordOk(b) && mapOk(b) && b.cls.name !== this.lastBossName);
+        debutable(b) && ordOk(b) && envHard(b) && b.cls.name !== this.lastBossName);
       for (let i = debutPool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         const tmp = debutPool[i]; debutPool[i] = debutPool[j]; debutPool[j] = tmp;
