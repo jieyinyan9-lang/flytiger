@@ -1769,8 +1769,17 @@
       for (const b of forceList) {
         if (Math.random() < b.forceChance[ord]) { pick = b; break; }
       }
+      // debutChance：新批次地图限定 Boss（鬣狗起 9 只），本局首次登场前在其地图每次预警
+      // 独立掷骰 90% 强制出场；未登场期间不参与本轮随机池；登场后（bossSeen）拉平为普通等权成员
+      const debutable = b => b.debutChance && !this.bossSeen.has(b.cls.name);
+      if (!pick) {
+        for (const b of pool.filter(debutable)) {
+          if (Math.random() < b.debutChance) { pick = b; break; }
+        }
+      }
       // 加权随机：基础权重一致（等权），本局已出场过的 Boss 权重 ×0.5
-      const randomPool = pool.filter(b => !forceable(b));
+      // 未登场的新批次 Boss 不进随机池（仅走 90% 独立掷骰）
+      const randomPool = pool.filter(b => !forceable(b) && !debutable(b));
       if (!pick) {
         const p2 = randomPool.length ? randomPool : pool;
         const weights = p2.map(b => (b.weight || 1) * (this.bossSeen.has(b.cls.name) ? 0.5 : 1));

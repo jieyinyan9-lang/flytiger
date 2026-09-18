@@ -8102,23 +8102,26 @@
     // 强制轮后（无论是否命中过）拉平为荒地普通池等权成员，可反复出场
     { cls: BoneDragonKing, weight: 3, map: 'wasteland', minOrd: 2,
       forceChance: { 2: 0.7, 3: 0.8 }, music: 'boss-gulongwang' },
-    // 癫狂鬣狗：草原永久限定（map），进入草原普通池即可反复出场
-    { cls: MadHyena, weight: 3, map: 'grassland', ground: true, music: 'boss-1' },
-    // 浣熊漫游者：霓虹喵都永久限定（map），进入霓虹喵都普通池即可反复出场
-    { cls: RaccoonRover, weight: 3, map: 'cyber', music: 'boss-2' },
-    // 沙之行者：沙漠永久限定（map），进入沙漠普通池即可反复出场
-    { cls: SandWalker, weight: 3, map: 'desert', music: 'boss-1' },
+    // —— 新批次地图限定 Boss（癫狂鬣狗起，共 9 只）：debutChance 0.9 ——
+    // 本局首次登场前，在所属地图每次 Boss 预警独立掷骰 90% 强制出场；未命中本轮不入随机池；
+    // 登场（bossSeen 登记）后拉平为普通等权池成员，可反复出场
+    // 癫狂鬣狗：草原永久限定（map）
+    { cls: MadHyena, weight: 3, map: 'grassland', ground: true, debutChance: 0.9, music: 'boss-1' },
+    // 浣熊漫游者：霓虹喵都永久限定（map）
+    { cls: RaccoonRover, weight: 3, map: 'cyber', debutChance: 0.9, music: 'boss-2' },
+    // 沙之行者：沙漠永久限定（map）
+    { cls: SandWalker, weight: 3, map: 'desert', debutChance: 0.9, music: 'boss-1' },
     // 乔治船长：大海永久限定（map），炮击→俯冲循环，低血狂暴炮击5发/俯冲加速
-    { cls: CaptainGeorge, weight: 3, map: 'ocean', music: 'boss-1' },
+    { cls: CaptainGeorge, weight: 3, map: 'ocean', debutChance: 0.9, music: 'boss-1' },
     // 火遮眼：火焰山永久限定（map），火焰斩→火龙冲锋循环，狂暴3道窄斩
-    { cls: FireBlind, weight: 3, map: 'volcano', music: 'boss-1' },
-    // 紫手：紫色荒地永久限定（map），第1轮起进入普通等权池；a随机攻击↔b角牌阵，狂暴6牌
-    { cls: PurpleHand, weight: 3, map: 'wasteland', music: 'boss-2' },
+    { cls: FireBlind, weight: 3, map: 'volcano', debutChance: 0.9, music: 'boss-1' },
+    // 紫手：紫色荒地永久限定（map）；a随机攻击↔b角牌阵，狂暴6牌
+    { cls: PurpleHand, weight: 3, map: 'wasteland', debutChance: 0.9, music: 'boss-2' },
     // 深海恶霸：深海永久限定（map）；追踪水鲨/炸弹3环冲击波/90°转向铁钩链，66%血鲨鱼围猎高潮
-    { cls: SeaBully, weight: 3, map: 'seabed', music: 'boss-1' },
+    { cls: SeaBully, weight: 3, map: 'seabed', debutChance: 0.9, music: 'boss-1' },
     // 雪巫：雪地永久限定（map）；冰晶雨密度循环/冰环环心安全，66%血冰霜风暴三段连打
-    { cls: SnowWitch, weight: 3, map: 'snow', music: 'boss-2' },
+    { cls: SnowWitch, weight: 3, map: 'snow', debutChance: 0.9, music: 'boss-2' },
     // 鸦伯爵：城堡永久限定（map）；瞬移躲玩家（10s CD）+宝石三档弹道反转（飞掷前慢后快/回旋去回/珠宝盗窃两组交叉）
-    { cls: CrowCount, weight: 3, map: 'castle', music: 'boss-2' }
+    { cls: CrowCount, weight: 3, map: 'castle', debutChance: 0.9, music: 'boss-2' }
   ];
 })();
