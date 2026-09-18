@@ -1191,7 +1191,9 @@
     /* ---------------- 数值 ---------------- */
     get bossActive() { return this.bosses.length > 0 || this.warnT > 0; }
     get atkScale() {
-      const base = 1 + this.time * 0.0015 + (this.round - 1) * 0.05;
+      // 敌人/Boss 伤害成长曲线：时间系数 0.0015→0.00075、轮次系数 0.05→0.032
+      // 目标：第7轮开局(约750s)≈1.75（≈旧第4轮伤害水准），普通玩家可稳定打到第7轮
+      const base = 1 + this.time * 0.00075 + (this.round - 1) * 0.032;
       return this.bossActive ? base * (1 + this.bossSpawned * CFG.boss.atkGrow) : base;
     }
     /**
@@ -1842,8 +1844,8 @@
       }
       // Boss 死亡：场上所有敌方弹幕无效化，逐渐消失
       this.bullets.forEach(b => { if (!b.friendly) b.neutralize(); });
-      // 击败 Boss 默认回复 40% 生命
-      const heal = Math.round(this.player.maxHp * 0.4);
+      // 击败 Boss 默认回复 50% 生命（保证健康进入下一轮）
+      const heal = Math.round(this.player.maxHp * 0.5);
       this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
       // 每击败 1 只 Boss 解锁 1 种新小怪
       const unlocked = Object.keys(CFG.enemies)

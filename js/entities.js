@@ -5322,9 +5322,9 @@
       this.dotTickT = 0;       // DoT 离散跳伤害计时（每 0.5s 一跳 + 伤害数字）
       this._ambT = 0;          // 异常身体像素（火苗/毒泡）喷发节流
 
-      // 难度缩放
+      // 难度缩放（轮次系数 0.16→0.11、时间系数 0.0025→0.0014：后期怪血成长放缓，清怪更快、暴露更短）
       const round = g.round;
-      const hpMul = (1 + (round - 1) * 0.16 + g.time * 0.0025) * g.diffMul;
+      const hpMul = (1 + (round - 1) * 0.11 + g.time * 0.0014) * g.diffMul;
       this.maxHp = Math.round(def.hp * hpMul);
       // 动态血量精英（如大型蝙蝠）：以本轮参考 DPS 为锚保证 5-8 秒交战时长，
       // 玩家实际 DPS 偏离只软追赶 45%（与 Boss 同一套参考曲线）
@@ -5335,7 +5335,7 @@
         this.maxHp = Math.max(this.maxHp, Math.round(refDps * rand(def.fightTime[0], def.fightTime[1]) * soft));
       }
       this.hp = this.maxHp;
-      this.speedMul = 1 + (round - 1) * 0.03 + Math.min(0.25, g.time * 0.001);
+      this.speedMul = 1 + (round - 1) * 0.02 + Math.min(0.18, g.time * 0.0007);
 
       // 月痕沙海关卡：敌人从左右两侧随机刷出；其余地图固定从右侧入场
       const stage = g.mapId === 'moondesert';
@@ -9508,8 +9508,8 @@
       this.freezeT = 0;
 
       const round = g.round;
-      const hpMul = (1 + (round - 1) * 0.16 + g.time * 0.0025) * g.diffMul;
-      this.speedMul = 1 + (round - 1) * 0.03 + Math.min(0.25, g.time * 0.001);
+      const hpMul = (1 + (round - 1) * 0.11 + g.time * 0.0014) * g.diffMul;
+      this.speedMul = 1 + (round - 1) * 0.02 + Math.min(0.18, g.time * 0.0007);
       this.segR = isMini ? GRASS.miniR : GRASS.segR;
       this.spacing = isMini ? GRASS.miniSpace : GRASS.segSpace;
       const segHp0 = Math.round((isMini ? GRASS.miniHp : GRASS.segHp) * hpMul);
