@@ -4770,7 +4770,7 @@
 
       // 自动射击（近战期间停火；射速按角色射速倍率；Boss 台词演出期间全局停火）
       if (!this.isMeleeing && !g.shootDisabled) {
-        // 元素弹道独立冷却（三向各自递减；火焰3s/寒冰2s；毒液 interval=0 不走冷却）
+        // 元素弹道独立冷却（三向各自递减；火焰1.5s/寒冰1s；毒液 interval=0 不走冷却）
         for (const dir of ['front', 'down', 'back']) {
           const q = this.elemWays[dir];
           for (let w = 0; w < q.length; w++) {
