@@ -1732,6 +1732,8 @@
       this.roundKills = 0;
     }
     triggerBossWarn() {
+      // Boss 战开始：场上自然刷出的龙系小怪钻地离场（Boss 召唤的龙保留）
+      this.dismissWildDragons();
       // 所有 Boss 等权，每一轮都可能出现；本局已出场过的 Boss 后续出场权重持续减半（bossSeen），
       // 直至所有非专属 Boss 全部轮过一遍后清空记录、概率恢复正常（spawnBoss 中重置）
       // 地图专属 Boss（狮身人面像/牛魔/骨龙王）：
@@ -1770,14 +1772,14 @@
         if (Math.random() < b.forceChance[ord]) { pick = b; break; }
       }
       // debutChance：新批次地图限定 Boss（鬣狗起 9 只），本局首次登场前为"首秀"状态——
-      // 不受地图限定：任何地图的 Boss 预警都把所有未登场新 Boss 纳入，随机洗牌顺序逐一掷骰 90%，
-      // 命中即出场；全部未命中本轮才回到普通随机池（地面 Boss 仍受大海/群山硬性环境限制）。
-      // 某只一旦登场（bossSeen 登记），仅它自己拉平为普通池成员、地图限定重新生效；
+      // 地图限定永久生效（硬规则）：仅当预警发生在该 Boss 专属地图时才纳入首秀掷骰，
+      // 在本图内把所有未登场新 Boss 汇集、随机洗牌顺序逐一掷骰 90%，命中即出场；
+      // 全部未命中本轮才回到普通随机池（地面 Boss 仍受大海/群山硬性环境限制）。
+      // 某只一旦登场（bossSeen 登记），仅它自己拉平为本图普通池成员；
       // 其余未登场新 Boss 仍保持 90%，不会被连带拉平
       const debutable = b => b.debutChance && !this.bossSeen.has(b.cls.name);
-      const envHard = b => !(b.ground && (this.mapId === 'ocean' || this.mapId === 'mountains'));
       const debutPool = window.BOSS_LIST.filter(b =>
-        debutable(b) && ordOk(b) && envHard(b) && b.cls.name !== this.lastBossName);
+        debutable(b) && ordOk(b) && mapOk(b) && b.cls.name !== this.lastBossName);
       for (let i = debutPool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         const tmp = debutPool[i]; debutPool[i] = debutPool[j]; debutPool[j] = tmp;
@@ -1881,6 +1883,7 @@
       const tide = arena || this.bossCount % 3 === 0;
       if (tide) {
         this.tideT = arena ? CFG.map.arenaTideTime : 30;
+        this.dismissWildDragons();   // 怪物潮开始：自然龙系钻地离场（Boss 召唤的除外）
         this.toast(arena ? `⚠ 角斗场怪物潮来袭：小怪数量 ×3！坚持 ${CFG.map.arenaTideTime} 秒！` : `⚠ 怪物潮来袭：小怪数量 ×3！`, 3.6);
       }
       void unlocked;   // 解锁信息静默处理，不再弹 tips
@@ -2004,6 +2007,13 @@
       this.dragonAllowedThisRound = gap > 0 && gap % 2 === 0 && Math.random() < 0.7;
     }
 
+    /** Boss 战 / 怪物潮开始：自然刷出的龙系钻地离场（垂直下钻→地下冲出屏外），Boss 召唤的除外 */
+    dismissWildDragons() {
+      for (const e of this.enemies) {
+        if (e.type === 'grassdragon' && !e.bossOwned && e.startLeave) e.startLeave();
+      }
+    }
+
     /** 飞行弹幕敌人解锁：通过指定关卡后，每轮各档次 30% 概率解锁 1 只未解锁的 */
     rollFlyerUnlocks() {
       const tierMinBoss = { weak: 2, medium: 3, strong: 4 };
@@ -2036,6 +2046,7 @@
         if (def.arenaOnly && this.mapId !== 'colosseum' &&
             !(this.mapId === 'moondesert' && stageOk)) return;      // 斗兽场专属小怪（投掷奴/羊头斗士/盾奴/皮影客/自爆囚）
         if (def.oncePerRound && !this.dragonAllowedThisRound) return;   // 草龙：隔轮出场/30%缺席/死亡换图当轮封禁
+        if (def.oncePerRound && (this.bossActive || this.isTide)) return;   // Boss战/怪物潮：自然龙系离场且不补刷（Boss召唤除外）
         if (def.oncePerRound && this.grassDragonThisRound) return;   // 草龙：每轮至多一次
         if ((def.elite || def.ground) && this.enemies.some(e => e.type === type && !e.isMini)) return;  // 精英/地面单位场上限 1（分裂小段不计）
         // 罗马角斗场：地面类敌人（弓箭手/炮师）刷出权重 ×3，明显更常见
@@ -2055,6 +2066,7 @@
         if (!this.stageWavesTriggered.has(idx) && this.stageTime >= wt) {
           this.stageWavesTriggered.add(idx);
           this.tideT = cfg.waveDur;
+          this.dismissWildDragons();   // 月痕沙海怪物潮：自然龙系钻地离场（Boss 召唤的除外）
           this.toast(`⚠ 月痕沙海怪物潮来袭：小怪数量 ×3！坚持 ${cfg.waveDur} 秒！`, 3.2);
           SFX.warn();
         }

@@ -5330,8 +5330,9 @@
         this.packWave = 0;            // 骨龙组刷出波次：1,2,3,4... 递增
         this.packSpawnCd = 1.5;       // 首批 1.5s 后涌出，杜绝卡顿
         // 碎裂瞬间立即召唤 2 条日常骨蛇小怪（GrassDragon bone 主题，击杀掉落能量）
+        // bossOwned=true：Boss 召唤的龙，Boss 战/怪物潮清场不离场
         for (let m = 0; m < 2; m++) {
-          g.enemies.push(new GrassDragon(g, false, null, 'bone'));
+          g.enemies.push(new GrassDragon(g, false, null, 'bone', true));
         }
         g.shake(8);
         this.recalcHp(g);

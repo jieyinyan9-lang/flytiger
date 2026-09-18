@@ -9485,8 +9485,9 @@
    *    bone 骨蛇 / mech 机器蜈蚣 / sea 深海蓝龙。
    */
   class GrassDragon {
-    /** isMini=true 时 seed 为断裂处继承的坐标数组（head→tail 顺序）；themeId 决定地图主题外形 */
-    constructor(g, isMini, seed, themeId) {
+    /** isMini=true 时 seed 为断裂处继承的坐标数组（head→tail 顺序）；themeId 决定地图主题外形；
+     *  bossOwned=true 表示 Boss 战召唤（Boss战/怪物潮清场时不离场），分裂小段继承来源标记 */
+    constructor(g, isMini, seed, themeId, bossOwned) {
       const def = CFG.enemies.grassdragon;
       this.th = DRAGON_THEMES[themeId] || DRAGON_THEMES.grass;
       this.type = 'grassdragon';
@@ -9496,6 +9497,9 @@
       this.dsrc = { k: 'e', key: 'grassdragon' };   // 击杀者归因（含地图主题变体与分裂小段，统一归草龙死法池）
       this.isMini = !!isMini;
       this.dead = false;
+      this.bossOwned = !!bossOwned;   // Boss 召唤的龙（含其分裂小段）：不随 Boss 战/怪物潮清场
+      this.leaving = false;           // 钻地离场中（Boss战/怪物潮开始时触发）
+      this.leaveDir = 1;              // 地下撤离方向（朝最近屏边）
       this.groundUnit = true;    // 穿山钻地：触碰山石不坠毁
       this.contactDmg = def.contact;
       this.bulletDmg = def.bulletDmg;
@@ -9593,7 +9597,8 @@
       }
 
       const prevY = this.y;
-      if (this.isMini) this.updateMini(dt, g);
+      if (this.leaving) this.updateLeave(dt);
+      else if (this.isMini) this.updateMini(dt, g);
       else this.updateMain(dt);
 
       // 钻地 / 出土跨界特效
@@ -9634,6 +9639,29 @@
       for (const s of this.segments) if (!s.dead) hp += Math.max(0, s.hp);
       this.hp = hp;
       if (hp <= 0 && !this.dead) this.killAll(g);
+    }
+
+    /** Boss战/怪物潮开始：停止攻击循环，垂直下钻后从地下朝最近屏边离开，到屏外移除 */
+    startLeave() {
+      if (this.leaving) return;
+      this.leaving = true;
+      this.leaveDir = this.x < CFG.W / 2 ? -1 : 1;
+    }
+    /** 离场状态：空中→垂直钻回 burrowY；地下→水平冲出屏外标记 dead（跨界扬尘由 update 统一处理） */
+    updateLeave(dt) {
+      const sm = this.speedMul;
+      this.arcT = 0;
+      if (this.y < this.burrowY) {
+        this.ha = Math.PI / 2;
+        this.y += GRASS.vertSpd * sm * dt;
+        if (this.y >= this.burrowY) this.y = this.burrowY;
+      } else {
+        this.ha = this.leaveDir > 0 ? 0 : Math.PI;
+        this.y = this.burrowY;
+        this.x += this.leaveDir * GRASS.burrowSpd * sm * dt;
+        if (this.x < -80 || this.x > CFG.W + 80) this.dead = true;
+      }
+      this.hx = Math.cos(this.ha); this.hy = Math.sin(this.ha);
     }
 
     /** 本体：出土上升 → 天上随机穿梭（直角 / 折线 / 弧线）→ 触地钻入 → 地下高速穿行 → 再出土 */
@@ -9995,7 +10023,7 @@
     detachMini(idxs, g) {
       if (idxs.length < 2) return false;
       const run = idxs.map(j => ({ x: this.segments[j].x, y: this.segments[j].y }));
-      g.enemies.push(new GrassDragon(g, true, run, this.th.id));
+      g.enemies.push(new GrassDragon(g, true, run, this.th.id, this.bossOwned));
       for (const j of idxs) this.segments[j].dead = true;
       return true;
     }
