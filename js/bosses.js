@@ -8104,8 +8104,8 @@
     { cls: BoneDragonKing, weight: 3, map: 'wasteland', minOrd: 2,
       forceChance: { 2: 0.7, 3: 0.8 }, music: 'boss-gulongwang' },
     // —— 新批次地图限定 Boss（癫狂鬣狗起，共 9 只）：debutChance 0.9 ——
-    // 本局首次登场前为首秀状态：不受地图限定，任何地图的 Boss 预警均纳入随机顺序独立掷骰 90%；
-    // 该只登场（bossSeen 登记）后，仅它自己拉平、地图限定重新生效；其余未登场新 Boss 仍保持 90%
+    // 本局首次登场前为首秀状态：地图限定永久生效，仅在该 Boss 专属地图预警时纳入随机顺序独立掷骰 90%；
+    // 该只登场（bossSeen 登记）后，仅它自己在本图拉平入普通池；其余未登场新 Boss 仍保持 90%
     // 癫狂鬣狗：草原永久限定（map）
     { cls: MadHyena, weight: 3, map: 'grassland', ground: true, debutChance: 0.9, music: 'boss-1' },
     // 浣熊漫游者：霓虹喵都永久限定（map）
