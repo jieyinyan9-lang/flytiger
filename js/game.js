@@ -1023,7 +1023,7 @@
       });
       // 角色专属「子弹成长」项
       const cb = window.CHARS && window.CHARS.bulletUpgrade(this.player.charId);
-      if (cb && cb.can(this.player)) pool.push(cb);
+      if (cb && cb.can(this.player, this)) pool.push(cb);
       const opts = [];
       const guaranteed = pool.filter(u => u.guaranteed && u.guaranteed(this.player, this));
       this.round = _roundBak;
@@ -1412,7 +1412,7 @@
 
     /* ---------------- 数值 ---------------- */
     get bossActive() { return this.bosses.length > 0 || this.warnT > 0; }
-    /** 玩家子弹降噪档位：多弹齐飞0.8 / 怪物潮0.75 / Boss战0.55 / Boss释放子弹技能0.35，多档命中取最低 */
+    /** 玩家子弹降噪档位：多弹齐飞0.8 / 怪物潮0.75 / Boss战0.5 / Boss释放子弹技能0.3，多档命中取最低 */
     playerBulletAlpha() {
       const bf = CFG.player.bulletFade;
       if (!bf) return 1;
@@ -1877,7 +1877,7 @@
       });
       // 角色专属「子弹成长」项注入（侠客/法师/浪客/战狂/超猫）
       const cb = window.CHARS && window.CHARS.bulletUpgrade(this.player.charId);
-      if (cb && cb.can(this.player)) pool.push(cb);
+      if (cb && cb.can(this.player, this)) pool.push(cb);
       const opts = [];
       // guaranteed 项强制放入选项（从 pool 中提取，can 已验证通过）
       const guaranteed = pool.filter(u => u.guaranteed && u.guaranteed(this.player, this));

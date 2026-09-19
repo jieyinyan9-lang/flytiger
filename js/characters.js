@@ -415,17 +415,15 @@
         }
         return `风格成长第 ${g + 1}/12 次：伤害 +4，弹体略微增大。`;
       },
-      can(p) {
+      can(p, g) {
         // xiaobai 基础成长由 tier 卡负责；其余英雄基础未满级时由此卡负责
         if (baseBulletLv(p) < 3) return !xiaobaiBaseHandled;
         // 基础满级：未选风格 → 风格二选一；已选且未满12次 → 风格成长
-        if (!p.bulletStyleId) return true;
-        return (p.bulletStyleGrowth || 0) < 12;
-      },
-      // 风格觉醒 / 风格成长为角色核心成长线，强制进选项（必出）
-      guaranteed(p) {
-        if (baseBulletLv(p) < 3) return !xiaobaiBaseHandled;
-        if (!p.bulletStyleId) return true;
+        if (!p.bulletStyleId) {
+          // 普通局最早第 4 轮才会出现风格觉醒；Boss 挑战 / 秘境（月痕沙海）不受轮次限制
+          if (g && !g.challengeMode && !g.stageMode && (g.round || 1) < 4) return false;
+          return true;
+        }
         return (p.bulletStyleGrowth || 0) < 12;
       },
       apply(p, g) {
