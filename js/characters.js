@@ -41,10 +41,10 @@
     },
     jiaodoushi: {
       id: 'jiaodoushi', name: '战狂', art: 'assets/Jiaodoushi.png', face: 'assets/Role/jiaodoushi.png?v=20260907', icon: '🪓',
-      speedMul: 0.8, dmg: 12, fireMul: 1.25, bulletSpd: 0.6,
+      speedMul: 0.8, dmg: 15, fireMul: 1.25, bulletSpd: 0.6,
       kind: 'shieldSaw', ult: 'bloodrage', bounceBase: 1,
       tag: '角斗士',
-      trait: '速度 -20% · 伤害 +20% · 射速 -20% · 血怒',
+      trait: '速度 -20% · 伤害 +50% · 射速 -20% · 血怒',
       desc: '披甲角斗猫，抛掷沉重的锯齿盾牌（会反弹）；子弹可成长为巨大战斧。大招开启血怒，受创越多伤害越高。'
     },
     chaoren: {
@@ -384,6 +384,8 @@
     const fin = FINAL[charId];
     // xiaobai 的基础成长由 config.js 的 tier 卡负责；这里只在基础满级后接管风格阶段
     const xiaobaiBaseHandled = charId === 'xiaobai';
+    // 战狂每次基础成长 +4（全程单发最高）；其余英雄 +3
+    const growDmg = charId === 'jiaodoushi' ? 4 : 3;
 
     return {
       id: 'cbullet', icon: '✦', cls: 'c-tier',
@@ -400,12 +402,12 @@
           if (lv < 3) {
             const extra = (charId === 'buliang' || charId === 'jiaodoushi') ? '、反弹 +1 次' : '';
             if (lv + 1 >= 3) {
-              return `子弹升至最高形态「${fin.name}」，伤害 +3${extra}，附带专属拖尾！`;
+              return `子弹升至最高形态「${fin.name}」，伤害 +${growDmg}${extra}，附带专属拖尾！`;
             }
-            return `子弹样式进化（第 ${lv + 1}/6 次成长）：伤害 +3${extra}`;
+            return `子弹样式进化（第 ${lv + 1}/6 次成长）：伤害 +${growDmg}${extra}`;
           }
           // 第 4-6 次：最终形态精炼（视觉不再变化，继续提升伤害）
-          return `子弹精炼（第 ${lv + 1}/6 次成长）：伤害 +3，最终形态继续强化。`;
+          return `子弹精炼（第 ${lv + 1}/6 次成长）：伤害 +${growDmg}，最终形态继续强化。`;
         }
         // 阶段2：风格二选一
         if (!p.bulletStyleId) {
@@ -437,7 +439,7 @@
         if (baseBulletLv(p) < 6 && !xiaobaiBaseHandled) {
           const lv = p.charBulletLv;
           p.charBulletLv++;
-          p.dmg += 3;
+          p.dmg += growDmg;
           // 反弹次数仅在前 3 次形态进化阶段成长，精炼阶段不再增加
           if (p.bounceMax !== undefined && lv < 3) p.bounceMax++;
           if (window.SFX && SFX.pick) SFX.pick();

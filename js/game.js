@@ -3399,15 +3399,21 @@
           if (Math.abs(lx) < b.boxW / 2 + pr && Math.abs(ly) < b.boxH / 2 + pr) hit = true;
         }
         if (hit) {
-          // 战狂血怒铠甲：命中的子弹转化为血色尖刺（长菱形），朝最近敌人反弹
+          // 战狂血怒铠甲：命中的子弹转化为血色尖刺（长菱形），像导弹一样追踪原本攻击的敌人；
+          // 原攻击者已死亡/消失（含Boss入场转场态）则改选场上任意其他敌人；小怪和Boss均生效
           if (p.bloodArmorT > 0) {
             b.dead = true;
-            const tgt = p.nearestEnemy(this);
+            const s0 = b.shooter;
+            const shooterOk = s0 && !s0.dead && !s0.dying &&
+              !(s0.isBoss && (s0.state === 'enter' || s0.state === 'trans' || s0.state === 'phaseTrans'));
+            const tgt = shooterOk ? s0 : p.nearestEnemy(this);
+            const spikeOpts = { kind: 'bloodSpike', friendly: true, dmg: Math.round(p.dmg * 1.6), r: 9,
+              life: 2.0, color: '#ff2a0a',
+              trailCols: ['#7a0a0a', '#ff2a0a', '#ff6a1a', '#ffd23b'], trailLite: false };
+            // 有目标：导弹式追踪（目标途中死亡，Bullet.update 内 pickRetarget 自动换敌）；无目标：直线飞出
+            if (tgt) { spikeOpts.homing = true; spikeOpts.turnRate = 4.0; spikeOpts.target = tgt; }
             const a = tgt ? Math.atan2(tgt.y - p.y, tgt.x - p.x) : rand(0, TAU);
-            this.bullets.push(new Bullet(p.x, p.y, Math.cos(a) * 540, Math.sin(a) * 540,
-              { kind: 'bloodSpike', friendly: true, dmg: Math.round(p.dmg * 1.6), r: 9, life: 1.3,
-                color: '#ff2a0a',
-                trailCols: ['#7a0a0a', '#ff2a0a', '#ff6a1a', '#ffd23b'], trailLite: false }));
+            this.bullets.push(new Bullet(p.x, p.y, Math.cos(a) * 540, Math.sin(a) * 540, spikeOpts));
             burst(this, b.x, b.y, 6, ['#ff2a0a', '#ff5a1a', '#fff'], 170, 4, 0.28);
             SFX.melee();
             continue;

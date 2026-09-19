@@ -680,6 +680,8 @@
       }
       /* —— 击杀者归因：显式 opts.src 优先，否则继承发射时刻的当前敌人/Boss —— */
       this.src = opts.src || shooterSrc();
+      /* 发射者实体引用（战狂血怒铠甲反弹尖刺：像导弹一样追踪原本攻击的敌人） */
+      this.shooter = opts.shooter !== undefined ? opts.shooter : curShooter;
     }
     /** Boss 死亡：弹幕无效化，减速并逐渐消失 */
     neutralize() {
@@ -802,6 +804,7 @@
       if (this.homing && !this.neutralized && this.kind !== 'ultlaser') {
         let p = this.target ? (this.target.dead ? this.pickRetarget(g) : this.target) : g.player;
         if (p) {
+        if (p !== this.target) this.target = p;   // 原目标死亡换敌后缓存（战狂血怒尖刺/激光串共用）
         const ta = Math.atan2(p.y - this.y, p.x - this.x);
         let cur = Math.atan2(this.vy, this.vx);
         let d = ta - cur;
@@ -4180,6 +4183,7 @@
       this._heldBeamCd = new Map();   // 持续光束对单体伤害节流（敌人 → 下次可命中时间）
       this._heldBeamDmg = 0;          // 持续光束每跳伤害（取最近一次开火的单发伤害）
       this._heldBeamScale = 1;        // 持续光束尺寸缩放（随角色体积）
+      this.meleeDur = 0;              // 本次自动技能总时长（fireBlocked 按已持续时间判定）
     }
 
     /** 刀刃长度倍率（剑刃延展：1/2/3 倍） */
@@ -4262,6 +4266,14 @@
     }
     get isMeleeing() { return this.meleeT > 0; }
     get meleeReady() { return this.meleeT <= 0 && this.cdT <= 0; }
+    /** 自动技能期间是否禁止射击：
+     *  战狂血怒铠甲：全程可射击；法师彩虹护盾：开启 1s 后可射击；其余近战动作期间停火。 */
+    get fireBlocked() {
+      if (this.meleeT <= 0) return false;
+      if (this.autoSkill === 'armor') return false;
+      if (this.autoSkill === 'shield') return (this.meleeDur - this.meleeT) < 1;
+      return true;
+    }
     /** 全弹道齐射颗数：主弹道×(前/后/下三向) + 元素弹道（火焰扇面/寒冰连射/毒液1颗），用于子弹降噪判定 */
     get volleyN() {
       let n = this.bulletCount * (1 + (this.tailWay ? 1 : 0) + (this.downWay ? 1 : 0));
@@ -4358,6 +4370,7 @@
     startRainbowShield(g) {
       this.autoSkill = 'shield';
       this.meleeT = 2.0;                            // 护盾 2s；碎掉后才进冷却
+      this.meleeDur = 2.0;                          // 开启 1s 后恢复射击
       this.invT = Math.max(this.invT, 2.0);
       this.rainbowShieldT = 2.0;
       SFX.melee();
@@ -4390,6 +4403,7 @@
     startBloodArmor(g) {
       this.autoSkill = 'armor';
       this.meleeT = 4.0;                            // 铠甲 4s；结束后才进冷却
+      this.meleeDur = 4.0;                          // 铠甲期间不停火
       this.bloodArmorT = 4.0;
       // 不设 invT：子弹命中可被铠甲转化为红色剑气反弹
       SFX.melee();
@@ -4884,8 +4898,8 @@
         }
       }
 
-      // 自动射击（近战期间停火；射速按角色射速倍率；Boss 台词演出期间全局停火）
-      if (!this.isMeleeing && !g.shootDisabled) {
+      // 自动射击（近战期间停火；战狂血怒铠甲全程/法师彩虹护盾1s后/大招期间均可射击；Boss 台词演出期间全局停火）
+      if (!this.fireBlocked && !g.shootDisabled) {
         // 元素弹道独立冷却（三向各自递减；火焰1.5s/寒冰1s；毒液 interval=0 不走冷却）
         for (const dir of ['front', 'down', 'back']) {
           const q = this.elemWays[dir];
