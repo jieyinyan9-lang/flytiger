@@ -403,7 +403,7 @@
         }
         // 阶段2：风格二选一
         if (!p.bulletStyleId) {
-          return '基础子弹已达最高强度！选择一种子弹风格，替换全部基础弹道，强度大幅提升（近2倍）。';
+          return '基础子弹已达最高强度！选择一种子弹风格，强度大幅提升（近2倍）。专属弹道合并为每向1发（元素弹、尾/下炮管保留），之后可再用「弹道强化」扩展。';
         }
         // 阶段3：风格成长
         const g = p.bulletStyleGrowth || 0;
@@ -447,7 +447,7 @@
               onPick(sid) {
                 const mul = window.BStyle.applyFirstStyle(p, sid);
                 const st = window.BStyle.findStyle(sid);
-                if (game.toast) game.toast(`风格觉醒：${st.name}（伤害 ×${mul.toFixed(2)}）`, 2.5, 'rb');
+                if (game.toast) game.toast(`风格觉醒：${st.name}（伤害 ×${mul.toFixed(2)}，专属弹道每向1发）`, 2.5, 'rb');
                 game.pauseForStylePick = false;
                 game.state = 'playing';
                 if (window.SFX && SFX.levelup) SFX.levelup();

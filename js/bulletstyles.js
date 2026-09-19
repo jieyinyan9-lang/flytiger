@@ -1202,6 +1202,10 @@
     p.dmg = Math.round(p.dmg * mul);
     // 弹体随形态略增（基础放大系数）
     p.bulletStyleSize = 1.0;
+    // 专属弹道合并：正面/尾部/下部每向只射 1 发风格弹（尾/下炮管解锁状态保留，元素弹不受影响）
+    // 后续可通过「弹道强化」成长卡重新堆叠每向弹数
+    p.bulletCount = 1;
+    p.wayLv = 0;
     return mul;
   }
 
