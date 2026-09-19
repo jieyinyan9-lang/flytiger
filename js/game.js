@@ -101,7 +101,7 @@
   };
   /** Boss 死法池 key → 显示名 */
   const BOSS_DEATH_NAMES = {
-    pigking: '火焰飞猪王', thunderbehemoth: '雷公巨兽', samurai: '飞天日本武士',
+    pigking: '火焰飞猪王', thunderbehemoth: '雷公巨兽', samurai: '赤鬼',
     swordeagle: '铁鹰', skullking: '亡灵骷髅王', dogking: '飞天狗王',
     giantpheasant: '火鸡王', homelander: '怒星使', bossman: '斧王',
     stranger: '怪客', frogking: '蛙哥', cranesage: '鹤仙',

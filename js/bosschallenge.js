@@ -22,10 +22,10 @@
     /* —— 通用 Boss —— */
     PigKing:          { name: '火焰飞猪王', rating: 'B+', personality: '暴躁鲁莽', trait: '精英强化 · 火系冲撞', ability: '巨型火球与烈焰冲撞' },
     ThunderBehemoth:  { name: '雷公巨兽',   rating: 'B+', personality: '沉闷凶悍', trait: '精英强化 · 雷电重甲', ability: '落雷轰击与重型弹幕' },
-    GiantPheasant:    { name: '火鸡王',     rating: 'B+', personality: '急躁好斗', trait: '地面突击 · 俯冲近战', ability: '贴地高速俯冲突袭' },
+    GiantPheasant:    { name: '火鸡王',     rating: 'A+', personality: '急躁好斗', trait: '地面突击 · 俯冲近战', ability: '贴地高速俯冲突袭' },
     DogKing:          { name: '飞天狗王',   rating: 'B+', personality: '狡诈张狂', trait: '空中机动 · 解体光束', ability: '解体分裂与长线光束' },
-    SwordEagle:       { name: '铁鹰',       rating: 'A',  personality: '凌厉果决', trait: '空中机动 · 飞剑弹幕', ability: '飞剑齐射与俯冲斩' },
-    Samurai:          { name: '飞天日本武士', rating: 'A', personality: '孤傲自律', trait: '空中机动 · 剑道技击', ability: '居合斩与分身斩' },
+    SwordEagle:       { name: '铁鹰',       rating: 'SS', personality: '凌厉果决', trait: '空中机动 · 飞剑弹幕', ability: '飞剑齐射与俯冲斩' },
+    Samurai:          { name: '赤鬼',       rating: 'S',  personality: '孤傲自律', trait: '空中机动 · 剑道技击', ability: '居合斩与分身斩' },
     SkullKing:        { name: '亡灵骷髅王', rating: 'A',  personality: '阴冷无情', trait: '空中机动 · 亡灵召唤', ability: '召唤骷髅亡灵大军' },
     Stranger:         { name: '怪客',       rating: 'A',  personality: '乖张莫测', trait: '空中机动 · 诡异弹道', ability: '无规则诡异弹幕' },
     /* —— 场景限定 Boss（评级 A 起） —— */

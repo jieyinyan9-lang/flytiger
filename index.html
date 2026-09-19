@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>飞喵的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260919r7">
+<link rel="stylesheet" href="css/style.css?v=20260919r8">
 </head>
 <body>
 <div id="game-wrap">
@@ -299,6 +299,27 @@
     </div>
   </div>
 
+  <!-- 子弹风格二选一（预览 ?styleui=1） -->
+  <div id="stylepick" class="hidden">
+    <button id="sp-close" type="button">×</button>
+    <div class="sp-head">
+      <div class="sp-kicker">基础子弹已达最高强度</div>
+      <div class="sp-title" id="sp-title">小白 · 风格觉醒</div>
+      <div class="sp-sub">选择一条专属风格路线，立即替换全部基础弹道（多弹道 / 分裂弹 / 并行弹）；元素附加弹不受影响，风格一旦选定不可更换</div>
+    </div>
+    <div class="sp-switch">
+      <button id="sp-prev" type="button">‹</button>
+      <div class="sp-hero">
+        <img id="sp-avatar" alt="">
+        <span id="sp-hero-name">小白</span>
+        <span class="sp-base-tag">基础弹：<b id="sp-base"></b></span>
+      </div>
+      <button id="sp-next" type="button">›</button>
+    </div>
+    <div id="sp-cards"></div>
+    <div class="sp-foot">风格预览：点击卡片或按 1 / 2 查看锁定反馈　·　← / → 切换英雄（共 7 名）　·　Esc 关闭</div>
+  </div>
+
   <!-- Boss 挑战：奖励 -->
   <div id="bc-reward" class="hidden">
     <div class="bc-rw-box">
@@ -313,6 +334,7 @@
 
 <script src="js/sprites.js?v=20260917r3"></script>
 <script src="js/characters.js?v=20260914r2"></script>
+<script src="js/bulletstyles.js?v=20260919r1"></script>
 <script src="js/config.js?v=20260919r17"></script>
 <script src="js/audio.js?v=20260917r1"></script>
 <script src="js/music.js?v=20260914r3"></script>
@@ -322,7 +344,7 @@
 <script src="js/entities.js?v=20260919r30"></script>
 <script src="js/hazards.js?v=20260916r3"></script>
 <script src="js/bosses.js?v=20260919r13"></script>
-<script src="js/bosschallenge.js?v=20260919r3"></script>
-<script src="js/game.js?v=20260919r29"></script>
+<script src="js/bosschallenge.js?v=20260919r4"></script>
+<script src="js/game.js?v=20260919r30"></script>
 </body>
 </html>
