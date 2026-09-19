@@ -20,7 +20,8 @@
     mofashi: '法师 —— 掌控全局',
     buliang: '不良少年 —— 街头混混',
     jiaodoushi: '狂战士 —— 越挨打越兴奋',
-    chaoren: '超级小子 —— 全场C位'
+    chaoren: '超级小子 —— 全场C位',
+    meiying: '魅影 —— 幽冥来客'
   };
 
   const DEFS = [
@@ -76,6 +77,23 @@
     { id: 'cr_replay', cat: 'chaoren', icon: '🎬', name: '「我要上精彩回放！」', desc: '单次激光串击杀12个以上敌人' },
     { id: 'cr_god',    cat: 'chaoren', icon: '🦸', name: '「全场唯一真神」',     desc: '使用超级小子到达第10轮' },
 
+    /* ============ 👻 魅影 —— 幽冥来客 ============ */
+    { id: 'my_soul',    cat: 'meiying', icon: '👻', name: '「幽魂引路」',   desc: '使用幽魂弹累计击杀30个敌人' },
+    { id: 'my_pierce',  cat: 'meiying', icon: '🔮', name: '「一弹三魂」',   desc: '一发幽魂弹连续穿透击杀3个敌人' },
+    { id: 'my_night',   cat: 'meiying', icon: '🌙', name: '「百鬼夜行」',   desc: '首次释放百鬼夜行' },
+    { id: 'my_night20', cat: 'meiying', icon: '💀', name: '「群鬼盛宴」',   desc: '一次百鬼夜行击杀20个以上敌人' },
+    { id: 'my_boss',    cat: 'meiying', icon: '⚰️', name: '「阎王三更」',   desc: '百鬼夜行期间击败Boss' },
+    { id: 'my_round10', cat: 'meiying', icon: '🌌', name: '「冥界漫步」',   desc: '使用魅影到达第10轮' },
+
+    /* ============ ✨ 英雄觉醒子弹成就 ============ */
+    { id: 'aw_first',    cat: 'awaken', icon: '✨', name: '「觉醒！」',       desc: '首次完成英雄子弹风格觉醒' },
+    { id: 'aw_form2',    cat: 'awaken', icon: '🔷', name: '「形态跃迁」',     desc: '任意风格成长至第2形态' },
+    { id: 'aw_form4',    cat: 'awaken', icon: '🔶', name: '「终极形态」',     desc: '任意风格成长至第4形态' },
+    { id: 'aw_max',      cat: 'awaken', icon: '💠', name: '「风格圆满」',     desc: '单条风格线12次成长全部完成' },
+    { id: 'aw_styles5',  cat: 'awaken', icon: '🎭', name: '「风格鉴赏家」',   desc: '累计觉醒5种不同的子弹风格' },
+    { id: 'aw_allheroes',cat: 'awaken', icon: '🌟', name: '「全员觉醒」',     desc: '7名英雄全部完成过风格觉醒' },
+    { id: 'aw_boss',     cat: 'awaken', icon: '💥', name: '「觉醒之威」',     desc: '风格觉醒后击败Boss' },
+
     /* ============ 🏟️ 角斗场专属成就 ============ */
     { id: 'ar_enter',    cat: 'arena', icon: '🏟️', name: '「谁把我扔进来的喵？」', desc: '首次进入罗马角斗场' },
     { id: 'ar_kills100', cat: 'arena', icon: '⚔️', name: '「这里挺热闹嘛~」',     desc: '在角斗场累计击败100名敌人' },
@@ -101,6 +119,36 @@
     { id: 'h_allwant', cat: 'hidden', icon: '🎒', name: '「全都要！」',     desc: '单局获得8种以上不同强化', hidden: true }
   ];
 
+  /* ============ 🏆 全Boss讨伐成就（24 只逐一讨伐 + 总览） ============
+   * 数据：[类名, 显示名, 评级]；评级决定图标，顺序同 Boss 挑战面板 */
+  const RATING_ICON = { 'B+': '🥉', 'A': '🥈', 'A+': '🥇', 'S': '🏅', 'SS': '🔱', 'SSS': '👑' };
+  const BOSS_DEFEAT_LIST = [
+    ['PigKing', '火焰飞猪王', 'B+'], ['ThunderBehemoth', '雷公巨兽', 'B+'],
+    ['GiantPheasant', '火鸡王', 'A+'], ['DogKing', '飞天狗王', 'B+'],
+    ['SwordEagle', '铁鹰', 'SS'], ['Samurai', '赤鬼', 'S'],
+    ['SkullKing', '亡灵骷髅王', 'A'], ['Stranger', '怪客', 'A'],
+    ['MadHyena', '癫狂鬣狗', 'A'], ['SandWalker', '沙之行者', 'A'],
+    ['FrogKing', '蛙哥', 'A+'], ['BossMan', '斧王', 'S'],
+    ['Homelander', '怒星使', 'A+'], ['NiuMo', '牛魔', 'SSS'],
+    ['CaptainGeorge', '乔治船长', 'A+'], ['FireBlind', '火遮眼', 'A+'],
+    ['CraneSage', '鹤仙', 'S'], ['Sphinx', '狮身人面像', 'SSS'],
+    ['RaccoonRover', '浣熊漫游者', 'A+'], ['PurpleHand', '紫手', 'A+'],
+    ['BoneDragonKing', '巨型骨龙王', 'SSS'], ['SeaBully', '深海恶霸', 'A+'],
+    ['SnowWitch', '雪巫', 'A+'], ['CrowCount', '鸦伯爵', 'A+']
+  ];
+  BOSS_DEFEAT_LIST.forEach(([cls, nm, rt]) => {
+    DEFS.push({
+      id: 'bk_' + cls, cat: 'bosses', icon: RATING_ICON[rt],
+      name: `讨伐 · ${nm}`, desc: `在正常游戏中击败 ${nm}（${rt} 级Boss）；挑战Boss界面中击败不计`
+    });
+  });
+  DEFS.push(
+    { id: 'bk_sss',      cat: 'bosses', icon: '👑', name: '「神之壁垒」',   desc: '在正常游戏中击败任意一只 SSS 级Boss；挑战Boss界面中击败不计' },
+    { id: 'bk_ten',      cat: 'bosses', icon: '🏯', name: '「十路诸侯」',   desc: '在正常游戏中累计击败 10 种不同的Boss；挑战Boss界面中击败不计' },
+    { id: 'bk_challenge',cat: 'bosses', icon: '⚔️', name: '「委托猎人」',   desc: '在 Boss 挑战模式中成功讨伐' },
+    { id: 'bk_all',      cat: 'bosses', icon: '🌈', name: '「全Boss制霸」', desc: `在正常游戏中击败全部 ${BOSS_DEFEAT_LIST.length} 种Boss；挑战Boss界面中击败不计` }
+  );
+
   const DEF_MAP = {};
   DEFS.forEach(d => { DEF_MAP[d.id] = d; });
 
@@ -116,7 +164,10 @@
       lastRunAt: 0,        // 上一次开局时间戳
       restartStreak: 0,    // 快速连续开局次数
       arenaKills: 0,       // 角斗场累计击杀
-      arenaRounds: 0       // 角斗场累计完成轮数（击败Boss数）
+      arenaRounds: 0,      // 角斗场累计完成轮数（击败Boss数）
+      styleSeen: {},       // 已觉醒过的风格 id -> true（跨局累计）
+      heroStyleSeen: {},   // 已觉醒过的英雄 id -> true（跨局累计）
+      bossDefeated: {}     // 已击败过的 Boss 类名 -> true（跨局累计）
     }
   };
 
@@ -160,6 +211,7 @@
       starKills: 0,            // 星星弹击杀
       buttKills: 0,            // 烟头弹击杀
       bounceButtKills: 0,      // 反弹烟头击杀
+      soulKills: 0,            // 幽魂弹击杀（魅影）
       knifeHits: 0,            // 飞刀连续命中
       confuseKills: 0,         // 困惑敌人击杀（单次护盾窗口）
       bossDmgTaken: 0,         // 本轮Boss战承伤
@@ -264,6 +316,7 @@
           unlock('g_round10');
           if (run.deaths === 0) unlock('g_flawless');
           if (run.charId === 'chaoren') unlock('cr_god');
+          if (run.charId === 'meiying') unlock('my_round10');
         }
         break;
       }
@@ -280,6 +333,7 @@
       /* ===== Boss 被击败 ===== */
       case 'bossDefeated': {
         unlock('g_boss');
+        const clsName = d.boss ? d.boss.constructor.name : '';
         if (!run || !p) break;
         const ratio = p.maxHp ? p.hp / p.maxHp : 1;
         if (ratio <= 0.25) unlock('g_lowboss');
@@ -297,6 +351,23 @@
         if (run.charId === 'jiaodoushi' && ratio <= 0.3) unlock('js_fight');
         // 超级小子：大招后击败Boss
         if (run.charId === 'chaoren' && run.ultKind === 'lasers' && run.ultT > 0) unlock('cr_ult');
+        // 魅影：百鬼夜行期间击败Boss
+        if (run.charId === 'meiying' && run.ultKind === 'phantom' && run.ultT > 0) unlock('my_boss');
+        // 觉醒子弹：风格觉醒后击败Boss
+        if (p.bulletStyleId) unlock('aw_boss');
+        // —— 全Boss讨伐：登记类名 → 个体成就 + 总览成就（仅正常游戏，挑战Boss界面不计）——
+        if (clsName && !g.challengeMode) {
+          saved.stats.bossDefeated[clsName] = true;
+          unlock('bk_' + clsName);
+          const hit = BOSS_DEFEAT_LIST.find(x => x[0] === clsName);
+          if (hit && hit[2] === 'SSS') unlock('bk_sss');
+          const bn = Object.keys(saved.stats.bossDefeated).length;
+          if (bn >= 10) unlock('bk_ten');
+          if (bn >= BOSS_DEFEAT_LIST.length) unlock('bk_all');
+          save();
+        }
+        // Boss 挑战模式中成功讨伐（与上面的正常游戏讨伐互不相通）
+        if (g.challengeMode) unlock('bk_challenge');
         // —— 角斗场：完成一轮结算 ——
         if (run.arena) {
           run.arenaRounds++;
@@ -379,6 +450,15 @@
         if (d.ult) {
           run.laserKills++;
           if (run.charId === 'chaoren' && run.laserKills >= 12) unlock('cr_replay');
+        }
+        // 魅影幽魂弹：累计击杀 + 单发穿透计数（bullet 上累计，同一发杀≥3 即「一弹三魂」）
+        if (d.kind === 'soul') {
+          run.soulKills++;
+          if (run.charId === 'meiying' && run.soulKills >= 30) unlock('my_soul');
+          if (d.bullet) {
+            d.bullet._achSoulKills = (d.bullet._achSoulKills || 0) + 1;
+            if (run.charId === 'meiying' && d.bullet._achSoulKills >= 3) unlock('my_pierce');
+          }
         }
         break;
       }
@@ -508,6 +588,37 @@
       case 'starField': {
         if (!run) break;
         if (run.charId === 'mofashi' && (d.n || 0) >= 12) unlock('mf_field');
+        break;
+      }
+
+      /* ===== [魅影] 百鬼夜行释放（n=本次大招击杀小怪数） ===== */
+      case 'ultPhantom': {
+        unlock('my_night');
+        if (!run) break;
+        if ((d.n || 0) >= 20) unlock('my_night20');
+        break;
+      }
+
+      /* ===== 英雄子弹风格觉醒（styleId/heroId/倍率） ===== */
+      case 'styleAwaken': {
+        unlock('aw_first');
+        if (d.styleId) {
+          saved.stats.styleSeen[d.styleId] = true;
+          if (Object.keys(saved.stats.styleSeen).length >= 5) unlock('aw_styles5');
+        }
+        if (d.heroId) {
+          saved.stats.heroStyleSeen[d.heroId] = true;
+          if (Object.keys(saved.stats.heroStyleSeen).length >= 7) unlock('aw_allheroes');
+        }
+        save();
+        break;
+      }
+
+      /* ===== 英雄子弹风格成长（growth 1-12 / formUp / newForm） ===== */
+      case 'styleGrowth': {
+        if (d.formUp && d.newForm >= 2) unlock('aw_form2');
+        if (d.formUp && d.newForm >= 4) unlock('aw_form4');
+        if ((d.growth || 0) >= 12) unlock('aw_max');
         break;
       }
     }
@@ -681,6 +792,9 @@
       { key: 'buliang', title: '🐱 不良少年 —— 街头混混' },
       { key: 'jiaodoushi', title: '🐱 狂战士 —— 越挨打越兴奋' },
       { key: 'chaoren', title: '🐱 超级小子 —— 全场C位' },
+      { key: 'meiying', title: '👻 魅影 —— 幽冥来客' },
+      { key: 'awaken', title: '✨ 英雄觉醒子弹成就' },
+      { key: 'bosses', title: '🏆 全Boss讨伐成就' },
       { key: 'arena', title: '🏟️ 角斗场专属成就' },
       { key: 'hidden', title: '❓ 隐藏成就' }
     ];

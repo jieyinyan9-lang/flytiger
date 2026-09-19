@@ -1622,7 +1622,8 @@
       });
       const bossLock = new Map(this.bosses.map(b => [b, b.lockHp]));   // 先快照，伤害后恢复锁血
       this.bosses.forEach(b => { b.lockHp = false; });
-      // 屏幕内小怪全灭（草龙本体改为幽焰持续灼烧）
+      // 屏幕内小怪全灭（草龙本体改为幽焰持续灼烧）；同时统计击杀数用于成就
+      let phantomKills = 0;
       this.enemies.slice().forEach(e => {
         if (e.dead) return;
         if (e.type === 'grassdragon' && !e.isMini) {
@@ -1630,8 +1631,11 @@
           e.spawnInvuln = 0;
           return;
         }
+        const aliveBefore = !e.dead;
         e.takeDamage(99999, this);
+        if (aliveBefore && e.dead) phantomKills++;
       });
+      if (window.Ach) Ach.evt('ultPhantom', { g: this, n: phantomKills });
       // 草龙分裂小段：幽焰灼烧 + 重伤
       this.enemies.slice().forEach(e => {
         if (e.dead || !e.segments || !e.isMini) return;
@@ -3204,7 +3208,7 @@
               e.takeDamage(b.dmg, this, { x: 220, y: rand(-60, 60) });
               // 成就：子弹击杀归因（星星/烟头/反弹烟头）
               if (window.Ach && aliveBefore && e.dead) {
-                Ach.evt('bulletKill', { g: this, kind: b.kind, bounced: !!b._achBounced, ult: false });
+                Ach.evt('bulletKill', { g: this, kind: b.kind, bounced: !!b._achBounced, ult: false, bullet: b });
               }
               // 元素弹道命中：施加 DoT / 破无敌 / 冻结（系数吃元素精通等级，同元素可叠层）
               if (b.element === 'flame') {

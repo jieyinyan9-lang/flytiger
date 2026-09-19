@@ -464,6 +464,8 @@
         }
         // 阶段3：风格成长
         const r = window.BStyle.applyStyleGrowth(p);
+        // 成就：风格成长（形态跃迁 / 12 次圆满）
+        if (window.Ach) Ach.evt('styleGrowth', { g, growth: p.bulletStyleGrowth, formUp: r && r.formUp, newForm: r && r.newForm });
         if (r && r.formUp && window.SFX && SFX.levelup) SFX.levelup();
         else if (window.SFX && SFX.pick) SFX.pick();
       },
