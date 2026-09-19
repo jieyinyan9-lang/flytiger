@@ -724,8 +724,7 @@
         apply(p) {
           pushElementWay(p, 'flame');
         },
-        level(p) { return p.elementWay.filter(x => x === 'flame').length; },
-        guaranteed(p, g) { return g.bossCount >= 1 && p.elementWay.indexOf('flame') < 0; }
+        level(p) { return p.elementWay.filter(x => x === 'flame').length; }
       },
       {
         id: 'poison', icon: '☠', cls: 'c-atk', name: '毒液弹道',
@@ -739,8 +738,7 @@
         apply(p) {
           pushElementWay(p, 'poison');
         },
-        level(p) { return p.elementWay.filter(x => x === 'poison').length; },
-        guaranteed(p, g) { return g.round >= 2 && p.elementWay.indexOf('poison') < 0; }
+        level(p) { return p.elementWay.filter(x => x === 'poison').length; }
       },
       {
         id: 'ice', icon: '❄', cls: 'c-spd', name: '寒冰弹道',
@@ -754,8 +752,7 @@
         apply(p) {
           pushElementWay(p, 'ice');
         },
-        level(p) { return p.elementWay.filter(x => x === 'ice').length; },
-        guaranteed(p, g) { return g.round >= 4 && p.elementWay.indexOf('ice') < 0; }
+        level(p) { return p.elementWay.filter(x => x === 'ice').length; }
       },
       /* —— 元素精通（需先拥有对应元素弹道；异常流 build 的独立成长线） —— */
       {
