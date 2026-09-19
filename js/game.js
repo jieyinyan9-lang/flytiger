@@ -1009,7 +1009,14 @@
       const ch = this.challengeMode;
       if (!ch || ch.phase !== 'deploy') return;
       SFX.levelup();
+      // 部署专用屏蔽：引力领域 / 回复体力 / 额外生命（Boss 挑战不提供恢复与续航取巧项）
+      const DEPLOY_BAN = ['magnet', 'heal', 'lifeUp'];
+      // 部署按第 5 轮环境判定资格：临时改写 round，让受轮次门槛限制的爆炸弹 /
+      // 雷霆领域 / 防护刀刃均可刷出；构建完卡池立即还原，不影响 HUD 与正常流程
+      const _roundBak = this.round;
+      this.round = Math.max(this.round, 5);
       const pool = CFG.upgrades.filter(u => {
+        if (DEPLOY_BAN.includes(u.id)) return false;
         if (!u.can(this.player, this)) return false;
         if (u.charOnly && this.player.charId !== u.charOnly) return false;
         return true;
@@ -1019,6 +1026,7 @@
       if (cb && cb.can(this.player)) pool.push(cb);
       const opts = [];
       const guaranteed = pool.filter(u => u.guaranteed && u.guaranteed(this.player, this));
+      this.round = _roundBak;
       guaranteed.forEach(u => {
         const idx = pool.indexOf(u);
         if (idx >= 0) pool.splice(idx, 1);
@@ -1403,7 +1411,7 @@
 
     /* ---------------- 数值 ---------------- */
     get bossActive() { return this.bosses.length > 0 || this.warnT > 0; }
-    /** 玩家子弹降噪档位：多弹齐飞0.8 / 怪物潮0.75 / Boss战0.7 / Boss释放子弹技能0.5，多档命中取最低 */
+    /** 玩家子弹降噪档位：多弹齐飞0.8 / 怪物潮0.75 / Boss战0.55 / Boss释放子弹技能0.35，多档命中取最低 */
     playerBulletAlpha() {
       const bf = CFG.player.bulletFade;
       if (!bf) return 1;
