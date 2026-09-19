@@ -1011,10 +1011,10 @@
       SFX.levelup();
       // 部署专用屏蔽：引力领域 / 回复体力 / 额外生命（Boss 挑战不提供恢复与续航取巧项）
       const DEPLOY_BAN = ['magnet', 'heal', 'lifeUp'];
-      // 部署按第 5 轮环境判定资格：临时改写 round，让受轮次门槛限制的爆炸弹 /
-      // 雷霆领域 / 防护刀刃均可刷出；构建完卡池立即还原，不影响 HUD 与正常流程
+      // 部署按第 6 轮环境判定资格：临时改写 round，让受轮次门槛限制的爆炸弹 /
+      // 雷霆领域 / 防护刀刃 / 小白 6 阶子弹均可刷出；构建完卡池立即还原，不影响 HUD 与正常流程
       const _roundBak = this.round;
-      this.round = Math.max(this.round, 5);
+      this.round = Math.max(this.round, 6);
       const pool = CFG.upgrades.filter(u => {
         if (DEPLOY_BAN.includes(u.id)) return false;
         if (!u.can(this.player, this)) return false;

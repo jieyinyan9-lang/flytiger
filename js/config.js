@@ -545,11 +545,11 @@
       },
       {
         id: 'tier', icon: '✦', cls: 'c-tier', name: '子弹升级', charOnly: 'xiaobai',
-        desc: '普通弹升级为高阶强化弹：更大、更亮、附带穿透（3 阶，分别在第 1/3/5 轮出现）',
+        desc: '普通弹升级为高阶强化弹：更大、更亮、附带穿透（6 阶，第 1~6 轮各可升 1 阶）',
         can(p, g) {
-          if (p.bulletTier >= 3) return false;            // 满级后由「风格觉醒」卡接管
-          // 下一阶要求轮次：1阶第1轮、2阶第3轮、3阶第5轮
-          const needRound = p.bulletTier === 0 ? 1 : (p.bulletTier === 1 ? 3 : 5);
+          if (p.bulletTier >= 6) return false;            // 满级后由「风格觉醒」卡接管
+          // 第 (bulletTier+1) 阶需在第 (bulletTier+1) 轮：6 阶分别在第 1/2/3/4/5/6 轮出现
+          const needRound = p.bulletTier + 1;
           return !g || g.round >= needRound;
         },
         apply(p) { p.bulletTier++; p.tierLv++; p.dmg += 4; },

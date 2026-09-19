@@ -367,15 +367,15 @@
     jiaodoushi: '战盾成长', chaoren: '激光成长', meiying: '幽魂成长'
   };
 
-  /** 基础子弹等级（0-3）：xiaobai 用 bulletTier，其余用 charBulletLv */
+  /** 基础子弹等级（0-6）：xiaobai 用 bulletTier，其余用 charBulletLv */
   function baseBulletLv(p) {
     return p.charId === 'xiaobai' ? (p.bulletTier || 0) : (p.charBulletLv || 0);
   }
 
   /**
    * 角色专属子弹成长三选一项。单卡动态覆盖三阶段：
-   *  1) 基础成长（baseLv<3）：提升基础子弹强度（xiaobai 由 tier 卡负责，此处仅处理风格阶段）
-   *  2) 风格二选一（baseLv>=3 且未选风格）：弹出风格选择面板
+   *  1) 基础成长（baseLv<6）：提升基础子弹强度（xiaobai 由 tier 卡负责，此处仅处理风格阶段）
+   *  2) 风格二选一（baseLv>=6 且未选风格）：弹出风格选择面板
    *  3) 风格成长（已选风格且 growth<12）：累计成长，每3次形态跃迁
    */
   function bulletUpgrade(charId) {
@@ -388,18 +388,24 @@
     return {
       id: 'cbullet', icon: '✦', cls: 'c-tier',
       name(p) {
-        if (baseBulletLv(p) < 3 && !xiaobaiBaseHandled) return GROW_NAME[charId] || '子弹成长';
+        if (baseBulletLv(p) < 6 && !xiaobaiBaseHandled) return GROW_NAME[charId] || '子弹成长';
         if (!p.bulletStyleId) return '风格觉醒';
         return `风格强化（${p.bulletStyleGrowth || 0}/12）`;
       },
       desc(p) {
         // 阶段1：基础成长
-        if (baseBulletLv(p) < 3 && !xiaobaiBaseHandled) {
-          const extra = (charId === 'buliang' || charId === 'jiaodoushi') ? '、反弹 +1 次' : '';
-          if (p.charBulletLv + 1 >= 3) {
-            return `子弹升至最高形态「${fin.name}」，伤害 +3${extra}，附带专属拖尾！`;
+        if (baseBulletLv(p) < 6 && !xiaobaiBaseHandled) {
+          const lv = p.charBulletLv;
+          // 前 3 次：子弹形态进化（第 4 阶为最终形态）
+          if (lv < 3) {
+            const extra = (charId === 'buliang' || charId === 'jiaodoushi') ? '、反弹 +1 次' : '';
+            if (lv + 1 >= 3) {
+              return `子弹升至最高形态「${fin.name}」，伤害 +3${extra}，附带专属拖尾！`;
+            }
+            return `子弹样式进化（第 ${lv + 1}/6 次成长）：伤害 +3${extra}`;
           }
-          return `子弹样式进化（第 ${p.charBulletLv + 1}/3 次成长）：伤害 +3${extra}`;
+          // 第 4-6 次：最终形态精炼（视觉不再变化，继续提升伤害）
+          return `子弹精炼（第 ${lv + 1}/6 次成长）：伤害 +3，最终形态继续强化。`;
         }
         // 阶段2：风格二选一
         if (!p.bulletStyleId) {
@@ -417,21 +423,23 @@
       },
       can(p, g) {
         // xiaobai 基础成长由 tier 卡负责；其余英雄基础未满级时由此卡负责
-        if (baseBulletLv(p) < 3) return !xiaobaiBaseHandled;
+        if (baseBulletLv(p) < 6) return !xiaobaiBaseHandled;
         // 基础满级：未选风格 → 风格二选一；已选且未满12次 → 风格成长
         if (!p.bulletStyleId) {
-          // 普通局最早第 4 轮才会出现风格觉醒；Boss 挑战 / 秘境（月痕沙海）不受轮次限制
-          if (g && !g.challengeMode && !g.stageMode && (g.round || 1) < 4) return false;
+          // 普通局最早第 7 轮才会出现风格觉醒；Boss 挑战 / 秘境（月痕沙海）不受轮次限制
+          if (g && !g.challengeMode && !g.stageMode && (g.round || 1) < 7) return false;
           return true;
         }
         return (p.bulletStyleGrowth || 0) < 12;
       },
       apply(p, g) {
         // 阶段1：基础成长
-        if (baseBulletLv(p) < 3 && !xiaobaiBaseHandled) {
+        if (baseBulletLv(p) < 6 && !xiaobaiBaseHandled) {
+          const lv = p.charBulletLv;
           p.charBulletLv++;
           p.dmg += 3;
-          if (p.bounceMax !== undefined) p.bounceMax++;
+          // 反弹次数仅在前 3 次形态进化阶段成长，精炼阶段不再增加
+          if (p.bounceMax !== undefined && lv < 3) p.bounceMax++;
           if (window.SFX && SFX.pick) SFX.pick();
           return;
         }
@@ -460,7 +468,7 @@
         else if (window.SFX && SFX.pick) SFX.pick();
       },
       level(p) {
-        if (baseBulletLv(p) < 3 && !xiaobaiBaseHandled) return p.charBulletLv;
+        if (baseBulletLv(p) < 6 && !xiaobaiBaseHandled) return p.charBulletLv;
         if (!p.bulletStyleId) return baseBulletLv(p);
         return p.bulletStyleGrowth || 0;
       }

@@ -165,7 +165,10 @@
     bolt0: { color: '#ffd93b', edge: '#ff9d2e', r: 4, len: 14 },
     bolt1: { color: '#5ee7ff', edge: '#1b8fc9', r: 6, len: 18 },
     bolt2: { color: '#e59bff', edge: '#8b3fd0', r: 7, len: 22 },
-    bolt3: { color: '#ffffff', edge: '#5ee7ff', r: 10, len: 28 }
+    bolt3: { color: '#ffffff', edge: '#5ee7ff', r: 10, len: 28 },
+    bolt4: { color: '#fff7c2', edge: '#ffb347', r: 12, len: 32 },
+    bolt5: { color: '#ffffff', edge: '#ff8a3d', r: 14, len: 36 },
+    bolt6: { color: '#ffffff', edge: '#ff5e3a', r: 16, len: 40 }
   };
 
   /** 龙系怪物专属刺弹：机制与草龙龙鳞刺一致（高速直线、触地入土），外形按地图主题区分 */
@@ -4090,7 +4093,7 @@
       this.fireInt = CFG.player.fireInterval * (cdef.fireMul || 1);   // 角色射速（射击间隔）
       this.bulletSpdMul = cdef.bulletSpd || 1;        // 角色子弹飞行速度倍率（反弹类弹种较慢）
       this.kind = cdef.kind || 'bolt';                // 角色弹种
-      this.charBulletLv = 0;                          // 角色子弹成长（0-3，第 4 阶为最终形态）
+      this.charBulletLv = 0;                          // 角色子弹成长（0-6，第 4 阶为最终形态，4-6 为精炼）
       // 英雄子弹风格成长系统
       this.bulletStyleId = null;                       // 已选风格 id（null=未风格化）
       this.bulletStyleGrowth = 0;                      // 风格成长次数 0-12
@@ -4960,7 +4963,7 @@
         return new Bullet(x, y, vx, vy, {
           kind: 'bolt', friendly: true, dmg,
           r: (4 + this.bulletTier * 2) * bscale * sizeMul,
-          pierce: this.bulletTier >= 2 ? (this.bulletTier === 3 ? 4 : 2) : 0,
+          pierce: this.bulletTier >= 5 ? 6 : (this.bulletTier >= 3 ? 4 : (this.bulletTier >= 2 ? 2 : 0)),
           bombLv: this.bombLv, tier: this.bulletTier, ...styleOpts
         });
       }

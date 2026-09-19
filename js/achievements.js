@@ -246,8 +246,8 @@
           else { run.upgradeStreakId = d.id; run.upgradeStreak = 1; }
           if (run.upgradeStreak >= 3) unlock('h_sametype');
           if (Object.keys(run.distinct).length >= 8) unlock('h_allwant');
-          // 小白：子弹达到最高阶（bulletTier 3 = 高阶穿透弹）
-          if (run.charId === 'xiaobai' && p && p.bulletTier >= 3) unlock('xb_tier');
+          // 小白：子弹达到最高阶（bulletTier 6 = 高阶穿透弹）
+          if (run.charId === 'xiaobai' && p && p.bulletTier >= 6) unlock('xb_tier');
         }
         save();
         break;
