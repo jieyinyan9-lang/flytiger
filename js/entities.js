@@ -4695,12 +4695,14 @@
         }
       }
 
-      // 超猫巨型红色激光：向右贯穿，驱赶 + 少量伤害
+      // 超猫巨型红色激光：向右贯穿，伤害与最高阶段持续光束对齐（按开火同频造成 100% dmg），保留向右上方驱赶
       if (this.laserT > 0) {
         this.laserT = Math.max(0, this.laserT - dt);
         const now = g.time;
         const laserW = 34;
         const lx = this.x, ly = this.y;
+        const tickDmg = Math.max(1, Math.round(this._heldBeamDmg || this.dmg));
+        const tickInt = this.fireInt || CFG.player.fireInterval;
         g.targets().forEach(e => {
           if (e.dead) return;
           if (e.isBoss && (e.state === 'enter' || e.state === 'trans' || e.state === 'phaseTrans')) return;
@@ -4709,10 +4711,9 @@
           if (px > lx - 10 && Math.abs(py - ly) < laserW + e.radius) {
             const nextHit = this._laserCd.get(e) || 0;
             if (now >= nextHit) {
-              this._laserCd.set(e, now + 0.18);
-              const dmg = Math.max(3, Math.round(this.dmg * 0.35));
-              if (e.segments) e.damageAt(px, py, dmg, g);
-              else e.takeDamage(dmg, g, { x: 460, y: -560 });   // 向右上方强力驱赶
+              this._laserCd.set(e, now + tickInt);
+              if (e.segments) e.damageAt(px, py, tickDmg, g);
+              else e.takeDamage(tickDmg, g, { x: 460, y: -560 });   // 向右上方强力驱赶
               burst(g, px, py, 3, ['#ff2a0a', '#ffd23b', '#fff'], 120, 2, 0.18);
             }
           }
