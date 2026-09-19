@@ -592,6 +592,8 @@
       this.groundSlam = !!opts.groundSlam;     // 触地震伤地下龙类
       this.splitN = opts.splitN || 0;          // 死亡分裂数量（法师星星）
       this.edgeBounce = !!opts.edgeBounce;     // 屏幕边缘反弹（超猫最终激光）
+      this.elemBounce = !!opts.elemBounce;     // 毒液精通：撞障碍/地图边界镜面反弹（不减速不削伤）
+      this.pbombLand = false;                  // 玩家抛射炸弹是否触地（触地爆炸触发二次爆炸）
       this.len = opts.len || 0;                // 矩形激光块长度（最终形态长至屏右）
       this.bossDmgRatio = opts.bossDmgRatio || 0;   // 对 Boss 按最大生命百分比造成伤害
       this.ultraKill = !!opts.ultraKill;       // 秒杀小怪（含地下龙类）
@@ -1676,8 +1678,27 @@
             burst(g, this.x, this.y, 6, ['#35e0ff', '#fff'], 150, 3, 0.3);
           }
         }
+        // 毒液精通：地图边界（左右屏边/顶部/地面）镜面反弹，次数耗尽后正常消亡
+        if (this.elemBounce && this.bouncesLeft > 0) {
+          let bounced = false;
+          if (this.x < this.r && this.vx < 0) { this.x = this.r; this.vx = Math.abs(this.vx); bounced = true; }
+          else if (this.x > CFG.W - this.r && this.vx > 0) { this.x = CFG.W - this.r; this.vx = -Math.abs(this.vx); bounced = true; }
+          if (this.y < CFG.TOP_Y + this.r && this.vy < 0) { this.y = CFG.TOP_Y + this.r; this.vy = Math.abs(this.vy); bounced = true; }
+          else if (this.y > gy - this.r && this.vy > 0) { this.y = gy - this.r; this.vy = -Math.abs(this.vy); bounced = true; }
+          if (bounced) {
+            this.bouncesLeft--;
+            this.angle = Math.atan2(this.vy, this.vx);
+            burst(g, this.x, this.y, 5, ['#2dd44a', '#7dff6a', '#0a5a12'], 120, 3, 0.28);
+          }
+        }
+        // 玩家抛射炸弹：触地即炸（落地标记交给 game 触发二次爆炸）；岩石/破碎障碍/敌人碰撞在 game.collisions 处理
+        if (this.kind === 'pbomb' && this.vy > 0 && this.y > gy - this.r * 0.7) {
+          this.y = gy - this.r * 0.7;
+          this.pbombLand = true;
+          this.dead = true;
+        }
         // 地面交互：烟头/火把触地震伤地下龙类小段；下落类弹种（飞刀/盾牌）触地消亡
-        if (!this.edgeBounce && this.y > gy - this.r * 0.6 && this.vy > 0) {
+        if (!this.edgeBounce && !this.elemBounce && this.y > gy - this.r * 0.6 && this.vy > 0) {
           if (this.groundSlam) {
             this.groundSlamHit(g, gy);
             this.dead = true;
@@ -2040,6 +2061,35 @@
         ctx.strokeStyle = 'rgba(236,248,255,0.55)'; ctx.lineWidth = 1.6;
         ctx.beginPath(); ctx.moveTo(26, -3); ctx.quadraticCurveTo(10, -11, -8, -8); ctx.stroke();
         ctx.restore();
+        return;
+      }
+      if (k === 'pbomb') {
+        // 玩家抛射炸弹：黑色圆铁壳 + 金属铆钉 + 引线火花（比角色受击体大，r≈24）
+        const R = this.r;
+        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.spin * 0.25);
+        const grd = ctx.createRadialGradient(-R * 0.26, -R * 0.32, 2, 0, 0, R + 4);
+        grd.addColorStop(0, '#5a5e6b'); grd.addColorStop(0.55, '#2c2e37'); grd.addColorStop(1, '#101117');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#06070a'; ctx.lineWidth = 2.4;
+        ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();
+        ctx.fillStyle = '#767c8c';
+        for (let i = 0; i < 7; i++) {
+          const a = i * TAU / 7;
+          ctx.beginPath(); ctx.arc(Math.cos(a) * (R - 8), Math.sin(a) * (R - 8), 2.4, 0, TAU); ctx.fill();
+        }
+        ctx.fillStyle = '#1a1c23';
+        ctx.fillRect(-5, -R - 3, 10, 6);
+        ctx.restore();
+        // 引线 + 火花（不随弹体旋转）
+        ctx.strokeStyle = '#9a743f'; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(this.x, this.y - R - 1);
+        ctx.quadraticCurveTo(this.x + 8, this.y - R - 10, this.x + 14, this.y - R - 6); ctx.stroke();
+        const fl = 1 + Math.sin(this.t * 30) * 0.35;
+        ctx.fillStyle = 'rgba(255,180,60,0.95)';
+        ctx.beginPath(); ctx.arc(this.x + 14, this.y - R - 6, 3.4 * fl, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,240,180,0.9)';
+        ctx.beginPath(); ctx.arc(this.x + 14, this.y - R - 6, 1.6 * fl, 0, TAU); ctx.fill();
         return;
       }
       if (k === 'wbomb') {
@@ -4046,16 +4096,19 @@
       // 元素弹道（击败 Boss 后解锁）：火/冰/毒每种最多 3 条，第 1 条朝前、第 2 条朝下、第 3 条朝后
       // 满配 = 3火+3冰+3毒共 9 条，每个方向恰好火/冰/毒各 1 条，三向独立齐射（不依赖主武器 tailWay/downWay）
       this.elemWays = { front: [], down: [], back: [] };  // 各向元素队列（每向最多3条、每种元素至多1条）
-      this.elemCds  = { front: [], down: [], back: [] };  // 与各向队列平行的独立冷却（火焰3s/寒冰2s；毒液0=随主射速）
+      this.elemCds  = { front: [], down: [], back: [] };  // 与各向队列平行的独立冷却（火焰1.5s/寒冰1s；毒液0=随主射速）
       this.elementWay = [];                               // 三向拼接镜像（front+down+back），供数量/持有统计复用
-      // 元素精通等级（三选一成长，0-3；决定元素弹 DoT 系数/持续/冻结时长）
+      this.elemQueue = [];                                // 寒冰精通连射待发队列：{t, dir, w}（一颗接一颗延迟射出）
+      // 元素精通等级（三选一成长；火焰 0-4，毒液/寒冰 0-3；决定元素弹 DoT 系数/持续/冻结与弹数变化）
       this.elemLv = { flame: 0, poison: 0, ice: 0 };
-      // 闪电子弹（闪电链）
+      // 闪电链（并入雷霆领域单卡：stormLv>0 即解锁，链接数/伤害等级随领域等级成长）
       this.chainJumps = 0;    // 链接敌人数量（0=未解锁）
       this.chainDmgLv = 0;    // 闪电伤害强化等级
-      // 雷霆领域（闪电子弹获得后的特殊攻击）：每 2s 自动电击屏幕内敌人
+      // 雷霆领域（含闪电子弹）：每 2s 自动电击屏幕内敌人
       this.stormLv = 0;       // 等级 0=未获得，1~6 = 每轮电击敌人数（决定电流配色/粗细）
       this.stormCd = 0;       // 距下一次自动电击的冷却（秒）
+      // 爆炸弹抛射炮（爆炸弹 Lv1 解锁）：每 3s 抛出一颗铁壳炸弹
+      this.bombCd = 0;        // 距下一颗抛射炸弹的冷却（秒）
       // 防护刀刃（环绕光剑）
       this.blades = 0;        // 环绕光剑数量
       this.bladeDmgLv = 0;    // 刀刃伤害强化等级
@@ -4424,6 +4477,8 @@
     /** 阵亡：消耗一条生命原地重生，否则游戏结束 */
     die(g) {
       if (g.state !== 'playing') return;
+      // Boss 挑战结算等待中：不再重生
+      if (g.challengeMode && g.challengeMode.ended) return;
       if (this.lives > 0) {
         this.lives--;
         if (window.Ach) window.Ach.evt('playerDeath', { g: g, src: g.lastHurtSrc });
@@ -4444,8 +4499,10 @@
           // 回到安全位置
           this.x = clamp(this.x, 80, 260);
           this.y = CFG.H * 0.4;
-          // 复活后转移至另一张地图
-          if (g.rerollMap) g.rerollMap();
+          // Boss 挑战·场景限定 Boss：死亡不切换场景；
+          // 通用 Boss 挑战（及普通模式）：复活后转移至另一张地图
+          const stayScene = g.challengeMode && g.challengeMode.sceneLocked;
+          if (!stayScene && g.rerollMap) g.rerollMap();
         }
       } else {
         g.gameOver();
@@ -4788,12 +4845,32 @@
             if (eb && eb.interval > 0 && this.elemCds[dir][w] > 0) this.elemCds[dir][w] = Math.max(0, this.elemCds[dir][w] - dt);
           }
         }
+        // 寒冰精通连射待发队列：逐颗延迟射出（一个接着一个）；队列指向的弹道已消失则丢弃
+        for (let i = this.elemQueue.length - 1; i >= 0; i--) {
+          const qq = this.elemQueue[i];
+          qq.t -= dt;
+          if (qq.t <= 0) {
+            if (this.elemWays[qq.dir] && this.elemWays[qq.dir][qq.w] === 'ice') {
+              this.fireElemOne(g, qq.dir, qq.w, 0, 0);
+            }
+            this.elemQueue.splice(i, 1);
+          }
+        }
+        // 爆炸弹抛射炮：每 3s 一颗铁壳炸弹（爆炸弹 Lv1+）
+        if (this.bombLv > 0) {
+          this.bombCd -= dt;
+          if (this.bombCd <= 0) {
+            this.bombCd = CFG.playerBomb.interval;
+            this.fireBombCannon(g);
+          }
+        }
         this.fireT -= dt;
         if (this.fireT <= 0) {
           this.fireT = this.fireInt || CFG.player.fireInterval;
           this.fire(g);
         }
       }
+      // 停火期间连射队列计时暂停（近战/台词结束后不会一次性倾泻，因为计时只在上方分支内递减）
 
       // 防护刀刃：环绕光剑旋转伤害 + 格挡子弹
       this.updateBlades(dt, g);
@@ -4965,7 +5042,8 @@
         });
       }
       // 元素弹道：前/下/后三向队列各自齐射（每向最多 3 条，共 9 条；独立于主武器 tailWay/downWay 解锁）
-      // 火焰/寒冰有独立发射间隔（3s/2s 重炮）；毒液 interval=0 跟随主射速高频射出
+      // 火焰 1.5s/寒冰 1s 独立间隔重炮；毒液 interval=0 跟随主射速高频射出
+      // 精通弹数变化：火焰一次齐射 2/3/4/6 颗（扇面）；寒冰连射 2/3/4 颗（入待发队列一颗接一颗）；毒液反弹 1/2/3 次
       const fireElemDir = (dir) => {
         const q = this.elemWays[dir];
         const cdq = this.elemCds[dir];
@@ -4977,43 +5055,23 @@
           // 独立冷却未到：该条本次不发射
           if (eb.interval > 0 && (cdq[w] || 0) > 0) continue;
           if (eb.interval > 0) cdq[w] = eb.interval;
-          const off = (cnt === 1 ? 0 : (w - (cnt - 1) / 2) * 0.42);
-          const slot = (cnt === 1 ? 0 : (w - (cnt - 1) / 2) * 14);   // 同向多条时的炮口排列间距
-          const eSpeed = speed * eb.spdMul;
-          let bx, by, vx, vy;
-          if (dir === 'front') {
-            // 前向：枪口向右；火焰上抛偏置 -20（弹速÷3 后与仰角同步÷3）、毒液下沉 60
-            const bias = el === 'flame' ? -20 : (el === 'poison' ? 60 : 0);
-            bx = muzzleX; by = muzzleY + slot;
-            vx = Math.cos(off) * eSpeed;
-            vy = Math.sin(off) * eSpeed + bias;
-          } else if (dir === 'back') {
-            // 后向：机尾向左水平镜像（×0.95），上下偏向保留
-            const bias = el === 'flame' ? -20 : (el === 'poison' ? 60 : 0);
-            bx = this.x - 44 * this.sizeMul; by = muzzleY + slot;
-            vx = -Math.cos(off) * eSpeed * 0.95;
-            vy = (Math.sin(off) * eSpeed + bias) * 0.95;
-          } else {
-            // 下向：机腹垂直向下（×0.9），散开角转向屏幕前方
-            bx = this.x + 8 * this.sizeMul + slot; by = this.y + 26 * this.sizeMul;
-            vx = Math.sin(off) * eSpeed * 0.9;
-            vy = Math.cos(off) * eSpeed * 0.9;
-          }
-          g.bullets.push(new Bullet(
-            bx, by, vx, vy,
-            { kind: 'orb', friendly: true, dmg: Math.max(1, Math.round(dmg * eb.dmgMul)), r: eb.r * bscale,
-              pierce: 0, element: el, life: eb.life || 4, elemPow: this.elemLv[el] || 0 }));
-          // 毒液枪口：绿色浆质喷溅 + 几颗毒液颗粒（沿发射方向喷出）
-          if (el === 'poison') {
-            const pvx = dir === 'down' ? rand(-130, 130) : rand(120, 320) * (dir === 'back' ? -1 : 1);
-            const pvy = dir === 'down' ? rand(120, 320) : rand(-130, 130);
-            for (let i = 0; i < 5; i++) {
-              g.particles.push(new Particle(
-                bx, by + rand(-6, 6),
-                pvx + (dir === 'down' ? rand(-60, 60) : 0), pvy,
-                rand(0.2, 0.42), rand(2.5, 5),
-                ['#2dd44a', '#4ade80', '#0a5a12', '#7dff6a'][randi(0, 3)]));
+          const lv = this.elemLv[el] || 0;
+          if (el === 'flame' && lv > 0) {
+            // 烈焰精通：同炮口扇面齐射 2/3/4/6 颗（角散布随弹数加大，炮口纵向微错位）
+            const n = eb.fan[lv - 1] || 1;
+            const spread = n === 2 ? 0.11 : n === 3 ? 0.17 : n === 4 ? 0.21 : 0.28;
+            for (let f = 0; f < n; f++) {
+              const dA = n === 1 ? 0 : -spread / 2 + spread * f / (n - 1);
+              const dY = n === 1 ? 0 : (f - (n - 1) / 2) * 8;
+              this.fireElemOne(g, dir, w, dA, dY);
             }
+          } else if (el === 'ice' && lv > 0) {
+            // 寒冰精通：首颗立即发射，其余按 volleyGap 逐颗延迟（一个接着一个）
+            const n = eb.volley[lv - 1] || 1;
+            this.fireElemOne(g, dir, w, 0, 0);
+            for (let i = 1; i < n; i++) this.elemQueue.push({ t: eb.volleyGap * i, dir, w });
+          } else {
+            this.fireElemOne(g, dir, w, 0, 0);
           }
         }
       };
@@ -5021,6 +5079,76 @@
       fireElemDir('down');
       fireElemDir('back');
       SFX.shoot();
+    }
+
+    /** 发射一颗元素弹（fire() 齐射 / 寒冰连射队列共用）。
+     *  dA：相对该炮口基准射向的附加角度（火焰扇面）；dY：炮口纵向错位（px） */
+    fireElemOne(g, dir, w, dA, dY) {
+      dA = dA || 0; dY = dY || 0;
+      const q = this.elemWays[dir];
+      const el = q[w];
+      const eb = CFG.elementBullet[el];
+      if (!eb) return null;
+      const cnt = q.length;
+      const speed = CFG.player.bulletSpeed * this.bulletSpeedMul * this.bulletSpdMul;
+      const bscale = 1 + (this.sizeMul - 1) * 0.3;
+      const off = (cnt === 1 ? 0 : (w - (cnt - 1) / 2) * 0.42) + dA;
+      const slot = (cnt === 1 ? 0 : (w - (cnt - 1) / 2) * 14) + dY;   // 同向多条时的炮口排列间距
+      const eSpeed = speed * eb.spdMul;
+      const muzzleY = this.y - 2;
+      let bx, by, vx, vy;
+      if (dir === 'front') {
+        // 前向：枪口向右；火焰上抛偏置 -20（弹速÷3 后与仰角同步÷3）、毒液下沉 60
+        const bias = el === 'flame' ? -20 : (el === 'poison' ? 60 : 0);
+        bx = this.x + 44 * this.sizeMul; by = muzzleY + slot;
+        vx = Math.cos(off) * eSpeed;
+        vy = Math.sin(off) * eSpeed + bias;
+      } else if (dir === 'back') {
+        // 后向：机尾向左水平镜像（×0.95），上下偏向保留
+        const bias = el === 'flame' ? -20 : (el === 'poison' ? 60 : 0);
+        bx = this.x - 44 * this.sizeMul; by = muzzleY + slot;
+        vx = -Math.cos(off) * eSpeed * 0.95;
+        vy = (Math.sin(off) * eSpeed + bias) * 0.95;
+      } else {
+        // 下向：机腹垂直向下（×0.9），散开角转向屏幕前方
+        bx = this.x + 8 * this.sizeMul + slot; by = this.y + 26 * this.sizeMul;
+        vx = Math.sin(off) * eSpeed * 0.9;
+        vy = Math.cos(off) * eSpeed * 0.9;
+      }
+      // 毒液精通：镜面反弹次数 = 精通等级（撞障碍/地图边界，不减速不削伤）
+      const pBounce = el === 'poison' ? (this.elemLv.poison || 0) : 0;
+      const bullet = new Bullet(
+        bx, by, vx, vy,
+        { kind: 'orb', friendly: true, dmg: Math.max(1, Math.round(this.dmg * this.ultDmgMul * eb.dmgMul)),
+          r: eb.r * bscale, pierce: 0, element: el, life: eb.life || 4, elemPow: this.elemLv[el] || 0,
+          bouncesLeft: pBounce, rockReact: pBounce > 0, elemBounce: pBounce > 0 });
+      g.bullets.push(bullet);
+      // 毒液枪口：绿色浆质喷溅 + 几颗毒液颗粒（沿发射方向喷出）
+      if (el === 'poison') {
+        const pvx = dir === 'down' ? rand(-130, 130) : rand(120, 320) * (dir === 'back' ? -1 : 1);
+        const pvy = dir === 'down' ? rand(120, 320) : rand(-130, 130);
+        for (let i = 0; i < 5; i++) {
+          g.particles.push(new Particle(
+            bx, by + rand(-6, 6),
+            pvx + (dir === 'down' ? rand(-60, 60) : 0), pvy,
+            rand(0.2, 0.42), rand(2.5, 5),
+            ['#2dd44a', '#4ade80', '#0a5a12', '#7dff6a'][randi(0, 3)]));
+        }
+      }
+      return bullet;
+    }
+
+    /** 爆炸弹抛射炮：斜上抛出铁壳炸弹，越过约半屏到最高点后下落（落地/命中即炸由 game 结算） */
+    fireBombCannon(g) {
+      const PB = CFG.playerBomb;
+      const dir = this.face || 1;
+      const bscale = 1 + (this.sizeMul - 1) * 0.3;
+      g.bullets.push(new Bullet(
+        this.x + dir * 30 * this.sizeMul, this.y - 6,
+        dir * PB.vx, PB.vy,
+        { kind: 'pbomb', friendly: true, dmg: Math.max(1, Math.round(this.dmg * this.ultDmgMul)),
+          r: PB.r * bscale, life: PB.life, bombLv: this.bombLv,
+          grav: PB.grav, spinRate: 5 }));
     }
 
     render(ctx) {

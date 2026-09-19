@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>飞喵的奇妙冒险 · 横版弹幕射击</title>
-<link rel="stylesheet" href="css/style.css?v=20260914r6">
+<link rel="stylesheet" href="css/style.css?v=20260919r7">
 </head>
 <body>
 <div id="game-wrap">
@@ -84,8 +84,13 @@
 
   <!-- 升级三选一 -->
   <div id="levelup" class="hidden">
-    <div class="lu-title">⚡ 飞喵成长 ⚡</div>
-    <div class="lu-sub">选择一项强化（按 1 / 2 / 3 或点击）</div>
+    <div class="lu-title" id="lu-title">⚡ 飞喵成长 ⚡</div>
+    <div class="lu-sub" id="lu-sub">选择一项强化（按 1 / 2 / 3 或点击）</div>
+    <!-- Boss 挑战·战前部署：进度 + 自动选择 -->
+    <div id="lu-deploy-bar" class="hidden">
+      <span id="lu-deploy-prog">战前部署 0/24</span>
+      <button id="lu-auto-btn" type="button">🤖 自动选择</button>
+    </div>
     <div id="lu-cards"></div>
   </div>
 
@@ -93,6 +98,7 @@
   <div id="menu">
     <!-- 右上角：仓库入口 + 任务委托 + 秘境发现 + 背景音乐开关 + 操作模式切换 -->
     <div class="menu-topright">
+      <button id="menu-bc-btn" class="audio-btn bc-entry-btn" type="button">⚔ 挑战Boss</button>
       <button id="menu-wh-btn" class="audio-btn wh-entry-btn" type="button">🎒 仓库背包</button>
       <button id="menu-mission-btn" class="audio-btn ms-entry-btn" type="button">📜 任务委托</button>
       <button id="menu-discover-btn" class="audio-btn dv-entry-btn" type="button">🧭 发现秘境<span class="entry-dot"></span></button>
@@ -265,19 +271,58 @@
       <div class="reward-hint" id="reward-hint">（4 秒后可点击任意位置返回主界面）</div>
     </div>
   </div>
+
+  <!-- Boss 挑战：Boss 选择界面 -->
+  <div id="bc-panel" class="hidden">
+    <div id="bc-head">
+      <div id="bc-title">⚔ Boss 挑战</div>
+      <div id="bc-fish">🐟 小鱼干 0</div>
+      <button id="bc-back-btn" class="pause-btn alt" type="button">← 返回菜单</button>
+    </div>
+    <div id="bc-tip">点击 Boss 卡片发起讨伐 · 限定 Boss 在专属场景作战，通用 Boss 进入随机场景</div>
+    <div id="bc-list-body"></div>
+  </div>
+
+  <!-- Boss 挑战：5 秒倒计时 -->
+  <div id="bc-countdown" class="hidden">
+    <div id="bc-cd-label">⚔ Boss 即将登场 ⚔</div>
+    <div id="bc-cd-num">5</div>
+  </div>
+
+  <!-- Boss 挑战：结算（战斗结算 + 委托结果） -->
+  <div id="bc-settle" class="hidden">
+    <div class="bc-settle-box">
+      <div id="bc-settle-title">🏆 讨伐成功</div>
+      <div id="bc-settle-stat" class="bc-settle-block"></div>
+      <div id="bc-settle-mission" class="bc-settle-block"></div>
+      <button id="bc-settle-btn" class="bc-settle-btn" type="button">返回主页</button>
+    </div>
+  </div>
+
+  <!-- Boss 挑战：奖励 -->
+  <div id="bc-reward" class="hidden">
+    <div class="bc-rw-box">
+      <div class="bc-rw-title">🎁 讨伐赏金</div>
+      <div class="bc-rw-fish">🐟</div>
+      <div id="bc-rw-name" class="bc-rw-name"></div>
+      <div id="bc-rw-amount" class="bc-rw-amount"></div>
+      <button id="bc-rw-btn" class="bc-settle-btn go" type="button">收下并返回</button>
+    </div>
+  </div>
 </div>
 
 <script src="js/sprites.js?v=20260917r3"></script>
 <script src="js/characters.js?v=20260914r2"></script>
-<script src="js/config.js?v=20260919r14"></script>
+<script src="js/config.js?v=20260919r15"></script>
 <script src="js/audio.js?v=20260917r1"></script>
 <script src="js/music.js?v=20260914r3"></script>
 <script src="js/achievements.js?v=20260909r2"></script>
 <script src="js/warehouse.js?v=20260914r4"></script>
 <script src="js/missions.js?v=20260914r2"></script>
-<script src="js/entities.js?v=20260919r27"></script>
+<script src="js/entities.js?v=20260919r29"></script>
 <script src="js/hazards.js?v=20260916r3"></script>
 <script src="js/bosses.js?v=20260919r12"></script>
-<script src="js/game.js?v=20260919r24"></script>
+<script src="js/bosschallenge.js?v=20260919r1"></script>
+<script src="js/game.js?v=20260919r26"></script>
 </body>
 </html>

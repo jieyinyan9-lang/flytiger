@@ -6302,10 +6302,10 @@
     takeDamage(dmg, g) {
       super.takeDamage(dmg, g);
       if (this.dead || this.hp <= 0) return;
-      // 每损 10% 血召唤 1 只双头蛇（大额伤害跨多条血线逐条补齐；场上软上限 4 只）
+      // 每损 10% 血判定一次，20% 概率召唤双头蛇（大额伤害跨多条血线逐条补齐；场上软上限 4 只）
       while (this.nextSummonAt > 0 && this.hp <= this.nextSummonAt) {
         this.nextSummonAt -= this.maxHp * 0.1;
-        this.summonSnake(g);
+        if (Math.random() < 0.2) this.summonSnake(g);
       }
     }
     summonSnake(g) {

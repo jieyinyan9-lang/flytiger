@@ -321,13 +321,17 @@
       dmgPerLv: 0.25       // 每级"闪电强化"提升伤害系数
     },
 
-    /** 雷霆领域（获得闪电子弹后的特殊攻击）：每 interval 秒自动电击屏幕内敌人。
-     *  Lv1~6 = 单次电击敌人数；屏幕内敌人不足时对同一敌人重复电击。
+    /** 雷霆领域（闪电子弹 + 自动电击合并为单条成长线）：
+     *  首次获得即解锁子弹闪电链；每 interval 秒自动电击屏幕内敌人。
+     *  Lv1~6 = 单次电击敌人数（不足时对同一敌人重复电击），同时驱动闪电链参数：
+     *  jumps：闪电链跳跃数（并入原「闪电链接」+2 效果）；闪电链伤害强化等级 = stormLv。
      *  电流配色：Lv1-2 白灰 / Lv3-4 黄白 / Lv5-6 蓝白且更粗 */
     chainStorm: {
       interval: 2.0,       // 自动电击周期（秒/轮）
       maxLv: 6,            // 可升级次数
-      dmgMul: 1.0          // 每道电击伤害系数（相对玩家当前基础伤害）
+      dmgMul: 1.0,         // 每道电击伤害系数（相对玩家当前基础伤害）
+      unlockRound: 3,      // 第 3 轮起出现（原闪电子弹第 4 轮提前）
+      jumps: [1, 3, 3, 5, 5, 6]   // 各等级闪电链跳跃数（1→3→3→5→5→6）
     },
 
     /** 防护刀刃（环绕光剑） */
@@ -545,7 +549,18 @@
       },
       {
         id: 'bomb', icon: '✺', cls: 'c-bomb', name: '爆炸弹',
-        desc: '子弹命中后爆炸，对周围敌人造成范围伤害（范围/伤害递增；第 2 轮起每轮可升 1 阶，共 6 阶）',
+        desc(p) {
+          const lv = p.bombLv || 0;
+          const TIERS = [
+            '解锁抛射炮：每 3s 抛出 1 颗铁壳炸弹（飞至屏幕一半距离后下落，落地/命中爆炸），普通子弹命中也会爆炸',
+            '爆炸范围增大，爆炸采用金白芯+橙红双层冲击波，颜色更明显清晰',
+            '炸弹落地连续爆炸 2 次（间隔 0.22s）',
+            '被爆炸击中的敌人会引燃附近 2~3 个敌人，各自发生小爆炸',
+            '连锁范围扩大：被爆炸击中的敌人会引燃附近 3~5 个敌人',
+            '爆炸范围与伤害达到最大'
+          ];
+          return `爆炸弹 ${lv}/6 阶。${lv < 6 ? '下一阶：' + TIERS[lv] : TIERS[5]}。第 2 轮起每轮可升 1 阶`;
+        },
         can(p, g) {
           if (p.bombLv >= 6) return false;
           // 第 bombLv 阶需在第 (2+bombLv) 轮才出现：2/3/4/5/6/7 轮各 1 阶
@@ -582,32 +597,31 @@
         apply(p) { p.downWay = true; },
         level(p) { return p.downWay ? 1 : 0; }
       },
-      /* —— 第三轮后出现：闪电子弹（闪电链） —— */
-      {
-        id: 'chain', icon: '⚡', cls: 'c-way', name: '闪电子弹',
-        desc: '解锁闪电子弹：子弹命中后释放闪电链，主动跳跃攻击附近敌人；再次选择提升闪电伤害',
-        can(p, g) { return g && g.round >= 4; },
-        apply(p) {
-          if (!p.chainJumps) p.chainJumps = 1;
-          p.chainDmgLv++;
-        },
-        level(p) { return p.chainDmgLv; }
-      },
-      {
-        id: 'chainN', icon: '⛓', cls: 'c-way', name: '闪电链接',
-        desc: '闪电链可链接的敌人数量 +2（在敌人间连续跳跃）',
-        can(p, g) { return g && g.round >= 4 && p.chainJumps >= 1 && p.chainJumps < CFG.chain.maxJumps; },
-        apply(p) { p.chainJumps = Math.min(CFG.chain.maxJumps, p.chainJumps + 2); },
-        level(p) { return p.chainJumps; }
-      },
+      /* —— 第 3 轮起：闪电链 + 雷霆领域合并为单条成长线（不再有独立的闪电子弹/闪电链接卡） —— */
       {
         id: 'chainStorm', icon: 'ϟ', cls: 'c-way', name: '雷霆领域',
         desc(p) {
+          const CS = CFG.chainStorm;
           const lv = p.stormLv || 0;
-          return `获得特殊攻击：每 2s 自动电击屏幕内 ${lv > 0 ? lv : 1} 名敌人；每升 1 级电击数量 +1（屏幕内仅 1 名敌人时对其重复电击），共 6 级。电流随等级变色：初期白灰 → 中期黄白 → 后期蓝白且更粗。当前 Lv.${lv}/6`;
+          if (lv === 0) {
+            return '解锁闪电链：子弹命中后电弧跳跃链接附近 1 个敌人；同时获得雷霆领域：每 2s 自动电击屏幕内 1 名敌人。共 6 级，升级同步强化闪电链伤害/链接数与电击道数（第 3 轮起出现）';
+          }
+          const jumps = CS.jumps[lv - 1];
+          const nextJumps = lv < CS.maxLv ? CS.jumps[lv] : jumps;
+          let s = `雷霆领域 Lv.${lv}/6：每 2s 电击 ${lv} 名敌人，子弹闪电链链接 ${jumps} 个敌人（伤害随等级提升）`;
+          if (lv < CS.maxLv) s += `。下一级：电击 ${lv + 1} 名、链接 ${nextJumps} 个`;
+          s += '。电流：白灰 → 黄白 → 蓝白且更粗';
+          return s;
         },
-        can(p) { return p.chainJumps >= 1 && (p.stormLv || 0) < CFG.chainStorm.maxLv; },
-        apply(p) { p.stormLv = (p.stormLv || 0) + 1; p.stormCd = CFG.chainStorm.interval; },
+        can(p, g) { return g && g.round >= CFG.chainStorm.unlockRound && (p.stormLv || 0) < CFG.chainStorm.maxLv; },
+        apply(p) {
+          const CS = CFG.chainStorm;
+          p.stormLv = Math.min(CS.maxLv, (p.stormLv || 0) + 1);
+          // 闪电链并入：链接数按等级表，伤害强化等级 = 领域等级
+          p.chainJumps = CS.jumps[p.stormLv - 1];
+          p.chainDmgLv = p.stormLv;
+          p.stormCd = CS.interval;
+        },
         level(p) { return p.stormLv || 0; }
       },
       /* —— 第三轮后出现：防护刀刃（环绕光剑） —— */
@@ -741,9 +755,11 @@
         desc(p) {
           const lv = p.elemLv.flame || 0;
           const pct = Math.round((0.40 + 0.15 * lv) * 100);
-          return `火焰异常强化 ${lv}/3：灼烧秒伤提升至子弹伤害的 ${pct}%，持续 ${3 + 0.5 * lv}s；重复命中可叠层（最多5层）`;
+          const shots = [2, 3, 4, 6];
+          const extra = lv < 4 ? `；本次成长后一次齐射 ${shots[lv]} 颗火焰弹` : '；齐射已达 6 颗（满）';
+          return `火焰异常强化 ${lv}/4：灼烧秒伤提升至子弹伤害的 ${pct}%，持续 ${3 + 0.5 * lv}s；重复命中可叠层（最多5层）${extra}`;
         },
-        can(p) { return p.elementWay.indexOf('flame') >= 0 && (p.elemLv.flame || 0) < 3; },
+        can(p) { return p.elementWay.indexOf('flame') >= 0 && (p.elemLv.flame || 0) < 4; },
         apply(p) { p.elemLv.flame = (p.elemLv.flame || 0) + 1; },
         level(p) { return p.elemLv.flame || 0; }
       },
@@ -752,7 +768,8 @@
         desc(p) {
           const lv = p.elemLv.poison || 0;
           const pct = Math.round((0.25 + 0.10 * lv) * 100);
-          return `毒液异常强化 ${lv}/3：中毒秒伤提升至子弹伤害的 ${pct}%，持续 ${6 + lv}s；重复命中可叠层（最多5层）`;
+          const extra = lv < 3 ? `；本次成长后毒液弹击中障碍物/地图边界可反弹 ${lv + 1} 次` : '；毒液弹已可反弹 3 次（满）';
+          return `毒液异常强化 ${lv}/3：中毒秒伤提升至子弹伤害的 ${pct}%，持续 ${6 + lv}s；重复命中可叠层（最多5层）${extra}`;
         },
         can(p) { return p.elementWay.indexOf('poison') >= 0 && (p.elemLv.poison || 0) < 3; },
         apply(p) { p.elemLv.poison = (p.elemLv.poison || 0) + 1; },
@@ -763,7 +780,8 @@
         desc(p) {
           const lv = p.elemLv.ice || 0;
           const pct = Math.round((0.30 + 0.10 * lv) * 100);
-          return `寒冰异常强化 ${lv}/3：冰晶秒伤提升至子弹伤害的 ${pct}%，冻结延长至 ${4 + 0.5 * lv}s；重复命中可叠层（最多5层）`;
+          const extra = lv < 3 ? `；本次成长后一轮连续发射 ${lv + 2} 颗冰锥（一颗接一颗）` : '；连射已达 4 颗（满）';
+          return `寒冰异常强化 ${lv}/3：冰晶秒伤提升至子弹伤害的 ${pct}%，冻结延长至 ${4 + 0.5 * lv}s；重复命中可叠层（最多5层）${extra}`;
         },
         can(p) { return p.elementWay.indexOf('ice') >= 0 && (p.elemLv.ice || 0) < 3; },
         apply(p) { p.elemLv.ice = (p.elemLv.ice || 0) + 1; },
@@ -835,7 +853,7 @@
     },
 
     /** 元素精通成长：元素弹命中后 DoT 秒伤 = 子弹命中伤害 × (dpsBase + dpsPerLv×精通等级)
-     *  精通等级 0-3（通过三选一「元素精通」卡成长）；同种异常可叠层 5 层（每层 +12%，见 game.applyElement） */
+     *  精通等级：火焰 0-4（4级卡）、毒液/寒冰 0-3；同种异常可叠层 5 层（每层 +12%，见 game.applyElement） */
     elementMaster: {
       flame:  { dpsBase: 0.40, dpsPerLv: 0.15, durBase: 3, durPerLv: 0.5 },
       poison: { dpsBase: 0.25, dpsPerLv: 0.10, durBase: 6, durPerLv: 1 },
@@ -845,11 +863,30 @@
     /** 玩家元素弹道独立射速（interval：秒/发，0 = 跟随主射速 0.12s）与单发伤害倍率（相对玩家基础伤害）。
      *  火焰 1.5s 一发重炮、寒冰 1s 一发、毒液随主射速高频低伤；
      *  频率不同但综合秒伤（直击 + 异常 DoT）拉平：单条弹道理论收益均≈6×基础伤害/秒。
-     *  毒：0.7÷0.12 ≈ 5.83 直击 + DoT；火：8÷1.5 ≈ 5.33 直击 + 0.4×8=3.2 DoT；冰：7.5÷1 = 7.5 直击 + 0.3×7.5=2.25 DoT */
+     *  毒：0.7÷0.12 ≈ 5.83 直击 + DoT；火：8÷1.5 ≈ 5.33 直击 + 0.4×8=3.2 DoT；冰：7.5÷1 = 7.5 直击 + 0.3×7.5=2.25 DoT
+     *  fan：烈焰精通各等级单次齐射弹数 [Lv1=2, Lv2=3, Lv3=4, Lv4=6]
+     *  volley/volleyGap：寒冰精通各等级一轮连射弹数 [2,3,4]，逐颗间隔秒
+     *  毒液精通反弹次数 = 精通等级（1/2/3），见 Bullet.elemBounce */
     elementBullet: {
-      flame:  { interval: 1.5, dmgMul: 8.0, r: 10.5, spdMul: 0.24, life: 12 },   // 速度÷3；体积 7→14→42→21→10.5（再缩小一半）；寿命×3保证慢速弹仍可飞抵屏右
-      ice:    { interval: 1.0, dmgMul: 7.5, r: 10.8, spdMul: 0.273, life: 12 },  // 速度÷3；体积 6→7.2→21.6→10.8（再缩小一半）
+      flame:  { interval: 1.5, dmgMul: 8.0, r: 10.5, spdMul: 0.24, life: 12, fan: [2, 3, 4, 6] },   // 速度÷3；体积 7→14→42→21→10.5（再缩小一半）；寿命×3保证慢速弹仍可飞抵屏右
+      ice:    { interval: 1.0, dmgMul: 7.5, r: 10.8, spdMul: 0.273, life: 12, volley: [2, 3, 4], volleyGap: 0.12 },  // 速度÷3；体积 6→7.2→21.6→10.8（再缩小一半）
       poison: { interval: 0,   dmgMul: 0.7, r: 6, spdMul: 0.88, life: 4 }
+    },
+
+    /** 玩家爆炸弹抛射炮（爆炸弹 Lv1 解锁）：每 interval 秒抛出一颗铁壳炸弹，
+     *  斜上抛物线飞行，越过约半个屏幕到达最高点后下落，触地/命中敌人/障碍即炸。
+     *  爆炸范围/伤害随 bombLv：radius=(34+lv×12)×(lv≥2?1.25:1)，dmgMul=0.55+lv×0.16（相对基础伤害） */
+    playerBomb: {
+      interval: 3.0,       // 秒/颗
+      r: 24,               // 弹体半径（大于角色受击半径 20）
+      vx: 400, vy: -300,   // 抛射初速度（斜上，最高点约在屏幕一半距离）
+      grav: 460,           // 恒定重力
+      life: 6,
+      chainR: [0, 0, 0, 0, 170, 200],    // Lv4/5 连锁小爆炸索敌半径
+      chainN: [0, 0, 0, 0, 2.5, 4],      // Lv4 取 2~3、Lv5 取 3~5（期望值，rnd 时取整）
+      chainSmallR: 66,     // 小爆炸伤害半径
+      chainDmgMul: 0.5,    // 小爆炸伤害倍率（相对主爆炸）
+      doubleDelay: 0.22    // Lv3+ 落地二次爆炸延迟
     },
 
     /** 地图表：每次进入游戏随机刷新一张；阻碍特性与草地相同（撞击掉 30% 生命并碎裂 / 地面单位免疫 / 可被炮弹炸毁）

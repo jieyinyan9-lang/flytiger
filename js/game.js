@@ -153,6 +153,14 @@
         warnSub: document.getElementById('warn-sub'),
         levelup: document.getElementById('levelup'),
         luCards: document.getElementById('lu-cards'),
+        luTitle: document.getElementById('lu-title'),
+        luSub: document.getElementById('lu-sub'),
+        luDeployBar: document.getElementById('lu-deploy-bar'),
+        luDeployProg: document.getElementById('lu-deploy-prog'),
+        luAutoBtn: document.getElementById('lu-auto-btn'),
+        bcPanel: document.getElementById('bc-panel'),
+        bcCountdown: document.getElementById('bc-countdown'),
+        bcCdNum: document.getElementById('bc-cd-num'),
         menu: document.getElementById('menu'),
         pause: document.getElementById('pause'),
         gameover: document.getElementById('gameover'),
@@ -180,6 +188,19 @@
       // 任务委托 / 秘境发现入口
       this.onClick('menu-mission-btn', () => { if (window.MISSIONS) MISSIONS.openPanel(); });
       this.onClick('menu-discover-btn', () => { if (window.MISSIONS) MISSIONS.openDiscover(); });
+      // Boss 挑战入口
+      this.onClick('menu-bc-btn', () => { if (window.BC) BC.openPanel(); });
+      this.onClick('bc-back-btn', () => { if (window.BC) BC.closePanel(); });
+      // 战前部署·自动选择
+      {
+        const autoEl = document.getElementById('lu-auto-btn');
+        if (autoEl) autoEl.addEventListener('click', () => {
+          if (this.challengeMode && this.challengeMode.phase === 'deploy') {
+            this.challengeMode.auto = true;
+            this.challengeMode.autoT = 0;
+          }
+        });
+      }
       if (window.MISSIONS) {
         // 派遣/归来：刷新选角状态；若备战猫被派出则自动改派
         MISSIONS.onCharDirty(() => this.syncMissionStatuses());
@@ -276,10 +297,16 @@
           if (this.deathScene) { this.skipDeathScene(); e.preventDefault(); return; }
           if (this.settleOpen) { e.preventDefault(); return; }   // 委托结算浮层打开期间禁用重开
           if (this.state === 'menu' || this.state === 'gameover') this.start();
-          else if (this.state === 'playing' && e.code === 'Space') this.player.tryUltimate(this);
+          else if (this.state === 'playing' && e.code === 'Space' &&
+              !(this.challengeMode && (this.challengeMode.phase === 'deploy' || this.challengeMode.phase === 'countdown'))) {
+            this.player.tryUltimate(this);
+          }
           e.preventDefault();
         }
-        if (e.code === 'KeyJ' && this.state === 'playing') this.player.tryUltimate(this);
+        if (e.code === 'KeyJ' && this.state === 'playing' &&
+            !(this.challengeMode && (this.challengeMode.phase === 'deploy' || this.challengeMode.phase === 'countdown'))) {
+          this.player.tryUltimate(this);
+        }
         if ((e.code === 'KeyP' || e.code === 'Escape') && (this.state === 'playing' || this.state === 'paused')) {
           this.togglePause();
           e.preventDefault();
@@ -289,7 +316,9 @@
         // 月痕沙海关卡：仅可从「发现秘境」面板进入（已移除主界面按 1 快捷键）
         // 奖励页：点击任意位置或按键退回主界面（4s 后可操作）
         if (this.rewardShown && this.rewardCanClose) { this.closeReward(); e.preventDefault(); return; }
-        if (this.state === 'levelup' && (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3')) {
+        const _deployOpen = this.challengeMode && this.challengeMode.phase === 'deploy';
+        if ((this.state === 'levelup' || _deployOpen) &&
+            (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3')) {
           const idx = e.code === 'Digit1' ? 0 : e.code === 'Digit2' ? 1 : 2;
           if (this.pendingOptions[idx]) this.pickUpgrade(idx);
         }
@@ -401,6 +430,7 @@
       this.beams = [];         // 长线光束（狗王解体攻击）
       this.arcs = [];          // 闪电链电弧视觉
       this.fxRings = [];       // 冲击波环（障碍碎裂爆炸等）{ x,y,r,vr,t,life,col }
+      this.delayedBlasts = []; // 爆炸弹 Lv3+ 落地二次爆炸延迟事件 {t,x,y,radius,dmg,lv}
       this.elemFx = [];        // 元素持续特效：毒云/灼烧死亡爆炸/毒液腐蚀痕迹
       this.poisonStains = [];  // 毒液腐蚀痕迹（命中墙壁的绿色斑，持续片刻）
       this.dmgNums = [];       // 飘字伤害数字（灼烧跳伤橙色数字）
@@ -460,6 +490,7 @@
       this._idleAnchor = null;              // 成就：长时间不移动判定锚点（每局重置）
       // 月痕沙海关卡模式状态
       this.stageMode = false;               // 是否处于月痕沙海关卡
+      this.challengeMode = null;            // Boss 挑战模式状态（null=普通模式）
       this.stageTime = 0;                   // 关卡已进行时间（秒）
       this.stageWavesTriggered = new Set(); // 已触发的怪物潮序号
       this.stageBossSpawned = false;        // 最终 Boss 是否已出场
@@ -931,6 +962,160 @@
       this.start();
     }
 
+    /* ============================================================
+     * Boss 挑战（入口界面 → 24 次部署三选一 → 5s 倒计时 → Boss 战）
+     * ============================================================ */
+    /** 从 Boss 挑战卡片发起讨伐 */
+    startChallenge(clsName) {
+      const entry = (window.BOSS_LIST || []).find(e => e.cls.name === clsName);
+      if (!entry) return;
+      SFX.unlock();
+      this.reset();
+      // 场景限定 Boss → 锁定专属场景（临时借用 mapChoice，不动持久偏好）；
+      // 通用 Boss → 强制随机场景，忽略本地图偏好
+      if (entry.map) {
+        const savedChoice = this.mapChoice;
+        this.mapChoice = entry.map;
+        this.rollMap();
+        this.mapChoice = savedChoice;
+      } else {
+        this.rollMap({ honorChoice: false });
+      }
+      this.challengeMode = {
+        cls: entry.cls,
+        sceneLocked: !!entry.map,
+        phase: 'deploy',          // deploy → countdown → fight
+        picks: 0, total: 24,
+        auto: false, autoT: 0,
+        ended: false, win: false,
+        settleT: 0, ord: 4,
+        cdT: 5
+      };
+      this.state = 'playing';
+      if (window.Ach) { Ach.beginRun(this.charId); Ach.evt('runStart', { g: this }); }
+      this.el.menu.classList.add('hidden');
+      if (this.el.bcPanel) this.el.bcPanel.classList.add('hidden');
+      this.el.gameover.classList.add('hidden');
+      this.el.pause.classList.add('hidden');
+      this.el.warn.classList.add('hidden');
+      this.el.hud.classList.remove('hidden');
+      this.el.bossHud.classList.add('hidden');
+      this.toast('⚔ Boss 挑战 · 先完成 24 次战前部署', 3);
+      this.buildDeployCards();
+    }
+
+    /** 部署三选一：卡池构建（不受每轮弹道/元素上限限制，其余同成长三选一） */
+    buildDeployCards() {
+      const ch = this.challengeMode;
+      if (!ch || ch.phase !== 'deploy') return;
+      SFX.levelup();
+      const pool = CFG.upgrades.filter(u => {
+        if (!u.can(this.player, this)) return false;
+        if (u.charOnly && this.player.charId !== u.charOnly) return false;
+        return true;
+      });
+      // 角色专属「子弹成长」项
+      const cb = window.CHARS && window.CHARS.bulletUpgrade(this.player.charId);
+      if (cb && cb.can(this.player)) pool.push(cb);
+      const opts = [];
+      const guaranteed = pool.filter(u => u.guaranteed && u.guaranteed(this.player, this));
+      guaranteed.forEach(u => {
+        const idx = pool.indexOf(u);
+        if (idx >= 0) pool.splice(idx, 1);
+        opts.push(u);
+      });
+      while (opts.length < 3 && pool.length) {
+        let total = 0;
+        const weights = pool.map(u => { const w = this.upgradeWeight(u); total += w; return w; });
+        let roll = Math.random() * total, i = 0;
+        for (; i < weights.length; i++) { roll -= weights[i]; if (roll <= 0) break; }
+        if (i >= pool.length) i = pool.length - 1;
+        opts.push(pool.splice(i, 1)[0]);
+      }
+      this.pendingOptions = opts;
+      this.el.luCards.innerHTML = '';
+      opts.forEach((u, i) => {
+        const card = document.createElement('div');
+        const isGuaranteed = guaranteed.includes(u);
+        card.className = 'lu-card ' + u.cls + (isGuaranteed ? ' lu-recommend' : '');
+        const lv = u.level(this.player);
+        const descText = typeof u.desc === 'function' ? u.desc(this.player, this) : u.desc;
+        card.innerHTML =
+          `<div class="card-key">${i + 1}</div>` +
+          (isGuaranteed ? '<div class="card-rec">★ 推荐</div>' : '') +
+          `<div class="card-icon">${u.icon}</div>` +
+          `<div class="card-name">${u.name}</div>` +
+          `<div class="card-lv">${lv > 0 ? '当前 Lv.' + lv : '未拥有'}</div>` +
+          `<div class="card-desc">${descText}</div>`;
+        card.addEventListener('click', () => this.pickUpgrade(i));
+        this.el.luCards.appendChild(card);
+      });
+      if (this.el.luTitle) this.el.luTitle.textContent = '🛡 战前部署';
+      if (this.el.luSub) this.el.luSub.textContent = '选择一项强化（按 1 / 2 / 3 、点击，或使用自动选择）';
+      if (this.el.luDeployBar) this.el.luDeployBar.classList.remove('hidden');
+      this.updateDeployProg();
+      this.el.levelup.classList.remove('hidden');
+    }
+    updateDeployProg() {
+      const ch = this.challengeMode;
+      if (this.el.luDeployProg) this.el.luDeployProg.textContent = `战前部署 ${ch.picks}/${ch.total}`;
+    }
+
+    /** 24 次部署完成：进入 5 秒倒计时，按第 4~5 轮强度设定 */
+    beginChallengeCountdown() {
+      const ch = this.challengeMode;
+      ch.phase = 'countdown';
+      const N = 4 + (Math.random() < 0.5 ? 0 : 1);   // Boss 强度随机为第 4 或第 5 轮
+      ch.ord = N;
+      this.bossSpawned = N - 1;   // spawnBoss 会 +1；Boss 构造读取 bossSpawned+1 = N
+      this.round = N;
+      this.el.levelup.classList.add('hidden');
+      ch.cdT = 5;
+      this.el.bcCdNum.textContent = '5';
+      this.el.bcCountdown.classList.remove('hidden');
+    }
+    /** 倒计时结束：直接对指定 Boss 发起预警（不走随机抽取） */
+    challengeWarn() {
+      const ch = this.challengeMode;
+      const entry = (window.BOSS_LIST || []).find(e => e.cls === ch.cls);
+      ch.phase = 'fight';
+      this.pendingBoss = ch.cls;
+      this.pendingBossMusic = (entry && entry.music) || 'boss-1';
+      this.warnT = CFG.boss.warnTime;
+      this.el.warnSub.textContent = 'Boss 挑战目标逼近了！';
+      this.el.warn.classList.remove('hidden');
+      SFX.bossWarn();
+    }
+    /** 挑战结束：记录结果并弹出结算（战斗结算 + 委托结果） */
+    finishChallenge(win) {
+      const ch = this.challengeMode;
+      if (!ch) return;
+      const clsName = ch.cls.name;
+      if (window.BC) BC.setResult(clsName, win);
+      let item = null;
+      if (window.BC) {
+        const l = BC.list();
+        item = l.limited.concat(l.generic).find(b => b.clsName === clsName);
+      }
+      item = item || {};
+      this.state = 'bcsettle';
+      this.el.hud.classList.add('hidden');
+      this.el.bossHud.classList.add('hidden');
+      this.el.warn.classList.add('hidden');
+      this.el.levelup.classList.add('hidden');
+      this.el.bcCountdown.classList.add('hidden');
+      if (window.BC) {
+        BC.openSettle({
+          win,
+          name: item.name || clsName,
+          rating: item.rating || 'B+',
+          time: this.time, kills: this.kills,
+          sceneName: item.sceneName || this.map.name,
+          sceneIcon: item.sceneIcon || this.map.icon
+        });
+      }
+    }
+
     /** 死亡结算「返回主页」：放弃再战，清场回到主菜单（reset 会清空战局残留并重滚地图） */
     backToMenu() {
       this.reset();
@@ -943,6 +1128,8 @@
       this.el.warn.classList.add('hidden');
       this.el.levelup.classList.add('hidden');
       this.el.pause.classList.add('hidden');
+      if (this.el.bcCountdown) this.el.bcCountdown.classList.add('hidden');
+      if (window.BC) BC.hideAll();   // 关闭挑战/结算/奖励面板
       this.el.menu.classList.remove('hidden');
       this.syncMapBtns();
       if (window.Music) Music.play('bgm-zhujiemian');
@@ -951,6 +1138,25 @@
 
     gameOver() {
       if (this.state === 'gameover') return;
+      // Boss 挑战失败：不走普通游戏结束/死亡演出，保留 playing 以等待结算
+      if (this.challengeMode) {
+        const ch = this.challengeMode;
+        if (ch.ended) return;
+        ch.ended = true;
+        ch.win = false;
+        ch.settleT = 2.0;
+        if (window.Ach) Ach.evt('gameOver', { g: this, src: this.lastHurtSrc });
+        SFX.explode(true);
+        this.flashT = 0.6; this.flashColor = '#ffc078';
+        this.shakeMag = 18;
+        burst(this, this.player.x, this.player.y, 70, ['#f7941d', '#ffd93b', '#ff5252', '#fff'], 360, 8, 1.1, 160);
+        burst(this, this.player.x, this.player.y, 24, ['#7d8794', '#a7b3c2', '#5a5f66'], 260, 6, 0.9, 300);
+        this.el.hud.classList.add('hidden');
+        this.el.bossHud.classList.add('hidden');
+        this.el.levelup.classList.add('hidden');
+        this.el.warn.classList.add('hidden');
+        return;
+      }
       this.state = 'gameover';
       // 本次从发现面板进入的特殊关未通关：取消通关标记关联
       if (window.MISSIONS) { try { MISSIONS.notifyLaunched(null); } catch (e) {} }
@@ -1216,7 +1422,7 @@
     applyElement(e, type, hitDmg, pow) {
       const m = CFG.elementMaster[type];
       if (!m) return;
-      const lv = Math.max(0, Math.min(3, pow | 0));
+      const lv = Math.max(0, Math.min(4, pow | 0));   // 烈焰精通最高 4 级；毒液/寒冰为 3 级（配置公式自限）
       const stack = (e.dotType === type && e.dotT > 0) ? Math.min(5, (e.dotStack || 1) + 1) : 1;
       e.dotStack = stack;
       e.dotType = type;
@@ -1589,6 +1795,8 @@
     /** 满足条件即弹出成长选择；无冷却锁，能量可连续触发（门槛随次数递增） */
     tryLevelUp() {
       if (this.state !== 'playing') return;
+      // Boss 挑战目标已倒下：等待结算期间不再弹三选一
+      if (this.challengeMode && this.challengeMode.ended) return;
       if (this.xp < this.xpNeed) return;
       // 骨龙王崩解（分裂）阶段不弹三选一
       const boneSplit = (this.bosses || []).some(b => !b.dead && b.headAlive === false);
@@ -1617,8 +1825,8 @@
       if (u.id === 'flameM' && p.elementWay.includes('flame')) w *= 1.5;
       if (u.id === 'poisonM' && p.elementWay.includes('poison')) w *= 1.5;
       if (u.id === 'iceM' && p.elementWay.includes('ice')) w *= 1.5;
-      // 已有体系的连贯强化：闪电链 / 刀刃系
-      if (u.id === 'chainN' || u.id === 'chainStorm' || u.id === 'bladeN' || u.id === 'bladeL') w *= 1.5;
+      // 已有体系的连贯强化：雷霆领域（含闪电链）/ 刀刃系
+      if (u.id === 'chainStorm' || u.id === 'bladeN' || u.id === 'bladeL') w *= 1.5;
       return w;
     }
     openLevelup() {
@@ -1678,15 +1886,34 @@
         card.addEventListener('click', () => this.pickUpgrade(i));
         this.el.luCards.appendChild(card);
       });
+      // 普通成长：恢复标准标题、隐藏部署条（此前可能处于挑战部署界面）
+      if (this.el.luTitle) this.el.luTitle.textContent = '⚡ 飞喵成长 ⚡';
+      if (this.el.luSub) this.el.luSub.textContent = '选择一项强化（按 1 / 2 / 3 或点击）';
+      if (this.el.luDeployBar) this.el.luDeployBar.classList.add('hidden');
       this.el.levelup.classList.remove('hidden');
     }
     pickUpgrade(i) {
       const u = this.pendingOptions && this.pendingOptions[i];
       if (!u) return;
-      const isNew = (u.id === 'chain' && !this.player.chainJumps) ||
+      const stormBefore = this.player.stormLv || 0;
+      const isNew = (u.id === 'chainStorm' && stormBefore === 0) ||
                     (u.id === 'blade' && !this.player.blades);
       u.apply(this.player);
       if (window.Ach) Ach.evt('upgrade', { g: this, id: u.id, name: u.name });
+      // Boss 挑战·部署选择：不计每轮上限；点手动卡即退出自动模式
+      const _chd = this.challengeMode;
+      if (_chd && _chd.phase === 'deploy') {
+        _chd.auto = false;
+        _chd.picks++;
+        if (_chd.picks >= _chd.total) {
+          this.pendingOptions = null;
+          this.beginChallengeCountdown();
+        } else {
+          this.updateDeployProg();
+          this.buildDeployCards();
+        }
+        return;
+      }
       // 弹道类成长计数（每轮上限 3 次）
       if (['way', 'tail', 'down', 'flame', 'poison', 'ice'].includes(u.id)) {
         this.wayPicksThisRound++;
@@ -1697,8 +1924,8 @@
       }
       this.pendingOptions = null;
       this.el.levelup.classList.add('hidden');
-      // 专属升级提示音效：闪电子弹（电流升腾）/ 防护刀刃（金属出鞘）
-      if (u.id === 'chain' || u.id === 'chainN' || u.id === 'chainStorm') {
+      // 专属升级提示音效：雷霆领域（电流升腾）/ 防护刀刃（金属出鞘）
+      if (u.id === 'chainStorm') {
         SFX.chainGet();
         burst(this, this.player.x, this.player.y, 28, ['#fff', '#ffe066', '#7fe7ff'], 260, 5, 0.6);
       } else if (u.id === 'blade' || u.id === 'bladeN') {
@@ -1708,7 +1935,7 @@
         burst(this, this.player.x, this.player.y, 24, ['#ffd93b', '#fff', '#74e0ff'], 240, 5, 0.6);
       }
       // 首次获得新能力时弹出提示（右下角）
-      if (isNew) this.toast(u.id === 'chain' ? '⚡ 闪电子弹解锁！' : '† 防护刀刃解锁！', 2, 'rb');
+      if (isNew) this.toast(u.id === 'chainStorm' ? 'ϟ 雷霆领域解锁（闪电链 + 自动电击）！' : '† 防护刀刃解锁！', 2, 'rb');
       // 元素弹道选择提示（右下角）：该元素第几条 → 布置方向（前/下/后），上限 x/3
       if (['flame', 'poison', 'ice'].includes(u.id)) {
         const names = { flame: '🔥火焰', poison: '☠毒液', ice: '❄寒冰' };
@@ -1849,6 +2076,13 @@
       }
     }
     onBossDefeated(boss) {
+      // Boss 挑战目标倒下：标记成功，演出结束后弹结算
+      const _chc = this.challengeMode;
+      if (_chc && !_chc.ended) {
+        _chc.ended = true;
+        _chc.win = true;
+        _chc.settleT = 2.6;
+      }
       this.bossCount++;
       // 击败 1 个 Boss = 通过 1 轮
       this.round = this.bossCount + 1;
@@ -1904,13 +2138,16 @@
       this.slowmoT = 0.9;
       this.scheduleNextBoss();
       // 骨龙王：死亡后固定只结算 1 次三选一（分裂阶段已禁用经验累积）
-      if (boss.constructor && boss.constructor.name === 'BoneDragonKing') {
+      // Boss 挑战已进入结算等待：不再弹三选一
+      if (boss.constructor && boss.constructor.name === 'BoneDragonKing' &&
+          !(this.challengeMode && this.challengeMode.ended)) {
         this.totalLevels++;
         this.xpNeed = CFG.xpNeed(this.totalLevels);
         this.openLevelup();
       }
       // 任务委托：击败 1 只 Boss = 全局推进 1 轮（进行中委托据此结算/超时）
-      if (window.MISSIONS) {
+      // Boss 挑战属于支线讨伐，不推进全局委托轮次
+      if (window.MISSIONS && !this.challengeMode) {
         try { MISSIONS.advanceRound(); } catch (e) {}
       }
       // 月痕沙海关卡：击败最终 Boss → 弹出奖励页
@@ -1977,6 +2214,118 @@
         }
       });
       if (window.Ach && hits >= 2) Ach.evt('aoeHits', { g: this, n: hits });
+    }
+
+    /* ---------------- 爆炸弹：抛射炸弹 / 子弹命中爆炸统一结算 ---------------- */
+    /** 爆炸半径：34+lv×12，Lv2（变化1）起 ×1.25 且配色更明显清晰 */
+    bombRadius(lv) { return (34 + lv * 12) * (lv >= 2 ? 1.25 : 1); }
+    /** 爆炸伤害倍率（相对触发弹伤害/基础伤害） */
+    bombDmgMul(lv) { return 0.55 + lv * 0.16; }
+
+    /** 玩家爆炸统一结算。
+     *  Lv2+：金白亮芯 + 橙红双层冲击波环（变化1：范围/颜色）
+     *  Lv3 且 landed：0.22s 后原地第二爆（变化2：落地爆炸 2 次）
+     *  Lv4/5：被直接击中的敌人引燃附近 2~3 / 3~5 个敌人（变化3/4）
+     * @param landed 是否触地爆炸（二次爆炸仅触地触发）；二次爆炸自身不再连锁 */
+    bombBlast(x, y, radius, dmg, lv, landed, allowChain) {
+      lv = Math.max(1, lv | 0);
+      if (allowChain === undefined) allowChain = true;
+      // —— 视觉 ——
+      if (lv >= 2) {
+        burst(this, x, y, 26, ['#fff7d6', '#ffd23b', '#ff9d2e', '#ff5a1e', '#c92f14'], radius * 3.4, 7, 0.5, 120);
+        this.fxRings.push({ x, y, r: radius * 0.25, vr: radius * 2.0, t: 0, life: 0.42, col: '#ff5a1e' });
+        this.fxRings.push({ x, y, r: radius * 0.12, vr: radius * 2.7, t: 0, life: 0.34, col: '#ffd23b' });
+        this.flashT = Math.max(this.flashT, 0.08); this.flashColor = '#ffd98a';
+      } else {
+        burst(this, x, y, 16, ['#ff7b2e', '#ffd23b', '#fff'], 240, 5, 0.45, 80);
+      }
+      SFX.explode(false);
+      this.shake(5);
+      // —— 范围伤害（与 aoe 同口径），收集直接命中目标（用于连锁排除） ——
+      let hits = 0;
+      const hitSet = new Set();
+      this.targets().forEach(e => {
+        if (e.segments) {
+          const wasAlive = !e.dead;
+          e.aoeDamage(x, y, radius, dmg, this);
+          if (wasAlive) { hits++; hitSet.add(e); }
+          return;
+        }
+        const d = Math.hypot(e.x - x, e.y - y);
+        if (d < radius + e.radius) {
+          hits++;
+          hitSet.add(e);
+          e.takeDamage(dmg, this, {
+            x: (e.x - x) / (d || 1) * 180,
+            y: (e.y - y) / (d || 1) * 180
+          });
+        }
+      });
+      if (window.Ach && hits >= 2) Ach.evt('aoeHits', { g: this, n: hits });
+      // —— 变化3/4：引燃附近敌人连锁小爆炸（只连锁一层；二次爆炸不再连锁） ——
+      if (allowChain && lv >= 4) this.bombChain(x, y, dmg, lv, hitSet);
+      // —— 变化2：触地连续爆炸 2 次 ——
+      if (landed && lv >= 3) {
+        this.delayedBlasts.push({ t: CFG.playerBomb.doubleDelay, x, y, radius: radius * 0.9, dmg, lv, landed: false, allowChain: false });
+      }
+    }
+
+    /** 连锁小爆炸：从炸点附近选取未被直接命中的最近 N 个敌人，各自在所在位置小爆炸 */
+    bombChain(cx, cy, dmg, lv, hitSet) {
+      const PB = CFG.playerBomb;
+      const chainR = PB.chainR[lv - 1] || 0;
+      if (!chainR) return;
+      const n = lv === 4 ? randi(2, 3) : randi(3, 5);
+      const cand = [];
+      for (const e of this.targets()) {
+        if (e.dead || e.dying || hitSet.has(e)) continue;
+        const pt = e.segments ? e.nearestExposed(cx, cy) : { x: e.x, y: e.y };
+        if (!pt) continue;
+        const d = Math.hypot(pt.x - cx, pt.y - cy);
+        if (d < chainR + (e.radius || 16)) cand.push({ e, x: pt.x, y: pt.y, d });
+      }
+      cand.sort((a, b) => a.d - b.d);
+      const used = new Set();
+      let spawned = 0;
+      for (const c of cand) {
+        if (spawned >= n) break;
+        if (used.has(c.e)) continue;
+        used.add(c.e); spawned++;
+        this.bombSmall(c.x, c.y, dmg * PB.chainDmgMul);
+      }
+    }
+
+    /** 连锁小爆炸：紧凑金橙火球 + 小范围伤害（小爆炸本身不再引发连锁） */
+    bombSmall(x, y, dmg) {
+      const r = CFG.playerBomb.chainSmallR;
+      burst(this, x, y, 12, ['#fff7d6', '#ffd23b', '#ff9d2e', '#ff5a1e'], r * 3, 5, 0.36, 90);
+      this.fxRings.push({ x, y, r: 10, vr: r * 2.6, t: 0, life: 0.28, col: '#ff9d2e' });
+      SFX.explode(false);
+      this.shake(3);
+      this.targets().forEach(e => {
+        if (e.dead || e.dying) return;
+        if (e.segments) { e.aoeDamage(x, y, r, dmg, this); return; }
+        const d = Math.hypot(e.x - x, e.y);
+        if (d < r + e.radius) {
+          e.takeDamage(dmg, this, {
+            x: (e.x - x) / (d || 1) * 130,
+            y: (e.y - y) / (d || 1) * 130
+          });
+        }
+      });
+    }
+
+    /** 延迟爆炸计时（爆炸弹变化2：落地第二爆） */
+    tickDelayedBlasts(dt) {
+      if (!this.delayedBlasts.length) return;
+      for (let i = this.delayedBlasts.length - 1; i >= 0; i--) {
+        const db = this.delayedBlasts[i];
+        db.t -= dt;
+        if (db.t <= 0) {
+          this.delayedBlasts.splice(i, 1);
+          this.bombBlast(db.x, db.y, db.radius, db.dmg, db.lv, db.landed, db.allowChain);
+        }
+      }
     }
 
     /* ---------------- 刷怪导演 ---------------- */
@@ -2529,6 +2878,30 @@
       this.scrollX += dt * 110 * (this.map.scrollMul || 1);
       this.shakeMag = Math.max(0, this.shakeMag - dt * 30);
       if (this.flashT > 0) this.flashT = Math.max(0, this.flashT - dt);
+      // —— Boss 挑战：自动部署 / 倒计时 / 结算等待 ——
+      const ch = this.challengeMode;
+      // chLock：部署、倒计时、已结束阶段锁定常规刷怪与 Boss 自动调度
+      const chLock = !!(ch && (ch.ended || ch.phase === 'deploy' || ch.phase === 'countdown'));
+      if (ch && ch.phase === 'deploy' && ch.auto) {
+        ch.autoT -= dt;
+        if (ch.autoT <= 0) {
+          ch.autoT = 0.08;
+          this.pickUpgrade(Math.floor(Math.random() * 3));
+        }
+      }
+      if (ch && ch.phase === 'countdown') {
+        ch.cdT -= dt;
+        const n = Math.max(0, Math.ceil(ch.cdT));
+        if (this.el.bcCdNum) this.el.bcCdNum.textContent = String(n);
+        if (ch.cdT <= 0) {
+          this.el.bcCountdown.classList.add('hidden');
+          this.challengeWarn();
+        }
+      }
+      if (ch && ch.ended && ch.phase === 'fight') {
+        ch.settleT -= dt;
+        if (ch.settleT <= 0) this.finishChallenge(ch.win);
+      }
       // 月痕沙海关卡模式计时与流程
       if (this.stageMode && this.state === 'playing') this.stageTick(dt);
       // 怪物潮倒计时（Boss 战/预警期间暂停，不浪费潮次）
@@ -2572,7 +2945,7 @@
           this.spawnBoss(this.pendingBoss);
           this.pendingBoss = null;
         }
-      } else if (!this.bossActive && !this.stageMode) {
+      } else if (!this.bossActive && !this.stageMode && !chLock) {
         this.bossT -= dt;
         this.roundT += dt;
         if (this.bossT <= 0) {
@@ -2584,11 +2957,14 @@
         }
       }
 
-      this.spawnTick(dt);
-      this.rockTick(dt);
-      this.breakTick(dt);
-      this.mapTick(dt);
-      if (Hazards) Hazards.tick(this, dt);   // 新地图机关（水流/暴风雪/落雷/方石/数据墙）
+      // Boss 挑战部署/倒计时/已结束阶段：不刷怪、不进场障碍与机关
+      if (!chLock) {
+        this.spawnTick(dt);
+        this.rockTick(dt);
+        this.breakTick(dt);
+        this.mapTick(dt);
+        if (Hazards) Hazards.tick(this, dt);   // 新地图机关（水流/暴风雪/落雷/方石/数据墙）
+      }
 
       // 实体更新（敌人/Boss 更新期间绑定 shooter 上下文，其发射的子弹归因到自己——用于死亡死法判定）
       this.player.update(dt, this);
@@ -2623,6 +2999,7 @@
       this.breakables.forEach(r => r.update(dt, this));
       this.arcs.forEach(a => a.t += dt);
       this.fxRings.forEach(ring => { ring.t += dt; ring.r += ring.vr * dt; });
+      this.tickDelayedBlasts(dt);   // 爆炸弹变化2：落地第二爆延迟结算
 
       // 元素持续特效：毒云期间持续冒绿泡；腐蚀痕迹/飘字数字推进
       this.elemFx.forEach(fx => {
@@ -2822,9 +3199,10 @@
             // 闪电子弹：命中后闪电链跳跃链接附近敌人
             if (p.chainJumps >= 1 && !e.dead && !e.dying) this.chainLightning(e, b.dmg);
             // 爆炸弹：命中即范围爆炸（不再吞弹 —— 随后正常消耗穿透/反弹次数，与穿透、反弹、贯穿激光协同）
-            if (b.bombLv > 0) {
-              const radius = 34 + b.bombLv * 12;
-              this.aoe(b.x, b.y, radius, b.dmg * (0.55 + b.bombLv * 0.16));
+            // pbomb（抛射炸弹）不在此炸：由 collisions() 末尾的抛射炸弹统一结算，避免双爆
+            if (b.bombLv > 0 && b.kind !== 'pbomb') {
+              this.bombBlast(b.x, b.y, this.bombRadius(b.bombLv),
+                b.dmg * this.bombDmgMul(b.bombLv), b.bombLv, false);
             }
             if (b.noDieOnHit && b.bouncesLeft > 0 && b.pierce <= 0) {
               // 烟头/锯齿盾命中敌人：朝任意方向反弹（消耗反弹次数，不消失），反弹后速度/伤害减半
@@ -2852,9 +3230,17 @@
           }
         }
       }
-      // 角色弹 vs 障碍山石：反弹（烟头/盾牌/最终激光）/ 分裂（星星）/ 击穿摧毁（大招激光）
+      // 角色弹 vs 障碍山石：抛射炸弹撞障即炸 / 反弹（烟头/盾牌/毒液精通）/ 分裂（星星）/ 击穿摧毁（大招激光）
       for (const b of this.bullets) {
         if (!b.friendly || b.dead) continue;
+        // 抛射炸弹：撞上障碍 → 引爆炸弹并炸毁障碍（爆炸本体在 collisions() 末尾统一结算）
+        if (b.kind === 'pbomb') {
+          for (const r of this.rocks) {
+            if (r.dead) continue;
+            if (r.contains(b.x, b.y, b.r)) { b.dead = true; r.destroy(this); break; }
+          }
+          continue;
+        }
         if (!(b.rockReact || b.rockBreak)) continue;
         for (const r of this.rocks) {
           if (r.dead) continue;
@@ -2874,16 +3260,21 @@
             const dn = (b.vx * nx + b.vy * ny) / (nl * nl);
             b.vx -= 2 * dn * nx; b.vy -= 2 * dn * ny;       // 镜面反射
             b.x = cx + (nx / nl) * (b.r + 5); b.y = cy + (ny / nl) * (b.r + 5);
-            b.vx += rand(-70, 70); b.vy += rand(-70, 70);   // 随机扰动（任意方向反弹）
-            const bspd = b.bounceSpd || 0.5;                  // 反弹减速（浪客烟头仅保留 0.4，更慢）
-            b.vx *= bspd; b.vy *= bspd;
-            b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
             b.angle = Math.atan2(b.vy, b.vx);
-            if (b.kind === 'butt') b._achBounced = true;     // 成就：反弹烟头标记
-            // 浪客烟头反弹火花：更小更少（战狂锯齿盾保持原样）
-            if (b.kind === 'butt') burst(this, b.x, b.y, 3, ['#ff9d2e', '#caa06a'], 90, 2, 0.2);
-            else burst(this, b.x, b.y, 5, ['#fff', '#caa06a'], 150, 3, 0.25);
-            SFX.melee();
+            if (b.elemBounce) {
+              // 毒液精通：纯镜面反射，不减速、不削伤、不随机扰动
+              burst(this, b.x, b.y, 5, ['#2dd44a', '#7dff6a', '#0a5a12'], 120, 3, 0.28);
+            } else {
+              b.vx += rand(-70, 70); b.vy += rand(-70, 70);   // 随机扰动（任意方向反弹）
+              const bspd = b.bounceSpd || 0.5;                  // 反弹减速（浪客烟头仅保留 0.4，更慢）
+              b.vx *= bspd; b.vy *= bspd;
+              b.dmg = Math.max(1, Math.round(b.dmg * 0.5));   // 反弹后伤害降低一半
+              if (b.kind === 'butt') b._achBounced = true;     // 成就：反弹烟头标记
+              // 浪客烟头反弹火花：更小更少（战狂锯齿盾保持原样）
+              if (b.kind === 'butt') burst(this, b.x, b.y, 3, ['#ff9d2e', '#caa06a'], 90, 2, 0.2);
+              else burst(this, b.x, b.y, 5, ['#fff', '#caa06a'], 150, 3, 0.25);
+              SFX.melee();
+            }
           } else b.dead = true;
           break;
         }
@@ -2896,6 +3287,19 @@
           if (!k.contains(b.x, b.y, b.r)) continue;
           if (b.rockBreak) { k.destroy(this, true); break; }   // 激光串一击摧毁
           k.struck(this, b);
+          // 毒液精通：撞破碎障碍也镜面反弹（击打计数照常），次数耗尽才被吞
+          if (b.elemBounce && b.bouncesLeft > 0) {
+            b.bouncesLeft--;
+            const kcy = k.ccyNow();
+            const nx = b.x - k.x, ny = b.y - kcy;
+            const nl = Math.hypot(nx, ny) || 1;
+            const dn = (b.vx * nx + b.vy * ny) / (nl * nl);
+            b.vx -= 2 * dn * nx; b.vy -= 2 * dn * ny;
+            b.x = k.x + (nx / nl) * (b.r + 6); b.y = kcy + (ny / nl) * (b.r + 6);
+            b.angle = Math.atan2(b.vy, b.vx);
+            burst(this, b.x, b.y, 5, ['#2dd44a', '#7dff6a', '#0a5a12'], 120, 3, 0.28);
+            break;
+          }
           // 穿透 / 长条激光 / 边缘反弹弹不被吞（命中次数由 k.hitCd 限速）；普通子弹命中即消失
           const beam = b.pierce > 0 || b.len > 0 || b.boxW > 0 || b.edgeBounce;
           if (!beam) b.dead = true;
@@ -2995,6 +3399,13 @@
             burst(this, b.x, b.y, 6, ['#ff5252', '#fff'], 160, 4, 0.3);
           }
         }
+      }
+      // 玩家抛射炸弹：触地/命中敌人/撞障死亡后统一爆炸（_blasted 防同帧重复结算）
+      for (const b of this.bullets) {
+        if (b.kind !== 'pbomb' || !b.dead || b._blasted) continue;
+        b._blasted = true;
+        const lv = b.bombLv || 1;
+        this.bombBlast(b.x, b.y, this.bombRadius(lv), b.dmg * this.bombDmgMul(lv), lv, !!b.pbombLand);
       }
     }
 
