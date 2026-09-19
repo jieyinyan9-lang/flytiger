@@ -32,19 +32,19 @@
     MadHyena:         { name: '癫狂鬣狗',   rating: 'A',  personality: '癫狂嗜血', trait: '限定草原 · 地面奔袭', ability: '召唤山石封锁战场' },
     SandWalker:       { name: '沙之行者',   rating: 'A',  personality: '隐忍诡诈', trait: '限定沙漠 · 沙隐突袭', ability: '潜入沙中突然袭击' },
     FrogKing:         { name: '蛙哥',       rating: 'A+', personality: '粗野强横', trait: '通用巨兽 · 重炮近战', ability: '巨舌横扫与重炮跳跃' },
-    BossMan:          { name: '斧王',       rating: 'A+', personality: '霸道专横', trait: '空中强攻 · 重斧压制', ability: '巨斧旋风与追踪飞斧' },
+    BossMan:          { name: '斧王',       rating: 'S',  personality: '霸道专横', trait: '空中强攻 · 重斧压制', ability: '巨斧旋风与追踪飞斧' },
     Homelander:       { name: '怒星使',     rating: 'A+', personality: '傲慢冷酷', trait: '空中压制 · 镭射轰击', ability: '双目镭射与热能冲击' },
-    NiuMo:            { name: '牛魔',       rating: 'A+', personality: '凶暴执拗', trait: '限定草原 · 多段变身', ability: '三段变身毁天灭地' },
+    NiuMo:            { name: '牛魔',       rating: 'SSS', personality: '凶暴执拗', trait: '限定草原 · 多段变身', ability: '三段变身毁天灭地' },
     CaptainGeorge:    { name: '乔治船长',   rating: 'A+', personality: '老辣狡黠', trait: '限定大海 · 炮击俯冲', ability: '连环炮击接俯冲突袭' },
     FireBlind:        { name: '火遮眼',     rating: 'A+', personality: '炽烈决绝', trait: '限定火山 · 火焰斩击', ability: '火焰斩接火龙冲锋' },
     CraneSage:        { name: '鹤仙',       rating: 'S',  personality: '超然飘逸', trait: '通用特殊 · 五技仙术', ability: '五种仙术切换运用' },
-    Sphinx:           { name: '狮身人面像', rating: 'S',  personality: '威严睿智', trait: '限定沙漠 · 谜题诅咒', ability: '谜题试炼与诅咒弹幕' },
-    RaccoonRover:     { name: '浣熊漫游者', rating: 'S',  personality: '机敏圆滑', trait: '限定都市 · 游击漫游', ability: '穿梭游击与道具奇袭' },
-    PurpleHand:       { name: '紫手',       rating: 'S',  personality: '邪魅深沉', trait: '限定荒地 · 角牌法阵', ability: '随机仙术与角牌阵' },
-    BoneDragonKing:   { name: '巨型骨龙王', rating: 'S',  personality: '阴森桀骜', trait: '限定荒地 · 崩解分裂', ability: '崩解为骨龙群再重组' },
-    SeaBully:         { name: '深海恶霸',   rating: 'SS', personality: '残忍嗜虐', trait: '限定海底 · 黑帮打手', ability: '追踪水鲨 / 炸弹冲击波 / 转向铁钩' },
-    SnowWitch:        { name: '雪巫',       rating: 'SS', personality: '冷酷妖艳', trait: '限定雪地 · 永动冰霜', ability: '冰晶雨与冰环无缝连打' },
-    CrowCount:        { name: '鸦伯爵',     rating: 'SSS', personality: '优雅阴鸷', trait: '限定城堡 · 瞬移珠宝', ability: '瞬移躲击 + 宝石三档反转弹幕' }
+    Sphinx:           { name: '狮身人面像', rating: 'SSS', personality: '威严睿智', trait: '限定沙漠 · 谜题诅咒', ability: '谜题试炼与诅咒弹幕' },
+    RaccoonRover:     { name: '浣熊漫游者', rating: 'A+', personality: '机敏圆滑', trait: '限定都市 · 游击漫游', ability: '穿梭游击与道具奇袭' },
+    PurpleHand:       { name: '紫手',       rating: 'A+', personality: '邪魅深沉', trait: '限定荒地 · 角牌法阵', ability: '随机仙术与角牌阵' },
+    BoneDragonKing:   { name: '巨型骨龙王', rating: 'SSS', personality: '阴森桀骜', trait: '限定荒地 · 崩解分裂', ability: '崩解为骨龙群再重组' },
+    SeaBully:         { name: '深海恶霸',   rating: 'A+', personality: '残忍嗜虐', trait: '限定海底 · 黑帮打手', ability: '追踪水鲨 / 炸弹冲击波 / 转向铁钩' },
+    SnowWitch:        { name: '雪巫',       rating: 'A+', personality: '冷酷妖艳', trait: '限定雪地 · 永动冰霜', ability: '冰晶雨与冰环无缝连打' },
+    CrowCount:        { name: '鸦伯爵',     rating: 'A+', personality: '优雅阴鸷', trait: '限定城堡 · 瞬移珠宝', ability: '瞬移躲击 + 宝石三档反转弹幕' }
   };
 
   /* ---------------- 持久化：讨伐结果 ---------------- */

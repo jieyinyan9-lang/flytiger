@@ -1719,14 +1719,29 @@
         this.dead = true;
       }
     }
-    render(ctx) {
+    render(ctx, alphaMul) {
+      // 子弹降噪：alphaMul<1 时整体调低不透明度（拖尾/发光等特效基于 baseAlpha 同步变淡）
+      const a = (alphaMul !== undefined && alphaMul > 0 && alphaMul < 1) ? alphaMul : 1;
+      if (a >= 1) {
+        if (this.neutralized) {
+          if (this.fade <= 0) return;
+          ctx.globalAlpha = this.fade;
+          this._renderBody(ctx);
+          ctx.globalAlpha = 1;
+        } else {
+          this._renderBody(ctx);
+        }
+        return;
+      }
       if (this.neutralized) {
         if (this.fade <= 0) return;
-        ctx.globalAlpha = this.fade;
+        ctx.globalAlpha = this.fade * a;
         this._renderBody(ctx);
         ctx.globalAlpha = 1;
       } else {
+        ctx.globalAlpha = a;
         this._renderBody(ctx);
+        ctx.globalAlpha = 1;
       }
     }
     /** 飞行弹幕小怪能量弹：纯亮矢量弹体 + 按强度分层的能量光带拖尾 */
@@ -4229,6 +4244,22 @@
     }
     get isMeleeing() { return this.meleeT > 0; }
     get meleeReady() { return this.meleeT <= 0 && this.cdT <= 0; }
+    /** 全弹道齐射颗数：主弹道×(前/后/下三向) + 元素弹道（火焰扇面/寒冰连射/毒液1颗），用于子弹降噪判定 */
+    get volleyN() {
+      let n = this.bulletCount * (1 + (this.tailWay ? 1 : 0) + (this.downWay ? 1 : 0));
+      for (const dir of ['front', 'down', 'back']) {
+        const q = this.elemWays[dir];
+        for (let i = 0; i < q.length; i++) {
+          const eb = CFG.elementBullet[q[i]];
+          if (!eb) continue;
+          const lv = this.elemLv[q[i]] || 0;
+          if (q[i] === 'flame') n += lv > 0 ? (eb.fan[lv - 1] || 1) : 1;
+          else if (q[i] === 'ice') n += lv > 0 ? (eb.volley[lv - 1] || 1) : 1;
+          else n += 1;
+        }
+      }
+      return n;
+    }
 
     startMelee(g) {
       this.meleeT = CFG.player.meleeDuration;

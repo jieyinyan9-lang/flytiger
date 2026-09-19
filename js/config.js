@@ -34,7 +34,15 @@
       meleeDmg: 46,
       meleeRange: 78,
       invincibleTime: 0.9,  // 受击无敌
-      maxSizeMul: 3.0       // 生命强化最大体型
+      maxSizeMul: 3.0,      // 生命强化最大体型
+      /** 子弹降噪：战场拥挤时逐档调低玩家子弹不透明度（多档同时命中取最低档） */
+      bulletFade: {
+        volleyN: 8,     // 全弹道齐射颗数达到该值 → 多弹齐飞档
+        volley: 0.8,    // 多弹齐飞
+        tide: 0.75,     // 怪物潮
+        boss: 0.7,      // Boss战（含预警）
+        bossDan: 0.5    // Boss释放子弹技能（场上存在敌方弹幕）
+      }
     },
 
     /** 升级所需能量：无冷却锁，数值门槛递增 —— 前紧后松曲线。

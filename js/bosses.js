@@ -290,7 +290,7 @@
   class Samurai extends Boss {
     constructor(g) {
       super(g, 26, 46);
-      this.bossName = '飞天日本武士';
+      this.bossName = '赤鬼';
       this.title = '特殊机制型';
       this.hoverX = 690;
       this.shurikenT = 1.6;

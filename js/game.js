@@ -1144,13 +1144,16 @@
         if (ch.ended) return;
         ch.ended = true;
         ch.win = false;
-        ch.settleT = 2.0;
+        ch.settleT = 1.6;
         if (window.Ach) Ach.evt('gameOver', { g: this, src: this.lastHurtSrc });
         SFX.explode(true);
         this.flashT = 0.6; this.flashColor = '#ffc078';
         this.shakeMag = 18;
-        burst(this, this.player.x, this.player.y, 70, ['#f7941d', '#ffd93b', '#ff5252', '#fff'], 360, 8, 1.1, 160);
-        burst(this, this.player.x, this.player.y, 24, ['#7d8794', '#a7b3c2', '#5a5f66'], 260, 6, 0.9, 300);
+        burst(this, this.player.x, this.player.y, 70, ['#f7941d', '#ffd93b', '#ff5252', '#fff'], 360, 8, 1.1, 110);
+        burst(this, this.player.x, this.player.y, 24, ['#7d8794', '#a7b3c2', '#5a5f66'], 260, 6, 0.9, 200);
+        // 冻结战场：清除双方弹幕并停火，避免等待结算期间 Boss 被残余子弹击杀
+        this.bullets.forEach(b2 => { b2.dead = true; });
+        this.shootDisabled = true;
         this.el.hud.classList.add('hidden');
         this.el.bossHud.classList.add('hidden');
         this.el.levelup.classList.add('hidden');
@@ -1400,6 +1403,22 @@
 
     /* ---------------- 数值 ---------------- */
     get bossActive() { return this.bosses.length > 0 || this.warnT > 0; }
+    /** 玩家子弹降噪档位：多弹齐飞0.8 / 怪物潮0.75 / Boss战0.7 / Boss释放子弹技能0.5，多档命中取最低 */
+    playerBulletAlpha() {
+      const bf = CFG.player.bulletFade;
+      if (!bf) return 1;
+      const p = this.player;
+      if (!p || p.dead) return 1;
+      let a = 1;
+      if (p.volleyN >= bf.volleyN) a = Math.min(a, bf.volley);
+      if (this.isTide) a = Math.min(a, bf.tide);
+      if (this.bossActive) {
+        a = Math.min(a, bf.boss);
+        // Boss 弹幕期：场上存在敌方弹幕（Boss战不刷普通怪，敌方弹基本都来自 Boss 技能）
+        if (this.bullets.some(b => !b.friendly && !b.dead && !b.neutralized)) a = Math.min(a, bf.bossDan);
+      }
+      return a;
+    }
     get atkScale() {
       // 敌人/Boss 伤害成长曲线：时间系数 0.0015→0.00075、轮次系数 0.05→0.032
       // 目标：第7轮开局(约750s)≈1.75（≈旧第4轮伤害水准），普通玩家可稳定打到第7轮
@@ -1892,7 +1911,7 @@
       if (this.el.luDeployBar) this.el.luDeployBar.classList.add('hidden');
       this.el.levelup.classList.remove('hidden');
     }
-    pickUpgrade(i) {
+    pickUpgrade(i, byAuto) {
       const u = this.pendingOptions && this.pendingOptions[i];
       if (!u) return;
       const stormBefore = this.player.stormLv || 0;
@@ -1900,10 +1919,11 @@
                     (u.id === 'blade' && !this.player.blades);
       u.apply(this.player);
       if (window.Ach) Ach.evt('upgrade', { g: this, id: u.id, name: u.name });
-      // Boss 挑战·部署选择：不计每轮上限；点手动卡即退出自动模式
+      // Boss 挑战·部署选择：不计每轮上限；手动选择（byAuto 为空）即退出自动模式，
+      // 自动循环触发的选择不打断自动流程，一次点击会连续选完全部 24 次
       const _chd = this.challengeMode;
       if (_chd && _chd.phase === 'deploy') {
-        _chd.auto = false;
+        if (!byAuto) _chd.auto = false;
         _chd.picks++;
         if (_chd.picks >= _chd.total) {
           this.pendingOptions = null;
@@ -2886,7 +2906,7 @@
         ch.autoT -= dt;
         if (ch.autoT <= 0) {
           ch.autoT = 0.08;
-          this.pickUpgrade(Math.floor(Math.random() * 3));
+          this.pickUpgrade(Math.floor(Math.random() * 3), true);
         }
       }
       if (ch && ch.phase === 'countdown') {
@@ -5236,8 +5256,9 @@
           }
           ctx.globalAlpha = 1;
         });
-        // 子弹
-        this.bullets.forEach(b => b.render(ctx));
+        // 子弹（降噪：玩家子弹按战场状态调低不透明度，敌方弹不受影响）
+        const pfAlpha = this.playerBulletAlpha();
+        this.bullets.forEach(b => b.render(ctx, b.friendly ? pfAlpha : 1));
         // 闪电打击层
         this.lightnings.forEach(l => { if (l.t >= l.warn) l.render(ctx); });
         // 长线光束（狗王解体攻击）
