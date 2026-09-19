@@ -448,6 +448,7 @@
           const game = g || window.G;
           if (window.BStyle && game) {
             game.pauseForStylePick = true;
+            if (window.Ach) Ach.evt('stylePrompt', { g: game });
             window.BStyle.show(p.charId, {
               real: true,
               onPick(sid) {

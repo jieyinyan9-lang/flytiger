@@ -149,6 +149,100 @@
     { id: 'bk_all',      cat: 'bosses', icon: '🌈', name: '「全Boss制霸」', desc: `在正常游戏中击败全部 ${BOSS_DEFEAT_LIST.length} 种Boss；挑战Boss界面中击败不计` }
   );
 
+  /* ============ 🌟 14 条觉醒路线专精成就（每路线 5 个 = 70） ============
+   * [风格id, 英雄id, 短名, 路线名, 第4形态名, 初醒成就名, 终态成就名] */
+  const ROUTES = [
+    ['ice',     'xiaobai',   '冰皇', '冰晶弹',   '冰皇穿心', '冰晶初醒喵', '冰皇终态喵'],
+    ['holy',    'xiaobai',   '天罚', '圣光弹',   '天罚圣枪', '圣光初醒喵', '天罚终态喵'],
+    ['qinglong','xiake',     '青龙', '青龙重剑', '青龙天剑', '青龙初醒喵', '青龙天剑终态喵'],
+    ['liuyun',  'xiake',     '流云', '流云飞剑', '万剑流云', '流云初醒喵', '万剑流云终态喵'],
+    ['sun',     'mofashi',   '太阳', '太阳星',   '天照星爆', '太阳初醒喵', '天照终态喵'],
+    ['rainbow', 'mofashi',   '彩虹', '彩虹星群', '彩虹星河', '彩虹初醒喵', '彩虹星河终态喵'],
+    ['demon',   'buliang',   '炎魔', '炎魔火炬', '炎魔之心', '炎魔初醒喵', '炎魔之心终态喵'],
+    ['burst',   'buliang',   '爆裂', '爆裂火炬', '炎爆核心', '爆裂初醒喵', '炎爆核心终态喵'],
+    ['berserk', 'jiaodoushi','狂战', '狂战巨斧', '灭世巨斧', '狂战初醒喵', '灭世终态喵'],
+    ['quake',   'jiaodoushi','裂地', '裂地战斧', '裂地神斧', '裂地初醒喵', '裂地神斧终态喵'],
+    ['cannon',  'chaoren',   '毁灭', '毁灭光炮', '终焉光炮', '毁灭初醒喵', '终焉终态喵'],
+    ['rift',    'chaoren',   '裂空', '裂空光束', '裂空光阵', '裂空初醒喵', '裂空光阵终态喵'],
+    ['king',    'meiying',   '鬼王', '鬼王',     '幽冥帝君', '鬼王初醒喵', '幽冥帝君终态喵'],
+    ['hundred', 'meiying',   '百鬼', '百鬼',     '百鬼夜行', '百鬼初醒喵', '百鬼夜行终态喵']
+  ];
+  const ROUTE_HERO = {};
+  ROUTES.forEach(([sid, hero]) => { ROUTE_HERO[sid] = hero; });
+  ROUTES.forEach(([sid, hero, sh, rname, f4, firstNm, f4Nm]) => {
+    DEFS.push(
+      { id: `rl_${sid}_first`, cat: 'routes', icon: '🔹', name: `「${firstNm}」`, desc: `首次选择${rname}路线` },
+      { id: `rl_${sid}_f4`,    cat: 'routes', icon: '🔶', name: `「${f4Nm}」`,    desc: `单局进化到${f4}` },
+      { id: `rl_${sid}_life`,  cat: 'routes', icon: '🐾', name: `「${sh}一命喵」`, desc: `用${rname}路线一条命击败任意Boss` },
+      { id: `rl_${sid}_low`,   cat: 'routes', icon: '❤️\u200d🔥', name: `「${sh}残血喵」`, desc: `用${rname}路线生命≤20%击败任意Boss` },
+      { id: `rl_${sid}_safe`,  cat: 'routes', icon: '🛡️', name: `「${sh}无伤喵」`, desc: `用${rname}路线无伤击败任意Boss` }
+    );
+  });
+
+  /* ============ ✨ 觉醒总览补充成就（9 个，并入 awaken 组） ============ */
+  DEFS.push(
+    { id: 'aw_pick',   cat: 'awaken', icon: '🌗', name: '「觉醒选边喵」', desc: '首次触发风格觉醒二选一' },
+    { id: 'aw_grow12', cat: 'awaken', icon: '🔟', name: '「十二层猫猫」', desc: '单局把任意一条觉醒路线强度成长堆到12次' },
+    { id: 'aw_dual',   cat: 'awaken', icon: '🔀', name: '「双线猫猫」',   desc: '同一英雄A/B两条路线都进化到第4形态' },
+    { id: 'aw_7pick',  cat: 'awaken', icon: '🐱', name: '「七猫全觉喵」', desc: '7名英雄均至少完成一次风格觉醒二选一' },
+    { id: 'aw_f14',    cat: 'awaken', icon: '🏆', name: '「十四终态喵」', desc: '14条觉醒路线全部进化到第4形态' },
+    { id: 'aw_naked',  cat: 'awaken', icon: '🥚', name: '「裸弹猫猫」',   desc: '不使用觉醒风格，仅用基础弹击败任意A+级以上Boss' },
+    { id: 'aw_slife',  cat: 'awaken', icon: '💪', name: '「觉醒一命喵」', desc: '用任意觉醒路线一条命击败任意S级以上Boss' },
+    { id: 'aw_slow',   cat: 'awaken', icon: '🩸', name: '「觉醒残血喵」', desc: '用任意觉醒路线生命≤20%击败任意S级以上Boss' },
+    { id: 'aw_ssafe',  cat: 'awaken', icon: '✨', name: '「觉醒无伤喵」', desc: '用任意觉醒路线无伤击败任意S级以上Boss' }
+  );
+
+  /* ============ ⚔ Boss 极限挑战成就（按评级 2/3/4/6 个，共 100） ============
+   * life/low/safe/speed/hit 为各 Boss 的定制成就名；可解锁种类由评级决定：
+   * B+：一命+无伤；A：+残血；A+：+90秒速杀；S：+90秒+限伤1+不复活；
+   * SS：速杀120秒+限伤1+不复活；SSS：速杀120秒+限伤2+不复活 */
+  const RT_RANK = { 'B+': 1, 'A': 2, 'A+': 3, 'S': 4, 'SS': 5, 'SSS': 6 };
+  const BOSS_RT_MAP = {};
+  BOSS_DEFEAT_LIST.forEach(([cls, , rt]) => { BOSS_RT_MAP[cls] = rt; });
+  const BOSS_EXTRA = [
+    { cls: 'PigKing',         life: '喵命一条',       safe: '无伤猫步' },
+    { cls: 'ThunderBehemoth', life: '雷声不怕喵',     safe: '避雷猫爪' },
+    { cls: 'DogKing',         life: '狗狗追不上猫',   safe: '空中猫步' },
+    { cls: 'MadHyena',        life: '鬣狗追不上猫',   low: '残血猫爪',     safe: '无伤猫步' },
+    { cls: 'SandWalker',      life: '沙里藏猫',       low: '残血踏沙喵',   safe: '无伤踏沙' },
+    { cls: 'SkullKing',       life: '骨头吓不到猫',   low: '残血超度喵',   safe: '无伤猫步' },
+    { cls: 'Stranger',        life: '怪招不中猫',     low: '残血猫爪',     safe: '无伤猫眼' },
+    { cls: 'RaccoonRover',    life: '浣熊别偷喵',     low: '残血反偷喵',   safe: '无伤猫步', speed: '速爪抓浣熊' },
+    { cls: 'CaptainGeorge',   life: '船长追不上猫',   low: '残血炮下喵',   safe: '无伤躲炮喵', speed: '速爪打船长' },
+    { cls: 'FireBlind',       life: '火大不烧猫',     low: '残血火中喵',   safe: '无伤猫步', speed: '速爪灭火喵' },
+    { cls: 'PurpleHand',      life: '仙术不迷猫',     low: '残血破阵喵',   safe: '无伤猫眼', speed: '速爪破阵喵' },
+    { cls: 'SeaBully',        life: '海底猫猫',       low: '残血潜水喵',   safe: '无伤猫步', speed: '速爪打恶霸' },
+    { cls: 'SnowWitch',       life: '冻不住猫',       low: '残血破冰喵',   safe: '无伤猫步', speed: '速爪融冰喵' },
+    { cls: 'CrowCount',       life: '鸦鸦抓不到猫',   low: '残血弹幕喵',   safe: '无伤猫步', speed: '速爪拔羽喵' },
+    { cls: 'GiantPheasant',   life: '火鸡追不上猫',   low: '残血火鸡爪',   safe: '无伤猫步', speed: '速爪抓火鸡' },
+    { cls: 'Homelander',      life: '星星不惹猫',     low: '残血怒喵',     safe: '无伤猫步', speed: '速爪惹星喵' },
+    { cls: 'FrogKing',        life: '蛙哥跳不过猫',   low: '残血踩蛙喵',   safe: '无伤猫步', speed: '速爪抓蛙喵' },
+    { cls: 'Samurai',         life: '赤鬼怕猫爪',     low: '残血斗鬼喵',   safe: '无伤猫步', speed: '速爪退鬼喵', hit: '稳爪斗鬼喵' },
+    { cls: 'BossMan',         life: '斧头砍不到猫',   low: '残血躲斧喵',   safe: '无伤猫步', speed: '速爪过斧喵', hit: '稳爪躲斧喵' },
+    { cls: 'CraneSage',       life: '仙鹤追不上猫',   low: '残血戏鹤喵',   safe: '无伤猫步', speed: '速爪戏鹤喵', hit: '稳爪戏鹤喵' },
+    { cls: 'SwordEagle',      life: '铁鹰抓不到猫',   low: '残血拔羽喵',   safe: '无伤猫步', speed: '速爪拔羽喵', hit: '稳爪拔羽喵' },
+    { cls: 'NiuMo',           life: '牛角不碰猫',     low: '残血斗牛喵',   safe: '无伤猫步', speed: '速爪降牛喵', hit: '稳爪斗牛喵' },
+    { cls: 'Sphinx',          life: '谜题难不倒猫',   low: '残血解谜喵',   safe: '无伤猫步', speed: '速爪破谜喵', hit: '稳爪解谜喵' },
+    { cls: 'BoneDragonKing',  life: '骨头龙怕猫',     low: '残血拆骨喵',   safe: '无伤猫步', speed: '速爪拆骨喵', hit: '稳爪拆骨喵' }
+  ];
+  BOSS_EXTRA.forEach(item => {
+    const nm = (BOSS_DEFEAT_LIST.find(x => x[0] === item.cls) || [])[1] || item.cls;
+    const rank = RT_RANK[BOSS_RT_MAP[item.cls]] || 0;
+    const push = (kind, icon, an, desc) => DEFS.push({ id: `bx_${item.cls}_${kind}`, cat: 'bossx', icon, name: `「${an}」`, desc });
+    push('life', '🐾', item.life, `一条命击败${nm}`);
+    push('safe', '🛡️', item.safe, `无伤击败${nm}`);
+    if (rank >= 2) push('low', '❤️\u200d🔥', item.low, `生命 ≤20% 时击败${nm}`);
+    if (rank >= 3) {
+      const sec = rank >= 5 ? 120 : 90;
+      push('speed', '⏱️', item.speed, `${sec}秒内击败${nm}`);
+    }
+    if (rank >= 4) {
+      const hitN = rank >= 6 ? 2 : 1;
+      push('hit', '🎯', item.hit, `受伤 ≤${hitN} 次击败${nm}`);
+      push('norevive', '🚫', '不复活喵', `不使用复活击败${nm}`);
+    }
+  });
+
   const DEF_MAP = {};
   DEFS.forEach(d => { DEF_MAP[d.id] = d; });
 
@@ -167,7 +261,8 @@
       arenaRounds: 0,      // 角斗场累计完成轮数（击败Boss数）
       styleSeen: {},       // 已觉醒过的风格 id -> true（跨局累计）
       heroStyleSeen: {},   // 已觉醒过的英雄 id -> true（跨局累计）
-      bossDefeated: {}     // 已击败过的 Boss 类名 -> true（跨局累计）
+      bossDefeated: {},    // 已击败过的 Boss 类名 -> true（跨局累计）
+      routeF4: {}          // 曾进化到第4形态的路线 id -> true（跨局累计）
     }
   };
 
@@ -215,6 +310,10 @@
       knifeHits: 0,            // 飞刀连续命中
       confuseKills: 0,         // 困惑敌人击杀（单次护盾窗口）
       bossDmgTaken: 0,         // 本轮Boss战承伤
+      bossHits: 0,             // 本轮Boss战受击次数（无伤/限伤判定）
+      bossStartT: 0,           // 本轮Boss出场时的游戏时间（速杀计时）
+      bossRevived: false,      // 本轮Boss战期间是否使用过复活
+      reviveUsed: false,       // 本局是否使用过复活
       ultKind: '',             // 最近释放的大招
       ultT: 0,                 // 大招判定窗口剩余
       waveKills: 0,            // 本次强光波击杀
@@ -326,7 +425,12 @@
         if (d.name === 'Sphinx' || d.name === 'NiuMo' || d.name === 'BoneDragonKing') {
           unlock('h_special');
         }
-        if (run) run.bossDmgTaken = 0;
+        if (run) {
+          run.bossDmgTaken = 0;
+          run.bossHits = 0;
+          run.bossRevived = false;
+          run.bossStartT = run.time;
+        }
         break;
       }
 
@@ -368,6 +472,40 @@
         }
         // Boss 挑战模式中成功讨伐（与上面的正常游戏讨伐互不相通）
         if (g.challengeMode) unlock('bk_challenge');
+
+        /* —— 🌟 觉醒路线专精 + ⚔ Boss 极限挑战（正常游戏/挑战模式均生效）—— */
+        const rt2 = BOSS_RT_MAP[clsName];
+        const rank2 = RT_RANK[rt2] || 0;
+        const tUsed = Math.max(0, run.time - run.bossStartT);
+        const oneLife = run.deaths === 0;
+        const lowHp2 = ratio <= 0.2;
+        const safe2 = run.bossHits === 0;
+        const sid2 = p.bulletStyleId;
+        // 当前所用路线的一命/残血/无伤
+        if (sid2) {
+          if (oneLife) unlock(`rl_${sid2}_life`);
+          if (lowHp2) unlock(`rl_${sid2}_low`);
+          if (safe2) unlock(`rl_${sid2}_safe`);
+        }
+        // 裸弹：无觉醒风格击败 A+ 级以上
+        if (!sid2 && rank2 >= 3) unlock('aw_naked');
+        // 任意觉醒路线击败 S 级以上：一命/残血/无伤
+        if (sid2 && rank2 >= 4) {
+          if (oneLife) unlock('aw_slife');
+          if (lowHp2) unlock('aw_slow');
+          if (safe2) unlock('aw_ssafe');
+        }
+        // 该 Boss 的极限成就（种类按评级，id 不存在时 unlock 自动忽略）
+        if (clsName) {
+          if (oneLife) unlock(`bx_${clsName}_life`);
+          if (safe2) unlock(`bx_${clsName}_safe`);
+          if (rank2 >= 2 && lowHp2) unlock(`bx_${clsName}_low`);
+          if (rank2 >= 3 && tUsed <= (rank2 >= 5 ? 120 : 90)) unlock(`bx_${clsName}_speed`);
+          if (rank2 >= 4) {
+            if (run.bossHits <= (rank2 >= 6 ? 2 : 1)) unlock(`bx_${clsName}_hit`);
+            if (!run.bossRevived) unlock(`bx_${clsName}_norevive`);
+          }
+        }
         // —— 角斗场：完成一轮结算 ——
         if (run.arena) {
           run.arenaRounds++;
@@ -510,6 +648,7 @@
         run.dodgeStreak = 0;
         if (run.arena) run.arenaRoundHurt = true;   // 角斗场：本轮受伤，无伤轮失效
         if (g.bossActive) run.bossDmgTaken += d.amt || 0;
+        if (g.bosses && g.bosses.length > 0) run.bossHits++;
         // 残血连击窗口：血量跌到 25% 以下开启 10s
         if (p.maxHp && p.hp / p.maxHp <= 0.25 && run.lowHpT <= 0) {
           run.lowHpT = 10;
@@ -520,7 +659,11 @@
 
       /* ===== 玩家阵亡（掉一条命） ===== */
       case 'playerDeath': {
-        if (run) run.deaths++;
+        if (run) {
+          run.deaths++;
+          run.reviveUsed = true;
+          if (g.bosses && g.bosses.length > 0) run.bossRevived = true;
+        }
         if (!saved.stats.everDied) {
           saved.stats.everDied = true;
           save();
@@ -599,16 +742,26 @@
         break;
       }
 
+      /* ===== 风格觉醒二选一面板弹出 ===== */
+      case 'stylePrompt': {
+        unlock('aw_pick');
+        break;
+      }
+
       /* ===== 英雄子弹风格觉醒（styleId/heroId/倍率） ===== */
       case 'styleAwaken': {
         unlock('aw_first');
         if (d.styleId) {
           saved.stats.styleSeen[d.styleId] = true;
           if (Object.keys(saved.stats.styleSeen).length >= 5) unlock('aw_styles5');
+          unlock(`rl_${d.styleId}_first`);
         }
         if (d.heroId) {
           saved.stats.heroStyleSeen[d.heroId] = true;
-          if (Object.keys(saved.stats.heroStyleSeen).length >= 7) unlock('aw_allheroes');
+          if (Object.keys(saved.stats.heroStyleSeen).length >= 7) {
+            unlock('aw_allheroes');
+            unlock('aw_7pick');
+          }
         }
         save();
         break;
@@ -618,7 +771,21 @@
       case 'styleGrowth': {
         if (d.formUp && d.newForm >= 2) unlock('aw_form2');
         if (d.formUp && d.newForm >= 4) unlock('aw_form4');
-        if ((d.growth || 0) >= 12) unlock('aw_max');
+        if ((d.growth || 0) >= 12) {
+          unlock('aw_max');
+          unlock('aw_grow12');
+        }
+        // 路线终态：登记该路线，检查十四终态与同英雄双线
+        if (d.formUp && d.newForm >= 4 && p && p.bulletStyleId) {
+          const fsid = p.bulletStyleId;
+          unlock(`rl_${fsid}_f4`);
+          saved.stats.routeF4[fsid] = true;
+          if (Object.keys(saved.stats.routeF4).length >= ROUTES.length) unlock('aw_f14');
+          const fhero = ROUTE_HERO[fsid];
+          const pair = ROUTES.filter(r => r[1] === fhero).map(r => r[0]);
+          if (pair.length === 2 && pair.every(s => saved.stats.routeF4[s])) unlock('aw_dual');
+          save();
+        }
         break;
       }
     }
@@ -794,7 +961,9 @@
       { key: 'chaoren', title: '🐱 超级小子 —— 全场C位' },
       { key: 'meiying', title: '👻 魅影 —— 幽冥来客' },
       { key: 'awaken', title: '✨ 英雄觉醒子弹成就' },
+      { key: 'routes', title: '🌟 觉醒路线专精成就' },
       { key: 'bosses', title: '🏆 全Boss讨伐成就' },
+      { key: 'bossx', title: '⚔ Boss 极限挑战成就' },
       { key: 'arena', title: '🏟️ 角斗场专属成就' },
       { key: 'hidden', title: '❓ 隐藏成就' }
     ];
