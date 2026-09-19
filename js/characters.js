@@ -367,32 +367,105 @@
     jiaodoushi: '战盾成长', chaoren: '激光成长', meiying: '幽魂成长'
   };
 
+  /** 基础子弹等级（0-3）：xiaobai 用 bulletTier，其余用 charBulletLv */
+  function baseBulletLv(p) {
+    return p.charId === 'xiaobai' ? (p.bulletTier || 0) : (p.charBulletLv || 0);
+  }
+
   /**
-   * 角色专属「子弹成长」三选一项（四种样式：初始 + 3 次成长，第 4 阶为最终形态）
-   * 浪客 / 战狂每次成长额外 +1 次反弹
+   * 角色专属子弹成长三选一项。单卡动态覆盖三阶段：
+   *  1) 基础成长（baseLv<3）：提升基础子弹强度（xiaobai 由 tier 卡负责，此处仅处理风格阶段）
+   *  2) 风格二选一（baseLv>=3 且未选风格）：弹出风格选择面板
+   *  3) 风格成长（已选风格且 growth<12）：累计成长，每3次形态跃迁
    */
   function bulletUpgrade(charId) {
     const c = list[charId];
-    if (!c || charId === 'xiaobai') return null;
+    if (!c) return null;
     const fin = FINAL[charId];
+    // xiaobai 的基础成长由 config.js 的 tier 卡负责；这里只在基础满级后接管风格阶段
+    const xiaobaiBaseHandled = charId === 'xiaobai';
+
     return {
       id: 'cbullet', icon: '✦', cls: 'c-tier',
-      name: GROW_NAME[charId] || '子弹成长',
+      name(p) {
+        if (baseBulletLv(p) < 3 && !xiaobaiBaseHandled) return GROW_NAME[charId] || '子弹成长';
+        if (!p.bulletStyleId) return '风格觉醒';
+        return `风格强化（${p.bulletStyleGrowth || 0}/12）`;
+      },
       desc(p) {
-        const extra = (charId === 'buliang' || charId === 'jiaodoushi') ? '、反弹 +1 次' : '';
-        if (p.charBulletLv + 1 >= 3) {
-          return `子弹升至最高形态「${fin.name}」，伤害 +3${extra}，附带专属拖尾！`;
+        // 阶段1：基础成长
+        if (baseBulletLv(p) < 3 && !xiaobaiBaseHandled) {
+          const extra = (charId === 'buliang' || charId === 'jiaodoushi') ? '、反弹 +1 次' : '';
+          if (p.charBulletLv + 1 >= 3) {
+            return `子弹升至最高形态「${fin.name}」，伤害 +3${extra}，附带专属拖尾！`;
+          }
+          return `子弹样式进化（第 ${p.charBulletLv + 1}/3 次成长）：伤害 +3${extra}`;
         }
-        return `子弹样式进化（第 ${p.charBulletLv + 1}/3 次成长）：伤害 +3${extra}`;
+        // 阶段2：风格二选一
+        if (!p.bulletStyleId) {
+          return '基础子弹已达最高强度！选择一种子弹风格，替换全部基础弹道，强度大幅提升（近2倍）。';
+        }
+        // 阶段3：风格成长
+        const g = p.bulletStyleGrowth || 0;
+        const nextForm = window.BStyle.getForm(g + 1);
+        const curForm = window.BStyle.getForm(g);
+        if (nextForm > curForm) {
+          const st = window.BStyle.findStyle(p.bulletStyleId);
+          return `风格成长第 ${g + 1}/12 次：形态跃迁为「${st.forms[nextForm - 1]}」，伤害大幅提升！`;
+        }
+        return `风格成长第 ${g + 1}/12 次：伤害 +4，弹体略微增大。`;
       },
-      can(p) { return p.charBulletLv < 3; },
-      apply(p) {
-        p.charBulletLv++;
-        p.dmg += 3;
-        if (p.bounceMax !== undefined) p.bounceMax++;
-        SFX.pick();
+      can(p) {
+        // xiaobai 基础成长由 tier 卡负责；其余英雄基础未满级时由此卡负责
+        if (baseBulletLv(p) < 3) return !xiaobaiBaseHandled;
+        // 基础满级：未选风格 → 风格二选一；已选且未满12次 → 风格成长
+        if (!p.bulletStyleId) return true;
+        return (p.bulletStyleGrowth || 0) < 12;
       },
-      level(p) { return p.charBulletLv; }
+      // 风格觉醒 / 风格成长为角色核心成长线，强制进选项（必出）
+      guaranteed(p) {
+        if (baseBulletLv(p) < 3) return !xiaobaiBaseHandled;
+        if (!p.bulletStyleId) return true;
+        return (p.bulletStyleGrowth || 0) < 12;
+      },
+      apply(p, g) {
+        // 阶段1：基础成长
+        if (baseBulletLv(p) < 3 && !xiaobaiBaseHandled) {
+          p.charBulletLv++;
+          p.dmg += 3;
+          if (p.bounceMax !== undefined) p.bounceMax++;
+          if (window.SFX && SFX.pick) SFX.pick();
+          return;
+        }
+        // 阶段2：风格二选一
+        if (!p.bulletStyleId) {
+          const game = g || window.G;
+          if (window.BStyle && game) {
+            game.pauseForStylePick = true;
+            window.BStyle.show(p.charId, {
+              real: true,
+              onPick(sid) {
+                const mul = window.BStyle.applyFirstStyle(p, sid);
+                const st = window.BStyle.findStyle(sid);
+                if (game.toast) game.toast(`风格觉醒：${st.name}（伤害 ×${mul.toFixed(2)}）`, 2.5, 'rb');
+                game.pauseForStylePick = false;
+                game.state = 'playing';
+                if (window.SFX && SFX.levelup) SFX.levelup();
+              }
+            });
+          }
+          return;
+        }
+        // 阶段3：风格成长
+        const r = window.BStyle.applyStyleGrowth(p);
+        if (r && r.formUp && window.SFX && SFX.levelup) SFX.levelup();
+        else if (window.SFX && SFX.pick) SFX.pick();
+      },
+      level(p) {
+        if (baseBulletLv(p) < 3 && !xiaobaiBaseHandled) return p.charBulletLv;
+        if (!p.bulletStyleId) return baseBulletLv(p);
+        return p.bulletStyleGrowth || 0;
+      }
     };
   }
 

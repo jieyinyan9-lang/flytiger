@@ -1628,3 +1628,156 @@ kbd {
   font-size: 30px; font-weight: 900; color: #9fe8ff;
   text-shadow: 2px 2px 0 #000; margin: 8px 0 16px; letter-spacing: 2px;
 }
+
+/* ========== 子弹风格二选一 ========== */
+#stylepick {
+  position: absolute; inset: 0; z-index: 70;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px;
+  background:
+    radial-gradient(900px 420px at 50% 30%, rgba(60,90,180,.35), rgba(6,10,26,0) 70%),
+    rgba(5, 8, 22, .92);
+  overflow: hidden;
+}
+#stylepick::before {   /* 背景斜向流光 */
+  content: ''; position: absolute; inset: -40%;
+  background: conic-gradient(from 0deg at 50% 50%,
+    rgba(127,212,255,.05), rgba(255,209,102,.05), rgba(201,139,255,.06),
+    rgba(255,46,136,.05), rgba(127,212,255,.05));
+  animation: spspin 26s linear infinite;
+}
+@keyframes spspin { to { transform: rotate(360deg); } }
+.sp-head { position: relative; text-align: center; z-index: 1; }
+.sp-kicker {
+  font-size: 13px; font-weight: 900; letter-spacing: 6px; text-indent: 6px;
+  color: #8fb8e8; margin-bottom: 4px;
+}
+.sp-title {
+  font-size: 32px; font-weight: 900; letter-spacing: 8px; text-indent: 8px;
+  color: #ffd166; text-shadow: 3px 3px 0 #000, 0 0 26px rgba(255,209,102,.45);
+}
+.sp-sub { font-size: 13px; color: #a9c3e8; letter-spacing: 1px; margin-top: 6px; max-width: 760px; line-height: 1.7; }
+
+.sp-switch {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 14px; margin: 2px 0 2px;
+}
+.sp-switch button {
+  width: 34px; height: 34px; border-radius: 50%;
+  font-size: 22px; font-weight: 900; line-height: 1;
+  color: #dceaff; background: #1c2b52; border: 2px solid #000;
+  box-shadow: 0 0 0 2px #4a6fa5; cursor: pointer; font-family: inherit;
+  transition: transform .1s;
+}
+.sp-switch button:hover { transform: scale(1.12); color: #ffd166; box-shadow: 0 0 0 2px #ffd166; }
+.sp-hero {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(16,26,54,.9); border: 2px solid #000;
+  box-shadow: 0 0 0 2px #3a568a; border-radius: 22px;
+  padding: 4px 16px 4px 6px;
+}
+.sp-hero img { width: 36px; height: 36px; object-fit: contain; image-rendering: pixelated; }
+.sp-hero span { font-size: 17px; font-weight: 900; color: #ffe9a8; letter-spacing: 2px; }
+.sp-base-tag { font-size: 12px !important; font-weight: 400 !important; color: #9fc0e8 !important; letter-spacing: 1px !important; }
+.sp-base-tag b { color: #c99bff; font-weight: 900; }
+
+#sp-cards { position: relative; z-index: 1; display: flex; gap: 28px; }
+.sp-card {
+  --ac: #7fd4ff;
+  position: relative;
+  width: 350px;
+  background: linear-gradient(180deg, #1b2a52 0%, #0f1936 100%);
+  border: 3px solid #000;
+  box-shadow: 0 0 0 3px var(--ac), 0 0 26px rgba(0,0,0,.6), 0 14px 30px rgba(0,0,0,.55);
+  border-radius: 6px;
+  padding: 14px 14px 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  cursor: pointer;
+  transition: transform .13s, box-shadow .13s, opacity .18s, filter .18s;
+}
+.sp-card:hover {
+  transform: translateY(-8px) scale(1.025);
+  box-shadow: 0 0 0 3px var(--ac), 0 0 34px rgba(0,0,0,.65), 0 0 30px color-mix(in srgb, var(--ac) 45%, transparent);
+}
+.sp-badge {
+  position: absolute; top: -15px; left: -15px; z-index: 2;
+  width: 42px; height: 42px; line-height: 38px; text-align: center;
+  font-size: 24px; font-weight: 900; color: #0b1430;
+  background: var(--ac); border: 3px solid #000; border-radius: 50%;
+  box-shadow: 0 4px 10px rgba(0,0,0,.6);
+  text-shadow: none;
+}
+.sp-canvas {
+  width: 322px; height: 132px;
+  border: 2px solid #000; border-radius: 4px;
+  box-shadow: inset 0 0 0 2px rgba(120,160,230,.28);
+  background: #080f26;
+}
+.sp-name {
+  font-size: 23px; font-weight: 900; letter-spacing: 5px; text-indent: 5px;
+  color: var(--ac); text-shadow: 2px 2px 0 #000, 0 0 16px color-mix(in srgb, var(--ac) 55%, transparent);
+}
+.sp-pos { display: flex; gap: 8px; }
+.sp-pos span {
+  font-size: 12px; font-weight: 900; letter-spacing: 2px;
+  color: var(--ac); border: 1.5px solid var(--ac); border-radius: 10px;
+  padding: 2px 12px; background: rgba(10,18,44,.6);
+}
+.sp-f1 { font-size: 12.5px; color: #cfe0fa; line-height: 1.7; min-height: 42px; text-align: center; }
+.sp-form-tag {
+  margin: -2px 0 4px; text-align: center; font-size: 12px; font-weight: 700;
+  color: var(--ac); letter-spacing: 1px; text-shadow: 0 0 8px color-mix(in srgb, var(--ac) 50%, transparent);
+}
+.sp-node { cursor: pointer; transition: transform .12s; }
+.sp-node:hover { transform: translateY(-2px); }
+.sp-node:hover b { box-shadow: 0 0 10px var(--ac); }
+.sp-road {
+  display: flex; align-items: center; gap: 0; width: 100%;
+  background: rgba(8,14,34,.55); border: 1.5px solid #2a3f6d; border-radius: 6px;
+  padding: 7px 6px; justify-content: center;
+}
+.sp-node {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 10.5px; color: #7f93b8; letter-spacing: 1px; white-space: nowrap;
+}
+.sp-node b {
+  width: 17px; height: 17px; line-height: 17px; text-align: center;
+  font-size: 10.5px; border-radius: 50%;
+  background: #2a3f6d; color: #9fb4d8; border: 1.5px solid #000;
+}
+.sp-node.on { color: #fff; }
+.sp-node.on b { background: var(--ac); color: #0b1430; }
+.sp-link { width: 12px; height: 2px; background: #3a568a; margin: 0 2px; margin-bottom: 14px; }
+.sp-choose {
+  font-size: 14px; font-weight: 900; letter-spacing: 4px; text-indent: 4px;
+  color: #0b1430; background: var(--ac);
+  border: 2px solid #000; border-radius: 5px;
+  padding: 7px 0; width: 100%; text-align: center;
+  box-shadow: 0 3px 0 rgba(0,0,0,.5);
+}
+.sp-picked {
+  display: none;
+  position: absolute; top: 12px; right: 12px;
+  font-size: 12px; font-weight: 900; color: #0b1430;
+  background: #7dffb0; border: 2px solid #000; border-radius: 12px;
+  padding: 3px 10px;
+}
+.sp-card.sp-sel {
+  box-shadow: 0 0 0 4px var(--ac), 0 0 44px color-mix(in srgb, var(--ac) 70%, transparent);
+}
+.sp-card.sp-sel .sp-picked { display: block; animation: sppop .18s ease-out; }
+#sp-cards.has-pick .sp-card:not(.sp-sel) { opacity: .42; filter: saturate(.4); }
+@keyframes sppop { from { transform: scale(.5); } to { transform: scale(1); } }
+
+.sp-foot {
+  position: relative; z-index: 1;
+  font-size: 12px; color: #7f97c0; letter-spacing: 1.5px; margin-top: 4px;
+}
+#sp-close {
+  position: absolute; top: 16px; right: 20px; z-index: 3;
+  width: 36px; height: 36px; border-radius: 50%;
+  font-size: 22px; font-weight: 900; line-height: 1;
+  color: #dceaff; background: rgba(28,43,82,.9); border: 2px solid #000;
+  box-shadow: 0 0 0 2px #4a6fa5; cursor: pointer; font-family: inherit;
+}
+#sp-close:hover { color: #ff8a7a; box-shadow: 0 0 0 2px #ff8a7a; }

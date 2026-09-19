@@ -1047,12 +1047,13 @@
         const isGuaranteed = guaranteed.includes(u);
         card.className = 'lu-card ' + u.cls + (isGuaranteed ? ' lu-recommend' : '');
         const lv = u.level(this.player);
+        const nameText = typeof u.name === 'function' ? u.name(this.player) : u.name;
         const descText = typeof u.desc === 'function' ? u.desc(this.player, this) : u.desc;
         card.innerHTML =
           `<div class="card-key">${i + 1}</div>` +
           (isGuaranteed ? '<div class="card-rec">★ 推荐</div>' : '') +
           `<div class="card-icon">${u.icon}</div>` +
-          `<div class="card-name">${u.name}</div>` +
+          `<div class="card-name">${nameText}</div>` +
           `<div class="card-lv">${lv > 0 ? '当前 Lv.' + lv : '未拥有'}</div>` +
           `<div class="card-desc">${descText}</div>`;
         card.addEventListener('click', () => this.pickUpgrade(i));
@@ -1902,12 +1903,13 @@
         const isGuaranteed = guaranteed.includes(u);
         card.className = 'lu-card ' + u.cls + (isGuaranteed ? ' lu-recommend' : '');
         const lv = u.level(this.player);
+        const nameText = typeof u.name === 'function' ? u.name(this.player) : u.name;
         const descText = typeof u.desc === 'function' ? u.desc(this.player, this) : u.desc;
         card.innerHTML =
           `<div class="card-key">${i + 1}</div>` +
           (isGuaranteed ? '<div class="card-rec">★ 推荐</div>' : '') +
           `<div class="card-icon">${u.icon}</div>` +
-          `<div class="card-name">${u.name}</div>` +
+          `<div class="card-name">${nameText}</div>` +
           `<div class="card-lv">${lv > 0 ? '当前 Lv.' + lv : '未拥有'}</div>` +
           `<div class="card-desc">${descText}</div>`;
         card.addEventListener('click', () => this.pickUpgrade(i));
@@ -1925,8 +1927,11 @@
       const stormBefore = this.player.stormLv || 0;
       const isNew = (u.id === 'chainStorm' && stormBefore === 0) ||
                     (u.id === 'blade' && !this.player.blades);
-      u.apply(this.player);
-      if (window.Ach) Ach.evt('upgrade', { g: this, id: u.id, name: u.name });
+      u.apply(this.player, this);
+      if (window.Ach) {
+        const nm = typeof u.name === 'function' ? u.name(this.player) : u.name;
+        Ach.evt('upgrade', { g: this, id: u.id, name: nm });
+      }
       // Boss 挑战·部署选择：不计每轮上限；手动选择（byAuto 为空）即退出自动模式，
       // 自动循环触发的选择不打断自动流程，一次点击会连续选完全部 24 次
       const _chd = this.challengeMode;
@@ -1971,7 +1976,8 @@
         const cnt = this.player.elementWay.filter(x => x === u.id).length;
         this.toast(`${names[u.id]}弹道 布置于${dirNames[cnt - 1]}向（${cnt}/3）`, 1.5, 'rb');
       }
-      this.state = 'playing';
+      // 风格二选一时保持暂停（由风格面板 onPick 回调恢复 playing）
+      if (!this.pauseForStylePick) this.state = 'playing';
       // 无冷却锁：若剩余能量仍满足门槛，下一帧会连续弹出下一次成长选择
     }
 
@@ -5613,4 +5619,5 @@
   }
 
   window.game = new Game();
+  window.G = window.game;
 })();

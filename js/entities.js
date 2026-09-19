@@ -582,6 +582,9 @@
       /* —— 角色专属弹种扩展 —— */
       this.glv = opts.glv || 0;                // 角色子弹样式阶段（0-3）
       this.gmax = !!opts.gmax;                 // 最终形态
+      // 英雄风格子弹：覆盖 kind 的视觉绘制（行为仍由原 kind 决定）
+      this.styleId = opts.styleId || null;
+      this.styleForm = opts.styleForm || 1;
       this.dropX = opts.dropX || 0;            // 飞抵该 x 后开始受重力下落（侠客飞刀/战狂盾牌）
       this.dropGrav = opts.dropGrav || 0;
       this.bouncesLeft = opts.bouncesLeft || 0;   // 剩余反弹次数（烟头/锯齿盾/最终激光）
@@ -712,19 +715,21 @@
         }
       }
     }
-    /** 法师星星分裂：死亡时原地散射 3 颗小星 */
+    /** 法师星星分裂：死亡时原地散射 3 颗小星（继承风格外观） */
     splitStars(g) {
       if (this.splitDone) return;
       this.splitDone = true;
       for (let i = 0; i < this.splitN; i++) {
         const a = -Math.PI + (Math.PI / Math.max(1, this.splitN - 1)) * i + rand(-0.12, 0.12);
         const sp = 100;   // 分裂小星速度（随基础弹速同步降低 3 倍，原 300）
+        const sub = {
+          kind: 'star', friendly: true,
+          dmg: Math.max(1, Math.round(this.dmg * 0.5)),
+          r: Math.max(3, this.r * 0.5), life: 0.9, spinRate: 16
+        };
+        if (this.styleId) { sub.styleId = this.styleId; sub.styleForm = this.styleForm; }
         g.bullets.push(new Bullet(this.x, this.y,
-          Math.cos(a) * sp, Math.sin(a) * sp - 60, {
-            kind: 'star', friendly: true,
-            dmg: Math.max(1, Math.round(this.dmg * 0.5)),
-            r: Math.max(3, this.r * 0.5), life: 0.9, spinRate: 16
-          }));
+          Math.cos(a) * sp, Math.sin(a) * sp - 60, sub));
       }
       burst(g, this.x, this.y, 8, ['#ffd93b', '#fff', '#7fe7ff'], 160, 3, 0.3);
     }
@@ -1959,6 +1964,12 @@
       const k = this.kind;
       /* —— 飞行弹幕小怪能量弹（纯亮矢量弹体 + 能量光带拖尾） —— */
       if (this.eb) { this.renderEnergy(ctx); return; }
+      /* —— 英雄风格子弹：用风格程序化绘制覆盖外观（行为由原 kind 决定） —— */
+      if (this.styleId && window.BStyle) {
+        const ang = Math.atan2(this.vy, this.vx);
+        window.BStyle.draw(ctx, this.styleId, this.styleForm, this.x, this.y, ang, this.t, this.r);
+        return;
+      }
       /* ================= 鸦伯爵宝石渲染（菱形彩色宝石 + 内部高亮切面 + 彩色长拖尾） ================= */
       if (k === 'gem') {
         const C = GEM_COLS[this.gemCol];
@@ -4080,6 +4091,10 @@
       this.bulletSpdMul = cdef.bulletSpd || 1;        // 角色子弹飞行速度倍率（反弹类弹种较慢）
       this.kind = cdef.kind || 'bolt';                // 角色弹种
       this.charBulletLv = 0;                          // 角色子弹成长（0-3，第 4 阶为最终形态）
+      // 英雄子弹风格成长系统
+      this.bulletStyleId = null;                       // 已选风格 id（null=未风格化）
+      this.bulletStyleGrowth = 0;                      // 风格成长次数 0-12
+      this.bulletStyleSize = 1.0;                      // 风格弹体放大系数（随成长递增）
       this.bounceMax = cdef.bounceBase || 0;          // 反弹类弹种的基础反弹次数
       this.magicShieldT = 0;                          // 法师魔法护盾剩余时间
       this.bloodRageT = 0;                            // 战狂血怒剩余时间
@@ -4932,6 +4947,11 @@
       const gmax = stage >= 4;
       const glv = stage - 1;
       const slv = Math.min(glv, 2);                      // 体积成长封顶在第 3 阶（最终形态不再变大）
+      // 风格化：若已选风格，弹体视觉由 BStyle 接管，体积随成长放大
+      const hasStyle = !!this.bulletStyleId;
+      const styleForm = hasStyle ? window.BStyle.getForm(this.bulletStyleGrowth) : 1;
+      const sizeMul = hasStyle ? (this.bulletStyleSize || 1.0) : 1;
+      const styleOpts = hasStyle ? { styleId: this.bulletStyleId, styleForm } : {};
       const CH = window.CHARS;
       const FIN = CH && CH.FINAL[this.charId];
       const kind = this.kind;
@@ -4939,64 +4959,65 @@
       if (kind === 'bolt') {
         return new Bullet(x, y, vx, vy, {
           kind: 'bolt', friendly: true, dmg,
-          r: (4 + this.bulletTier * 2) * bscale,
+          r: (4 + this.bulletTier * 2) * bscale * sizeMul,
           pierce: this.bulletTier >= 2 ? (this.bulletTier === 3 ? 4 : 2) : 0,
-          bombLv: this.bombLv, tier: this.bulletTier
+          bombLv: this.bombLv, tier: this.bulletTier, ...styleOpts
         });
       }
       if (kind === 'knife') {
         // 侠客飞刀：抛射线（初射角上抬），越过屏幕 50% 后受重力下落；最高形态翠绿大剑 + 树叶拖尾
         return new Bullet(x, y, vx, vy, {
           kind: 'knife', friendly: true, dmg,
-          r: (5 + slv * 2.2) * bscale, glv, gmax,
+          r: (5 + slv * 2.2) * bscale * sizeMul, glv, gmax,
           dropX: CFG.W * 0.5, dropGrav: 900,
           trailCols: gmax && FIN ? FIN.trail : null, trailLite: gmax,
-          bombLv: this.bombLv, spdTrail: this.spdLv
+          bombLv: this.bombLv, spdTrail: this.spdLv, ...styleOpts
         });
       }
       if (kind === 'star') {
         // 法师星星：持续自转 + S 形弧线（落点整体朝向不变），命中敌人/障碍分裂
         return new Bullet(x, y, vx, vy, {
           kind: 'star', friendly: true, dmg,
-          r: (6 + slv * 2) * bscale, glv, gmax,
+          r: (6 + slv * 2) * bscale * sizeMul, glv, gmax,
           spinRate: 14,
           sine: { amp: 0.55, freq: 7, phase: rand(0, TAU) },
           splitN: 3,
           rockReact: true,
           trailCols: gmax && FIN ? FIN.trail : null, trailLite: gmax,
-          bombLv: this.bombLv
+          bombLv: this.bombLv, ...styleOpts
         });
       }
       if (kind === 'butt') {
         // 浪客烟头：直射，命中敌人/障碍随机方向反弹（燃点持续燃烧），触地震伤地下龙
         return new Bullet(x, y, vx, vy, {
           kind: 'butt', friendly: true, dmg,
-          r: (5 + slv * 2) * bscale, glv, gmax,
+          r: (5 + slv * 2) * bscale * sizeMul, glv, gmax,
           bouncesLeft: this.bounceMax, noDieOnHit: this.bounceMax > 0,
           bounceSpd: 0.4,
           rockReact: true, burnOnHit: true, groundSlam: true,
           spinRate: 6,
           fireTrail: gmax,
           trailCols: gmax && FIN ? FIN.trail : null, trailLite: gmax,
-          bombLv: this.bombLv
+          bombLv: this.bombLv, ...styleOpts
         });
       }
       if (kind === 'shieldSaw') {
         // 战狂锯齿盾牌：抛射线（初射角上抬，越过屏幕 40% 后下落），命中敌人/障碍反弹
         return new Bullet(x, y, vx, vy, {
           kind: 'shieldSaw', friendly: true, dmg,
-          r: (7 + slv * 2.4) * bscale, glv, gmax,
+          r: (7 + slv * 2.4) * bscale * sizeMul, glv, gmax,
           bouncesLeft: this.bounceMax, noDieOnHit: this.bounceMax > 0,
           rockReact: true,
           dropX: CFG.W * 0.4, dropGrav: 760,
           spinRate: 10,
           trailCols: gmax && FIN ? FIN.trail : null, trailLite: gmax,
-          bombLv: this.bombLv
+          bombLv: this.bombLv, ...styleOpts
         });
       }
       if (kind === 'lblock') {
         // 超猫矩形激光块（玫红）：直射；最高形态不再发射飞行激光，而是在身前持续挂出一道贯穿至屏右的粗光束
-        if (gmax) {
+        // 风格化后：忽略 gmax 持续光束，仍发射可被风格绘制接管的飞行弹
+        if (gmax && !hasStyle) {
           // 最终形态：持续光束挂在角色身前，跟随上下移动、无残留（每发开火刷新存活时间）
           this.heldBeamT = Math.max(this.heldBeamT, 0.18);
           this._heldBeamDmg = dmg;
@@ -5005,25 +5026,25 @@
         }
         return new Bullet(x, y, vx, vy, {
           kind: 'lblock', friendly: true, dmg,
-          r: (5 + slv * 2) * bscale, glv, gmax,
+          r: (5 + slv * 2) * bscale * sizeMul, glv, gmax,
           bombLv: this.bombLv, spdTrail: this.spdLv,
-          brTrail: true                              // 前 3 阶段：简单蓝红粒子拖尾
+          brTrail: true, ...styleOpts
         });
       }
       if (kind === 'soul') {
         // 魅影幽魂弹：飘忽前进（正弦摆动）+ 穿透；最终形态幽冥鬼王（大体型、穿透 4 体、紫色拖尾）
         return new Bullet(x, y, vx, vy, {
           kind: 'soul', friendly: true, dmg,
-          r: (6 + slv * 2) * bscale, glv, gmax,
+          r: (6 + slv * 2) * bscale * sizeMul, glv, gmax,
           sine: { amp: 0.32 + glv * 0.05, freq: 6.5, phase: rand(0, TAU) },
           pierce: gmax ? 4 : 1 + Math.min(2, glv),
           spinRate: 8,
           trailCols: gmax && FIN ? FIN.trail : null, trailLite: true,
-          bombLv: this.bombLv
+          bombLv: this.bombLv, ...styleOpts
         });
       }
       // 兜底：普通弹
-      return new Bullet(x, y, vx, vy, { kind: 'bolt', friendly: true, dmg, r: 4 * bscale });
+      return new Bullet(x, y, vx, vy, { kind: 'bolt', friendly: true, dmg, r: 4 * bscale * sizeMul, ...styleOpts });
     }
 
     fire(g) {
